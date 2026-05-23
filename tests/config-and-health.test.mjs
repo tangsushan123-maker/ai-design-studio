@@ -239,6 +239,10 @@ describe("Layer output", () => {
     assert.equal(routeSource.includes("background-edit-source.png"), true);
     assert.equal(routeSource.includes("tighten_repair_mask_and_retry"), true);
     assert.equal(routeSource.includes("regenerateBackgroundNoText"), true);
+    assert.equal(routeSource.includes("autoRetryReferenceBackground"), true);
+    assert.equal(routeSource.includes("buildReferenceCompositeMask"), true);
+    assert.equal(routeSource.includes("protectNonTextSubjectsInCompositeMask"), true);
+    assert.equal(routeSource.includes("protect_original_outside_text_mask"), true);
     assert.equal(routeSource.includes("reference_remake"), true);
     assert.equal(routeSource.includes("无文字背景重生版"), true);
     assert.equal(routeSource.includes("residueCleanupApplied"), true);

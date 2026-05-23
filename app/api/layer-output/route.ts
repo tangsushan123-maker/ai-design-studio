@@ -265,9 +265,16 @@ export async function POST(request: Request) {
       try {
         if (shouldUseRebuildRepair) {
           backgroundGenerationMode = "reference_remake";
-          backgroundFinal = await regenerateBackgroundNoText(normalizedSource, canvas, extractionPlan, model);
-          backgroundFirstPass = backgroundFinal;
-          backgroundQuality = await qualityCheckReferenceBackground(original, backgroundFinal, repairSourceAlpha, canvas, 1);
+          const referenceCompositeMask = await buildReferenceCompositeMask(original, extractionPlan, canvas, repairMask, repairSourceAlpha);
+          const backgroundResult = await autoRetryReferenceBackground(original, normalizedSource, referenceCompositeMask, repairSourceAlpha, canvas, extractionPlan, {
+            model,
+            maskStrength,
+            keepGlow,
+          });
+          repairMask = backgroundResult.repairMask;
+          backgroundFirstPass = backgroundResult.firstPass;
+          backgroundFinal = backgroundResult.final;
+          backgroundQuality = backgroundResult.quality;
         } else {
           const backgroundResult = await autoRetryBackground(original, normalizedSource, repairMask, repairSourceAlpha, canvas, {
             model,
@@ -1442,6 +1449,112 @@ async function regenerateBackgroundNoText(
   return processToExactSize(output, canvas, "png", "crop");
 }
 
+async function autoRetryReferenceBackground(
+  original: Buffer,
+  source: { buffer: Buffer; fileName: string; mimeType: string },
+  initialRepairMask: RepairMask,
+  textAlphaMask: Buffer,
+  canvas: PixelSize,
+  plan: TextExtractionPlan,
+  options: { model: string; maskStrength: TextMaskStrength; keepGlow: boolean },
+) {
+  let repairMask = initialRepairMask;
+  let firstPass: Buffer | null = null;
+  let final: Buffer | null = null;
+  let quality: BackgroundQualityReport | null = null;
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      if (attempt > 0) {
+        const expandedRepairMask = await buildRepairMask(textAlphaMask, canvas, {
+          strength: options.maskStrength,
+          keepGlow: options.keepGlow,
+          growBoost: 8 + attempt * 14,
+        });
+        repairMask = await buildReferenceCompositeMask(original, plan, canvas, expandedRepairMask, textAlphaMask);
+      }
+      const referenceBackground = await regenerateBackgroundNoText(source, canvas, plan, options.model);
+      if (!firstPass) firstPass = referenceBackground;
+      final = await compositeOriginalOutsideMask(original, referenceBackground, repairMask, canvas);
+      quality = await qualityCheckReferenceBackground(original, final, repairMask.alpha, textAlphaMask, canvas, attempt + 1);
+      if (quality.passed) break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!firstPass || !final || !quality) {
+    throw lastError instanceof Error ? lastError : new Error("无字背景重生失败。");
+  }
+  return { firstPass, final, quality, repairMask };
+}
+
+async function buildReferenceCompositeMask(
+  original: Buffer,
+  plan: TextExtractionPlan,
+  canvas: PixelSize,
+  fallback: RepairMask,
+  guideAlpha: Buffer,
+): Promise<RepairMask> {
+  if (!plan.lines.length) return fallback;
+  const raw = Buffer.alloc(canvas.width * canvas.height);
+  for (const line of plan.lines) {
+    const growX = Math.max(14, Math.min(62, Math.round(line.height * (line.role === "title" ? 0.44 : 0.48))));
+    const growY = Math.max(12, Math.min(48, Math.round(line.height * (line.role === "title" ? 0.38 : 0.52))));
+    const left = Math.max(0, Math.floor(line.x - growX));
+    const top = Math.max(0, Math.floor(line.y - growY));
+    const right = Math.min(canvas.width, Math.ceil(line.x + line.width + growX));
+    const bottom = Math.min(canvas.height, Math.ceil(line.y + line.height + growY));
+    for (let y = top; y < bottom; y += 1) {
+      raw.fill(255, y * canvas.width + left, y * canvas.width + right);
+    }
+  }
+  const lineAlpha = await sharp(raw, { raw: { width: canvas.width, height: canvas.height, channels: 1 } })
+    .blur(Math.max(10, Math.min(28, Math.round(Math.min(canvas.width, canvas.height) * 0.035))))
+    .threshold(10)
+    .blur(Math.max(6, Math.min(22, Math.round(Math.min(canvas.width, canvas.height) * 0.025))))
+    .linear(2.4, 0)
+    .greyscale()
+    .raw()
+    .toBuffer();
+  const alpha = await protectNonTextSubjectsInCompositeMask(original, lineAlpha, guideAlpha, canvas);
+  const coverage = alphaCoverage(alpha);
+  if (coverage <= 0.0005 || coverage >= 0.48) return fallback;
+  return {
+    alpha,
+    debugPng: await maskToDebugPng(alpha, canvas),
+    editMask: await alphaToOpenAIEditMask(alpha, canvas),
+    coverage,
+    feather: Math.max(12, Math.min(30, Math.round(Math.min(canvas.width, canvas.height) * 0.045))),
+    radius: Math.max(18, Math.min(52, Math.round(Math.min(canvas.width, canvas.height) * 0.06))),
+  };
+}
+
+async function protectNonTextSubjectsInCompositeMask(original: Buffer, alpha: Buffer, guideAlpha: Buffer, canvas: PixelSize) {
+  const [source, nearbyText] = await Promise.all([
+    toRawImage(original, canvas),
+    expandAlphaMask(guideAlpha, canvas, 10, 2, 1),
+  ]);
+  const protectedMask = new Uint8Array(alpha.length);
+  for (let pixel = 0; pixel < alpha.length; pixel += 1) {
+    if ((alpha[pixel] || 0) <= 8 || (nearbyText[pixel] || 0) > 8) continue;
+    const index = pixel * source.channels;
+    const r = source.data[index] || 0;
+    const g = source.data[index + 1] || 0;
+    const b = source.data[index + 2] || 0;
+    const saturation = Math.max(r, g, b) - Math.min(r, g, b);
+    const likelyWarmProductOrMascot = r > 150 && g > 92 && b < 120 && r - b > 54 && saturation > 62;
+    if (likelyWarmProductOrMascot) protectedMask[pixel] = 1;
+  }
+  const expandedProtection = dilateMask(protectedMask, canvas.width, canvas.height, 4, 4);
+  const output = Buffer.from(alpha);
+  for (let pixel = 0; pixel < output.length; pixel += 1) {
+    if (expandedProtection[pixel] && (nearbyText[pixel] || 0) <= 8) output[pixel] = 0;
+  }
+  return output;
+}
+
 async function prepareBackgroundEditSource(original: Buffer, repairMask: RepairMask, canvas: PixelSize) {
   const [originalRaw, blurredRaw, maskAlpha] = await Promise.all([
     sharp(original)
@@ -1648,6 +1761,7 @@ async function qualityCheckBackground(
 async function qualityCheckReferenceBackground(
   originalBuffer: Buffer,
   backgroundBuffer: Buffer,
+  repairAlpha: Buffer,
   textAlpha: Buffer,
   canvas: PixelSize,
   attempts: number,
@@ -1674,6 +1788,10 @@ async function qualityCheckReferenceBackground(
       background.data[index + 1] || 0,
       background.data[index + 2] || 0,
     );
+    if ((repairAlpha[pixel] || 0) <= 8) {
+      outsideDiff += diff;
+      outsideCount += 1;
+    }
     if ((textAlpha[pixel] || 0) > 16) {
       textChange += diff;
       textCount += 1;
@@ -1682,9 +1800,6 @@ async function qualityCheckReferenceBackground(
       }
       const luma = 0.299 * (background.data[index] || 0) + 0.587 * (background.data[index + 1] || 0) + 0.114 * (background.data[index + 2] || 0);
       if (luma < 14) darkArtifacts += 1;
-    } else {
-      outsideDiff += diff;
-      outsideCount += 1;
     }
     if ((textAlpha[pixel] || 0) > 96) {
       textStrokeCount += 1;
@@ -1696,10 +1811,16 @@ async function qualityCheckReferenceBackground(
   const residualEdgeRatio = residualEdges / Math.max(1, textCount);
   const unchangedTextStrokeRatio = unchangedTextStrokes / Math.max(1, textStrokeCount);
   const darkArtifactRatio = darkArtifacts / Math.max(1, textCount);
-  const residualRisk = unchangedTextStrokeRatio > 0.22 || (unchangedTextStrokeRatio > 0.14 && residualEdgeRatio > 0.02);
+  const outsideChangedRisk = outsideDiffMean > 1.8;
+  const residualTextRisk = unchangedTextStrokeRatio > 0.22 || (unchangedTextStrokeRatio > 0.14 && residualEdgeRatio > 0.02);
+  const residualRisk = outsideChangedRisk || residualTextRisk;
   const issues: string[] = [];
   const actions: string[] = [];
-  if (residualRisk) {
+  if (outsideChangedRisk) {
+    issues.push("非文字区域与原图差异偏大，已改用局部合成保护原图相似度。");
+    actions.push("protect_original_outside_text_mask");
+  }
+  if (residualTextRisk) {
     issues.push("无字背景重生后仍疑似保留原文字笔触，需要重新生成无字背景。");
     actions.push("regenerate_reference_background");
   }
