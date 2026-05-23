@@ -1,0 +1,670 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+:root {
+  color-scheme: dark;
+  --background: #101216;
+  --foreground: #f5f5f7;
+  --material-thin: rgb(72 76 86 / 0.66);
+  --material-regular: rgb(58 63 74 / 0.82);
+  --material-thick: rgb(64 70 82 / 0.91);
+  --material-elevated: rgb(78 84 96 / 0.95);
+  --separator: rgb(255 255 255 / 0.14);
+  --separator-strong: rgb(255 255 255 / 0.24);
+  --glass-blur: 42px;
+  --glass-saturation: 190%;
+  --glass-highlight: linear-gradient(180deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.06) 42%, rgb(255 255 255 / 0.022));
+  --glass-highlight-soft: linear-gradient(180deg, rgb(255 255 255 / 0.13), rgb(255 255 255 / 0.042) 48%, rgb(255 255 255 / 0.016));
+  --glass-hairline: inset 0 1px 0 rgb(255 255 255 / 0.16), inset 0 -1px 0 rgb(255 255 255 / 0.045);
+  --label: rgb(245 245 247 / 0.94);
+  --label-secondary: rgb(235 235 245 / 0.66);
+  --label-tertiary: rgb(235 235 245 / 0.42);
+  --label-quaternary: rgb(235 235 245 / 0.24);
+  --accent: #0a84ff;
+  --accent-strong: #2997ff;
+  --mint: #64d2b4;
+  --warning: #ffd166;
+  --danger: #ff453a;
+  --rose: #ff5c8a;
+  --radius-panel: 18px;
+  --radius-control: 12px;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --shadow-soft:
+    0 18px 54px rgb(0 0 0 / 0.32),
+    var(--glass-hairline);
+  --shadow-strong:
+    0 34px 96px rgb(0 0 0 / 0.5),
+    0 1px 0 rgb(255 255 255 / 0.06),
+    var(--glass-hairline);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% -18%, rgb(255 255 255 / 0.16), transparent 28%),
+    linear-gradient(180deg, #262931 0%, #171a21 46%, #101216 100%);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+code {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.24);
+  padding: 0.08rem 0.32rem;
+  color: rgb(245 245 247 / 0.82);
+  font-family: "SF Mono", "Cascadia Code", Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  min-height: 32px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    background-color 180ms var(--ease-standard),
+    border-color 180ms var(--ease-standard),
+    color 180ms var(--ease-standard),
+    box-shadow 180ms var(--ease-standard),
+    transform 180ms var(--ease-standard),
+    opacity 180ms var(--ease-standard),
+    filter 180ms var(--ease-standard);
+}
+
+button:not(:disabled):hover,
+a:hover {
+  filter: brightness(1.04);
+}
+
+button:not(:disabled):active,
+a:active {
+  transform: scale(0.982);
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.38),
+    0 0 0 4px rgb(255 255 255 / 0.09),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.075),
+    inset 0 1px 0 rgb(255 255 255 / 0.055);
+}
+
+[data-composer-input="true"]:focus-visible {
+  box-shadow: none;
+}
+
+::selection {
+  background: rgb(10 132 255 / 0.32);
+  color: #fff;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.16);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(255 255 255 / 0.26);
+  background-clip: padding-box;
+}
+
+.apple-shell {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% -14%, rgb(255 255 255 / 0.15), transparent 30%),
+    linear-gradient(180deg, #292d35 0%, #171b22 50%, #101216 100%);
+}
+
+.apple-shell::before {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background:
+    linear-gradient(90deg, transparent, rgb(255 255 255 / 0.035) 48%, transparent 100%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.035), transparent 34%, rgb(0 0 0 / 0.24));
+  opacity: 0.42;
+  mask-image: linear-gradient(180deg, #000 0%, rgb(0 0 0 / 0.7) 45%, transparent 100%);
+}
+
+.apple-shell::after {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 0.045) 0 1px, transparent 1px 34px),
+    linear-gradient(225deg, rgb(255 255 255 / 0.025) 0 1px, transparent 1px 34px);
+  opacity: 0.18;
+}
+
+.apple-panel,
+.apple-panel-strong,
+.apple-sidebar,
+.apple-drawer,
+.apple-surface-section,
+.apple-menu,
+.apple-node-card,
+.apple-node-well,
+.apple-input,
+.apple-select,
+.apple-textarea,
+.apple-button {
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+}
+
+.apple-panel {
+  border: 1px solid var(--separator);
+  border-radius: var(--radius-panel);
+  background:
+    var(--glass-highlight-soft),
+    var(--material-regular);
+  box-shadow: var(--shadow-soft);
+  transform: translateZ(0);
+}
+
+.apple-panel-strong {
+  border: 1px solid var(--separator-strong);
+  border-radius: calc(var(--radius-panel) + 2px);
+  background:
+    var(--glass-highlight),
+    var(--material-thick);
+  box-shadow: var(--shadow-strong);
+}
+
+.apple-sidebar {
+  border-color: var(--separator);
+  background:
+    var(--glass-highlight-soft),
+    rgb(42 47 58 / 0.84);
+  box-shadow:
+    inset -1px 0 0 rgb(255 255 255 / 0.055),
+    18px 0 54px rgb(0 0 0 / 0.32);
+}
+
+.apple-drawer {
+  background:
+    var(--glass-highlight),
+    rgb(48 54 66 / 0.94);
+  box-shadow:
+    0 30px 100px rgb(0 0 0 / 0.62),
+    inset 0 1px 0 rgb(255 255 255 / 0.095);
+}
+
+.apple-surface-section {
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 12px;
+  background:
+    var(--glass-highlight-soft),
+    rgb(62 68 80 / 0.38);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 10px 28px rgb(0 0 0 / 0.18);
+}
+
+.apple-interactive-card {
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 12px;
+  background:
+    var(--glass-highlight-soft),
+    rgb(62 68 80 / 0.4);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.055),
+    0 10px 30px rgb(0 0 0 / 0.18);
+}
+
+.apple-interactive-card:hover {
+  border-color: rgb(255 255 255 / 0.16);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.085), rgb(255 255 255 / 0.03)),
+    rgb(255 255 255 / 0.038);
+  transform: translateY(-1px) scale(1.002);
+}
+
+.apple-interactive-card.is-selected {
+  border-color: rgb(10 132 255 / 0.55);
+  background:
+    linear-gradient(180deg, rgb(10 132 255 / 0.2), rgb(10 132 255 / 0.07)),
+    rgb(255 255 255 / 0.028);
+  box-shadow:
+    0 18px 48px rgb(10 132 255 / 0.12),
+    inset 0 1px 0 rgb(255 255 255 / 0.09);
+}
+
+.apple-icon-bubble {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.025)),
+    rgb(255 255 255 / 0.035);
+  color: rgb(245 245 247 / 0.78);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.075);
+}
+
+.apple-empty-state {
+  border: 1px dashed rgb(255 255 255 / 0.13);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(255 255 255 / 0.012)),
+    rgb(255 255 255 / 0.018);
+}
+
+.apple-button {
+  border: 1px solid rgb(255 255 255 / 0.15);
+  border-radius: 999px;
+  background:
+    var(--glass-highlight-soft),
+    rgb(255 255 255 / 0.07);
+  color: var(--label-secondary);
+  box-shadow:
+    var(--glass-hairline),
+    0 10px 24px rgb(0 0 0 / 0.16);
+}
+
+.apple-button:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 0.19);
+  background:
+    var(--glass-highlight),
+    rgb(255 255 255 / 0.07);
+  color: var(--label);
+}
+
+.apple-button-primary {
+  border: 1px solid rgb(255 255 255 / 0.52);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, #ffffff 0%, #dfe8f8 100%);
+  color: #05070c;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.72),
+    0 16px 34px rgb(255 255 255 / 0.095),
+    0 2px 14px rgb(10 132 255 / 0.1);
+}
+
+.apple-button-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffffff 0%, #f4f7ff 100%);
+}
+
+.apple-button-danger {
+  border: 1px solid rgb(255 69 58 / 0.34);
+  border-radius: 999px;
+  background: rgb(255 69 58 / 0.12);
+  color: rgb(255 199 193 / 0.94);
+}
+
+.apple-button-danger:hover:not(:disabled) {
+  background: rgb(255 69 58 / 0.18);
+  color: rgb(255 222 218 / 0.98);
+}
+
+.apple-input,
+.apple-select,
+.apple-textarea {
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: var(--radius-control);
+  background:
+    var(--glass-highlight-soft),
+    rgb(38 43 54 / 0.74);
+  color: var(--label);
+  box-shadow:
+    var(--glass-hairline),
+    0 8px 22px rgb(0 0 0 / 0.14);
+}
+
+.apple-select option {
+  background: #1c1c1e;
+  color: #f5f5f7;
+}
+
+.apple-input::placeholder,
+.apple-textarea::placeholder {
+  color: var(--label-quaternary);
+}
+
+.apple-input:focus,
+.apple-select:focus,
+.apple-textarea:focus {
+  border-color: rgb(255 255 255 / 0.18);
+  background:
+    var(--glass-highlight-soft),
+    rgb(22 25 32 / 0.72);
+  box-shadow:
+    var(--glass-hairline),
+    0 8px 22px rgb(0 0 0 / 0.14);
+}
+
+.apple-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--label-tertiary);
+}
+
+.apple-title {
+  font-size: 26px;
+  line-height: 1.15;
+  font-weight: 700;
+  color: var(--label);
+}
+
+.apple-subtitle {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--label-secondary);
+}
+
+.apple-section-title {
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: rgb(247 249 255 / 0.86);
+}
+
+.apple-meta {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--label-secondary);
+}
+
+.apple-caption {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--label-tertiary);
+}
+
+.apple-pill,
+.apple-pill-accent {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+}
+
+.apple-pill {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.068), rgb(255 255 255 / 0.026)),
+    rgb(255 255 255 / 0.026);
+  color: var(--label-secondary);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+.apple-pill-accent {
+  border: 1px solid rgb(10 132 255 / 0.34);
+  background:
+    linear-gradient(180deg, rgb(10 132 255 / 0.22), rgb(10 132 255 / 0.08));
+  color: rgb(223 239 255 / 0.96);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.09),
+    0 10px 28px rgb(10 132 255 / 0.12);
+}
+
+.apple-menu {
+  border: 1px solid rgb(255 255 255 / 0.17);
+  border-radius: 14px;
+  background:
+    var(--glass-highlight),
+    rgb(55 60 72 / 0.94);
+  box-shadow:
+    0 24px 72px rgb(0 0 0 / 0.62),
+    0 1px 0 rgb(255 255 255 / 0.06),
+    inset 0 1px 0 rgb(255 255 255 / 0.095);
+}
+
+.apple-menu-item {
+  width: 100%;
+  border-radius: 8px;
+  color: var(--label-secondary);
+  transition: background-color 140ms var(--ease-standard), color 140ms var(--ease-standard), transform 140ms var(--ease-standard);
+}
+
+.apple-menu-item:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.105);
+  color: var(--label);
+}
+
+.apple-menu-meta {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--label-tertiary);
+}
+
+.apple-field-label {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--label-tertiary);
+}
+
+.apple-segment {
+  border-radius: 999px;
+  color: var(--label-secondary);
+  transition:
+    background-color 160ms var(--ease-standard),
+    color 160ms var(--ease-standard),
+    box-shadow 160ms var(--ease-standard),
+    transform 160ms var(--ease-standard);
+}
+
+.apple-segment:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.07);
+  color: var(--label);
+}
+
+.apple-segment-active {
+  background: rgb(255 255 255 / 0.95);
+  color: #04070c;
+  box-shadow:
+    0 8px 22px rgb(255 255 255 / 0.09),
+    inset 0 1px 0 rgb(255 255 255 / 0.7);
+}
+
+.apple-hairline {
+  border-color: var(--separator);
+}
+
+.apple-status-success {
+  border-color: rgb(50 215 75 / 0.28);
+  background: rgb(50 215 75 / 0.1);
+  color: rgb(207 255 216 / 0.95);
+}
+
+.apple-status-warning {
+  border-color: rgb(255 209 102 / 0.26);
+  background: rgb(255 209 102 / 0.1);
+  color: rgb(255 231 170 / 0.94);
+}
+
+.apple-status-danger {
+  border-color: rgb(255 69 58 / 0.3);
+  background: rgb(255 69 58 / 0.12);
+  color: rgb(255 207 202 / 0.95);
+}
+
+.apple-status-neutral {
+  border-color: rgb(255 255 255 / 0.12);
+  background: rgb(255 255 255 / 0.045);
+  color: var(--label-secondary);
+}
+
+.apple-node-card {
+  border: 1px solid rgb(255 255 255 / 0.13);
+  background:
+    var(--glass-highlight-soft),
+    rgb(44 50 62 / 0.9);
+  box-shadow:
+    0 22px 64px rgb(0 0 0 / 0.48),
+    inset 0 1px 0 rgb(255 255 255 / 0.09),
+    inset 0 -1px 0 rgb(255 255 255 / 0.025);
+}
+
+.apple-node-card.is-selected {
+  border-color: rgb(10 132 255 / 0.74);
+  box-shadow:
+    0 26px 82px rgb(0 0 0 / 0.52),
+    0 0 0 2px rgb(10 132 255 / 0.19),
+    0 0 38px rgb(10 132 255 / 0.16),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+
+.apple-node-card.is-input-selected {
+  border-color: rgb(100 210 180 / 0.72);
+  box-shadow:
+    0 26px 82px rgb(0 0 0 / 0.52),
+    0 0 0 2px rgb(100 210 180 / 0.16),
+    0 0 38px rgb(100 210 180 / 0.13),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+
+.apple-node-card.is-danger {
+  border-color: rgb(255 69 58 / 0.7);
+  box-shadow:
+    0 26px 82px rgb(0 0 0 / 0.52),
+    0 0 0 2px rgb(255 69 58 / 0.15),
+    inset 0 1px 0 rgb(255 255 255 / 0.11);
+}
+
+.node-workflow-flow .react-flow__node.selected {
+  z-index: 30 !important;
+}
+
+.node-workflow-flow .react-flow__node:has(.apple-node-card.is-selected),
+.node-workflow-flow .react-flow__node:has(.apple-node-card.is-input-selected) {
+  z-index: 30 !important;
+}
+
+.apple-node-well {
+  border: 1px solid rgb(255 255 255 / 0.09);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.065), rgb(255 255 255 / 0.018)),
+    rgb(13 16 23 / 0.52);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.045),
+    inset 0 0 24px rgb(0 0 0 / 0.14);
+}
+
+.node-workflow-flow .react-flow__pane {
+  cursor: grab;
+}
+
+.node-workflow-flow .react-flow__pane:active {
+  cursor: grabbing;
+}
+
+.node-workflow-flow .react-flow__controls {
+  margin-left: 12px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  border: 1px solid var(--separator);
+  border-radius: 14px;
+  background:
+    var(--glass-highlight-soft),
+    rgb(42 45 52 / 0.78);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+}
+
+.node-workflow-flow .react-flow__controls-button {
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  background: transparent;
+  color: rgb(255 255 255 / 0.72);
+}
+
+.node-workflow-flow .react-flow__controls-button:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.node-workflow-flow .react-flow__minimap {
+  margin-left: 12px;
+  margin-bottom: 112px;
+  overflow: hidden;
+  border: 1px solid var(--separator);
+  border-radius: 14px;
+  background:
+    var(--glass-highlight-soft),
+    rgb(42 45 52 / 0.76);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+}
+
+.node-workflow-flow .workflow-edge .react-flow__edge-path {
+  stroke: rgb(10 132 255 / 0.62);
+  stroke-width: 1.2;
+}
+
+.node-workflow-flow .edge-deleting .react-flow__edge-path {
+  stroke: rgb(255 107 95 / 0.95);
+  stroke-width: 1.7;
+}
+
+.node-workflow-flow .react-flow__connection-path {
+  stroke: rgb(124 240 207 / 0.82);
+  stroke-width: 1.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
