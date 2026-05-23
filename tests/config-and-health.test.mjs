@@ -234,6 +234,7 @@ describe("Layer output", () => {
     assert.equal(routeSource.includes("likelyTitleText"), true);
     assert.equal(routeSource.includes("已回退为原图像素文字层"), true);
     assert.equal(routeSource.includes("transparentPixelRatio < 0.99998"), true);
+    assert.equal(routeSource.includes("无文字背景仍可能有文字残影"), true);
 
     assert.equal(workbenchSource.includes("LayerOutputPanel"), true);
     assert.equal(workbenchSource.includes("文字 PNG 透明检测失败。"), false);
@@ -246,6 +247,8 @@ describe("Layer output", () => {
     assert.equal(projectRoute.includes("input.runs.slice(0, 80)"), false);
     assert.equal(projectRoute.includes("runCount: project.runs?.length || 0"), true);
     assert.equal(workbenchSource.includes("canLayerOutput"), true);
+    assert.equal(workbenchSource.includes("isLayerOutputTextImage"), true);
+    assert.equal(workbenchSource.includes("outputs.some(isLayerOutputTextImage)"), true);
     assert.equal(workbenchSource.includes("开始拆分"), true);
     assert.equal(workbenchSource.includes("原图"), true);
     assert.equal(workbenchSource.includes("无文字背景"), true);

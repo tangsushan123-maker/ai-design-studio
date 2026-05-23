@@ -259,6 +259,9 @@ export async function POST(request: Request) {
         backgroundFirstPass = backgroundResult.firstPass;
         backgroundFinal = backgroundResult.final;
         backgroundQuality = backgroundResult.quality;
+        if (!backgroundQuality.passed) {
+          errors.background = backgroundQuality.issues.join("；") || "无文字背景仍可能有文字残影，可单独重新生成背景。";
+        }
         await writeFile(paths.repairMask, repairMask.debugPng);
         repairMaskStat = await stat(paths.repairMask);
         await writeFile(paths.backgroundFirstPass, backgroundFirstPass);

@@ -3506,7 +3506,7 @@ function NodeWorkflowWorkbench({
       true,
       {
         includeBackground: outputs.some((item) => item.materialType === "无文字背景"),
-        includeTextLayer: outputs.some((item) => item.materialType === "文字透明PNG"),
+        includeTextLayer: outputs.some(isLayerOutputTextImage),
       },
     );
     setEdges((current) => [
@@ -8883,6 +8883,11 @@ function canLayerOutput(image: ImageAsset) {
 function layerOutputResultImages(result: LayerOutputResult | null) {
   if (!result) return [];
   return [result.layers?.background || null, result.layers?.textLayer || null].filter((image): image is ImageAsset => Boolean(image?.url));
+}
+
+function isLayerOutputTextImage(image: ImageAsset) {
+  const label = [image.materialType, image.mode, image.branchLabel, image.fileName].filter(Boolean).join(" ");
+  return /文字透明|文字重建|原图文字|文字裁剪|text_(full|cropped|cutout)/i.test(label) && !/无文字背景|background_no_text/i.test(label);
 }
 
 function assertLayerOutputComplete(result: LayerOutputResult | null, options: LayerOutputOptions) {
