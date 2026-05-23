@@ -207,12 +207,12 @@ describe("Layer output", () => {
     assert.equal(routeSource.includes("buildTextAlphaMask(image, textRegions)"), true);
     assert.equal(routeSource.includes("exportTransparentText(image, textAlphaMask)"), true);
     assert.equal(routeSource.includes("buildRepairMask(textAlphaMask, image)"), true);
-    assert.equal(routeSource.includes("compositeOriginalOutsideMask(original, inpaintResult, repairMask)"), true);
+    assert.equal(routeSource.includes("compositeOriginalOutsideMask(original, inpaintResult, repairMask.alpha)"), true);
     assert.equal(routeSource.includes("renderFallbackTextLayer"), false);
     assert.equal(routeSource.includes("buildTextMaskFromGuide"), false);
     assert.equal(routeSource.includes("generateTextLayerWithRetry"), false);
     assert.equal(routeSource.includes("exportTextFull"), true);
-    assert.equal(routeSource.includes("composeMaskedEdit"), true);
+    assert.equal(routeSource.includes("repairMask.alpha"), true);
     assert.equal(routeSource.includes("original.png"), true);
     assert.equal(routeSource.includes("background_no_text.png"), true);
     assert.equal(routeSource.includes("text_full.png"), true);
@@ -228,8 +228,12 @@ describe("Layer output", () => {
     assert.equal(routeSource.includes("hasOpaqueBlackBackground"), true);
     assert.equal(routeSource.includes("rescueTextAlphaFromRegions"), true);
     assert.equal(routeSource.includes("buildFallbackTextAlphaFromRegions"), true);
+    assert.equal(routeSource.includes("prepareTextLayerAlpha"), true);
+    assert.equal(routeSource.includes("suppressBackgroundResidueFromTextAlpha"), true);
+    assert.equal(routeSource.includes("residueCleanupApplied"), true);
     assert.equal(routeSource.includes("likelyTitleText"), true);
     assert.equal(routeSource.includes("已回退为原图像素文字层"), true);
+    assert.equal(routeSource.includes("transparentPixelRatio < 0.99998"), true);
 
     assert.equal(workbenchSource.includes("LayerOutputPanel"), true);
     assert.equal(workbenchSource.includes("文字 PNG 透明检测失败。"), false);

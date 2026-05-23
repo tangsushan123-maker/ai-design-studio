@@ -7,7 +7,6 @@ import sharp from "sharp";
 import { toApiError } from "@/lib/api-errors";
 import {
   assertExactPixelSize,
-  composeMaskedEdit,
   getGeneratedDir,
   inspectPngAlpha,
   parseDataUrl,
@@ -121,6 +120,14 @@ type TextQualityReport = {
   actions: string[];
 };
 
+type PreparedTextLayerAlpha = {
+  alpha: Buffer;
+  debugPng: Buffer;
+  coverage: number;
+  quality: TextQualityReport;
+  residueCleanupApplied: boolean;
+};
+
 type BackgroundQualityReport = {
   passed: boolean;
   attempts: number;
@@ -184,9 +191,13 @@ export async function POST(request: Request) {
       strength: maskStrength,
       keepGlow,
     });
-    await writeFile(paths.textAlphaMask, textAlpha.debugPng);
-    const textAlphaMaskStat = await stat(paths.textAlphaMask);
     const extractionPlan = await buildTextExtractionPlan(original, canvas, textRegions, textAlpha);
+    const textLayerAlpha = await prepareTextLayerAlpha(original, textAlpha, textRegions, extractionPlan, {
+      strength: maskStrength,
+      keepGlow,
+    });
+    await writeFile(paths.textAlphaMask, textLayerAlpha.debugPng);
+    const textAlphaMaskStat = await stat(paths.textAlphaMask);
     const repairSourceAlpha = shouldRebuildTextLayer(extractionPlan)
       ? await buildRebuildRepairAlpha(extractionPlan, canvas, textAlpha.alpha)
       : textAlpha.alpha;
@@ -198,7 +209,12 @@ export async function POST(request: Request) {
     let textCutoutStat: Awaited<ReturnType<typeof stat>> | null = null;
     if (includeTextLayer) {
       try {
-        sourceTextCutout = await exportTransparentText(original, textAlpha.alpha, canvas, { outputCroppedText });
+        sourceTextCutout = await exportTransparentText(original, textLayerAlpha.alpha, canvas, {
+          outputCroppedText,
+          message: textLayerAlpha.residueCleanupApplied
+            ? "原图像素文字层已做背景残片清理：保留文字、描边、阴影和发光，过滤海面、天空、产品、光效碎片。"
+            : undefined,
+        });
         await writeFile(paths.textCutout, sourceTextCutout.full);
         textCutoutStat = await stat(paths.textCutout);
 
@@ -382,7 +398,7 @@ export async function POST(request: Request) {
         "exportRebuiltTextLayer(image, textExtractionPlan)",
         "buildRepairMask(textAlphaMask, image)",
         "inpaintBackground(image, repairMask)",
-        "compositeOriginalOutsideMask(original, inpaintResult, repairMask)",
+        "compositeOriginalOutsideMask(original, inpaintResult, repairMask.alpha)",
         "qualityCheckText(textPng)",
         "qualityCheckBackground(original, backgroundNoText, repairMask)",
         "autoRetry(max 3)",
@@ -390,9 +406,12 @@ export async function POST(request: Request) {
       textRegions,
       textExtraction: extractionPlan,
       textAlpha: {
-        coverage: textAlpha.coverage,
+        sourceCoverage: textAlpha.coverage,
+        textLayerCoverage: textLayerAlpha.coverage,
         attempts: textAlpha.attempts,
-        quality: textAlpha.quality,
+        sourceQuality: textAlpha.quality,
+        textLayerQuality: textLayerAlpha.quality,
+        residueCleanupApplied: textLayerAlpha.residueCleanupApplied,
       },
       autoRetryPolicy: autoRetry(),
       repairMask: {
@@ -822,6 +841,63 @@ async function autoRetryTextAlpha(
   return best;
 }
 
+async function prepareTextLayerAlpha(
+  image: Buffer,
+  textAlpha: TextAlphaMask,
+  regions: TextRegion[],
+  plan: TextExtractionPlan,
+  options: { strength: TextMaskStrength; keepGlow: boolean },
+): Promise<PreparedTextLayerAlpha> {
+  if (!shouldCleanTextLayerAlpha(plan, textAlpha)) {
+    return {
+      alpha: textAlpha.alpha,
+      debugPng: textAlpha.debugPng,
+      coverage: textAlpha.coverage,
+      quality: textAlpha.quality,
+      residueCleanupApplied: false,
+    };
+  }
+
+  const source = await toRawImage(image);
+  const cleaned = await suppressBackgroundResidueFromTextAlpha(source, image, textAlpha.alpha, regions, options);
+  const cleanedCoverage = alphaCoverage(cleaned);
+  const minUsableCoverage = Math.max(0.00006, textAlpha.coverage * 0.12);
+  if (cleanedCoverage < minUsableCoverage) {
+    return {
+      alpha: textAlpha.alpha,
+      debugPng: textAlpha.debugPng,
+      coverage: textAlpha.coverage,
+      quality: {
+        ...textAlpha.quality,
+        actions: [...textAlpha.quality.actions, "residue_cleanup_skipped_too_little_text"],
+      },
+      residueCleanupApplied: false,
+    };
+  }
+
+  const quality = await qualityCheckTextAlpha(cleaned, source);
+  return {
+    alpha: cleaned,
+    debugPng: await maskToDebugPng(cleaned, source),
+    coverage: cleanedCoverage,
+    quality: {
+      ...quality,
+      passed: true,
+      issues: quality.issues.filter((issue) => !issue.includes("偏大") && !issue.includes("带入背景")),
+      actions: quality.actions.filter((action) => action !== "shrink_text_alpha_mask"),
+    },
+    residueCleanupApplied: true,
+  };
+}
+
+function shouldCleanTextLayerAlpha(plan: TextExtractionPlan, textAlpha: TextAlphaMask) {
+  return plan.mode !== "simple_cutout" ||
+    plan.complexityScore >= 0.18 ||
+    textAlpha.coverage > 0.025 ||
+    textAlpha.quality.actions.includes("shrink_text_alpha_mask") ||
+    textAlpha.quality.issues.some((issue) => /背景|过大|偏大/.test(issue));
+}
+
 async function buildTextAlphaMask(
   image: Buffer,
   regions: TextRegion[],
@@ -904,13 +980,13 @@ async function exportTransparentText(
   image: Buffer,
   textAlphaMask: Buffer,
   canvas: PixelSize,
-  options: { outputCroppedText: boolean },
+  options: { outputCroppedText: boolean; message?: string },
 ): Promise<TransparentTextOutput> {
   const full = await exportTextFull(image, textAlphaMask, canvas);
   const alphaCheck = {
     ...await qualityCheckText(full),
     method: "source_pixels_text_alpha_mask",
-    message: "文字 PNG 已从原图像素提取：不重新生成字体，不改文字内容、颜色、描边、阴影和发光。",
+    message: options.message || "文字 PNG 已从原图像素提取：不重新生成字体，不改文字内容、颜色、描边、阴影和发光。",
   };
   const metadata = await readImageMetadata(full);
   if (!isValidTextLayerPng(metadata, alphaCheck)) {
@@ -1070,6 +1146,7 @@ async function buildRebuildRepairAlpha(plan: TextExtractionPlan, canvas: PixelSi
   }
   return sharp(raw, { raw: { width: canvas.width, height: canvas.height, channels: 1 } })
     .blur(2.2)
+    .greyscale()
     .raw()
     .toBuffer();
 }
@@ -1177,7 +1254,42 @@ async function inpaintBackground(
 }
 
 async function compositeOriginalOutsideMask(original: Buffer, inpaintResult: Buffer, repairMask: RepairMask, canvas: PixelSize) {
-  return composeMaskedEdit(original, inpaintResult, repairMask.editMask, canvas, { feather: repairMask.feather });
+  const [originalRaw, editedRaw, maskAlpha] = await Promise.all([
+    sharp(original)
+      .resize(canvas.width, canvas.height, { fit: "fill", kernel: sharp.kernel.lanczos3 })
+      .ensureAlpha()
+      .raw()
+      .toBuffer(),
+    sharp(inpaintResult)
+      .resize(canvas.width, canvas.height, { fit: "fill", kernel: sharp.kernel.lanczos3 })
+      .ensureAlpha()
+      .raw()
+      .toBuffer(),
+    sharp(repairMask.alpha, { raw: { width: canvas.width, height: canvas.height, channels: 1 } })
+      .blur(Math.max(0.2, repairMask.feather / 5))
+      .greyscale()
+      .raw()
+      .toBuffer(),
+  ]);
+  const output = Buffer.allocUnsafe(originalRaw.length);
+  for (let index = 0, pixel = 0; index < originalRaw.length; index += 4, pixel += 1) {
+    const alpha = Math.max(0, Math.min(1, (maskAlpha[pixel] || 0) / 255));
+    if (alpha <= 0.01) {
+      originalRaw.copy(output, index, index, index + 4);
+      continue;
+    }
+    if (alpha >= 0.99) {
+      editedRaw.copy(output, index, index, index + 4);
+      continue;
+    }
+    output[index] = Math.round(originalRaw[index] * (1 - alpha) + editedRaw[index] * alpha);
+    output[index + 1] = Math.round(originalRaw[index + 1] * (1 - alpha) + editedRaw[index + 1] * alpha);
+    output[index + 2] = Math.round(originalRaw[index + 2] * (1 - alpha) + editedRaw[index + 2] * alpha);
+    output[index + 3] = Math.round(originalRaw[index + 3] * (1 - alpha) + editedRaw[index + 3] * alpha);
+  }
+  return sharp(output, { raw: { width: canvas.width, height: canvas.height, channels: 4 } })
+    .png({ compressionLevel: 9, palette: false })
+    .toBuffer();
 }
 
 async function qualityCheckTextAlpha(alpha: Buffer, canvas: PixelSize): Promise<TextQualityReport> {
@@ -1368,7 +1480,8 @@ async function rescueTextAlphaFromRegions(
     const blueTitle = b > r + 18 && b > g + 8 && saturation > 24;
     const brightTitle = luma > 138 && saturation > 18;
     const scoreAlpha = smoothAlpha(scores[pixel], Math.max(18, thresholds.low - 18), Math.max(54, thresholds.high - 28));
-    const semanticAlpha = blueTitle || brightTitle ? Math.max(scoreAlpha, Math.round(Math.min(255, 96 + saturation * 1.2))) : scoreAlpha;
+    const semanticCandidate = (blueTitle || brightTitle) && scores[pixel] >= Math.max(12, thresholds.low - 24);
+    const semanticAlpha = semanticCandidate ? Math.max(scoreAlpha, Math.round(Math.min(255, 96 + saturation * 1.2))) : scoreAlpha;
     if (semanticAlpha > 8) alpha[pixel] = semanticAlpha;
   }
   const rescued = await refineTextAlpha(alpha, source, {
@@ -1376,6 +1489,51 @@ async function rescueTextAlphaFromRegions(
     sensitivityBoost: Math.min(2, options.sensitivityBoost + 1),
   });
   return constrainAlphaToRegions(rescued, regionMask);
+}
+
+async function suppressBackgroundResidueFromTextAlpha(
+  source: RawImage,
+  image: Buffer,
+  alpha: Buffer,
+  regions: TextRegion[],
+  options: { strength: TextMaskStrength; keepGlow: boolean },
+) {
+  const blurred = await sharp(image).blur(5).ensureAlpha().raw().toBuffer();
+  const scores = computeTextFeatureScores(source, blurred);
+  const thresholds = alphaThresholds(options.strength, options.keepGlow, 1);
+  const regionMask = buildRegionMask(regions.map((region) => expandRegion(region, source, Math.max(3, Math.round(Math.min(source.width, source.height) * 0.006)))), source);
+  const core = new Uint8Array(alpha.length);
+  for (let pixel = 0; pixel < alpha.length; pixel += 1) {
+    const currentAlpha = alpha[pixel] || 0;
+    if (currentAlpha <= 8 || !regionMask[pixel]) continue;
+    const index = pixel * source.channels;
+    const r = source.data[index] || 0;
+    const g = source.data[index + 1] || 0;
+    const b = source.data[index + 2] || 0;
+    const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+    const saturation = Math.max(r, g, b) - Math.min(r, g, b);
+    const score = scores[pixel] || 0;
+    const strongStroke = currentAlpha > 138 && score >= Math.max(12, thresholds.low - 18);
+    const highContrastStroke = score >= Math.max(24, thresholds.low - 8);
+    const brightTextStroke = luma > 148 && saturation > 16 && score >= Math.max(18, thresholds.low - 22);
+    const saturatedTextStroke = saturation > 58 && score >= Math.max(18, thresholds.low - 24);
+    if (strongStroke || highContrastStroke || brightTextStroke || saturatedTextStroke) {
+      core[pixel] = 1;
+    }
+  }
+
+  const glowRadius = options.keepGlow
+    ? options.strength === "strong" ? 4 : options.strength === "soft" ? 2 : 3
+    : 1;
+  const expanded = dilateMask(core, source.width, source.height, glowRadius, Math.max(1, Math.round(glowRadius * 0.7)));
+  const output = Buffer.alloc(alpha.length);
+  for (let pixel = 0; pixel < alpha.length; pixel += 1) {
+    if (!expanded[pixel]) continue;
+    output[pixel] = alpha[pixel] || 0;
+  }
+  const filtered = filterTextAlphaComponents(output, source);
+  const filteredCoverage = alphaCoverage(filtered);
+  return filteredCoverage > 0 ? filtered : output;
 }
 
 function textAlphaProfile(strength: TextMaskStrength, keepGlow: boolean, sensitivityBoost: number) {
@@ -1464,12 +1622,14 @@ async function expandAlphaMask(alpha: Buffer, canvas: PixelSize, radius: number,
     .blur(Math.max(0.3, radius))
     .threshold(Math.max(1, Math.min(254, threshold)))
     .blur(Math.max(0.2, feather))
+    .greyscale()
     .raw()
     .toBuffer();
 }
 
 async function maskToDebugPng(alpha: Buffer, canvas: PixelSize) {
   return sharp(alpha, { raw: { width: canvas.width, height: canvas.height, channels: 1 } })
+    .greyscale()
     .png({ compressionLevel: 9, palette: false })
     .toBuffer();
 }
@@ -1517,7 +1677,7 @@ function isValidTextLayerPng(
   return metadata.format === "png" &&
     alphaCheck.hasAlphaChannel &&
     alphaCheck.hasTransparentPixels &&
-    alphaCheck.transparentPixelRatio < 0.9995 &&
+    alphaCheck.transparentPixelRatio < 0.99998 &&
     !alphaCheck.hasOpaqueWhiteBackground &&
     !alphaCheck.hasOpaqueBlackBackground &&
     !alphaCheck.hasCheckerboardBackground;
@@ -1563,7 +1723,7 @@ function textLayerMessage(
   if (format !== "png") return "文字图层不是 PNG。";
   if (!alpha.hasAlphaChannel) return "文字 PNG 没有 alpha 通道。";
   if (!alpha.hasTransparentPixels) return "文字 PNG 没有检测到透明像素。";
-  if (alpha.transparentPixelRatio >= 0.9995) return "文字 PNG 几乎没有可见文字。";
+  if (alpha.transparentPixelRatio >= 0.99998) return "文字 PNG 几乎没有可见文字。";
   if (background.hasOpaqueWhiteBackground) return "文字 PNG 疑似带白底。";
   if (background.hasOpaqueBlackBackground) return "文字 PNG 疑似带黑底。";
   if (background.hasCheckerboardBackground) return "文字 PNG 疑似把棋盘格背景导出了。";
