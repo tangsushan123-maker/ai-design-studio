@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     const responsePrompt = promptVariants.join("\n\n---\n\n");
 
     const openai = getOpenAI();
-    const requests = promptVariants.map(async (requestPrompt) => {
+    const createFuseRequest = async (requestPrompt: string) => {
       const imageA = await toFile(first.buffer, first.fileName, { type: first.mimeType });
       const imageB = await toFile(second.buffer, second.fileName, { type: second.mimeType });
       const brandFiles = await Promise.all(brandReferenceImages.map((item, index) => toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType })));
@@ -85,7 +85,8 @@ export async function POST(request: Request) {
         prompt: requestPrompt,
         items: result.data ?? [],
       };
-    });
+    };
+    const requests = promptVariants.map(createFuseRequest);
     const settledResults = await Promise.allSettled(requests);
     const resultItems: Array<{ b64_json?: string | null; url?: string | null; prompt: string }> = settledResults.flatMap((result) =>
       result.status === "fulfilled" ? result.value.items.map((item) => ({ ...item, prompt: result.value.prompt })) : [],
@@ -100,9 +101,33 @@ export async function POST(request: Request) {
     const images = await Promise.all(
       resultItems.slice(0, 2).map(async (item, index) => {
         const imagePrompt = item.prompt || promptVariants[index] || responsePrompt;
-        const raw = await imageResultToBuffer(item.b64_json, item.url);
-        const processed = await processToTarget(raw, ratio, quality, "png");
-        const saved = await saveImageBuffer(processed, "png", {
+        let final = await processFuseResult(item, imagePrompt, {
+          ratio,
+          quality,
+          outputSize,
+          outputRatioLabel,
+          protectionContext,
+        });
+        if (shouldRetryFuseQuality(final.qualityCheck)) {
+          const retryPrompt = buildFuseCompositionRetryPrompt(imagePrompt, outputRatioLabel, outputSize);
+          const retryResponse = await createFuseRequest(retryPrompt).catch(() => null);
+          const retryItem = retryResponse?.items?.[0]
+            ? { ...retryResponse.items[0], prompt: retryPrompt }
+            : null;
+          if (retryItem) {
+            const retry = await processFuseResult(retryItem, retryPrompt, {
+              ratio,
+              quality,
+              outputSize,
+              outputRatioLabel,
+              protectionContext,
+            }).catch(() => null);
+            if (retry && (!shouldRetryFuseQuality(retry.qualityCheck) || fuseRiskValue(retry.qualityCheck) < fuseRiskValue(final.qualityCheck))) {
+              final = retry;
+            }
+          }
+        }
+        const saved = await saveImageBuffer(final.processed, "png", {
           ratioLabel: outputRatioLabel,
           quality,
         });
@@ -114,6 +139,8 @@ export async function POST(request: Request) {
           fileSizeBytes: savedStat.size,
           aspectRatio: outputRatioLabel,
           protectionContext,
+          operation: "fuse_images",
+          safeMarginPercent: 16,
         });
         const image = {
           id: saved.fileName,
@@ -121,7 +148,7 @@ export async function POST(request: Request) {
           originalUrl: saved.originalUrl,
           thumbnailUrl: saved.thumbnailUrl,
           previewUrl: saved.previewUrl,
-          prompt: imagePrompt,
+          prompt: final.prompt,
           variant: index + 1,
           ratio,
           mode: "AI合成",
@@ -150,6 +177,71 @@ export async function POST(request: Request) {
     const apiError = toApiError(error, "AI合成失败。");
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
   }
+}
+
+type FuseResultProcessContext = {
+  ratio: { width: number; height: number };
+  quality: QualityValue;
+  outputSize: { width: number; height: number };
+  outputRatioLabel: string;
+  protectionContext: ReturnType<typeof parseProtectionContext>;
+};
+
+async function processFuseResult(
+  item: { b64_json?: string | null; url?: string | null },
+  prompt: string,
+  context: FuseResultProcessContext,
+) {
+  const raw = await imageResultToBuffer(item.b64_json, item.url);
+  const processed = await processToTarget(raw, context.ratio, context.quality, "png", "safe_no_crop");
+  const qualityCheck = await inspectImageQuality(processed, {
+    quality: context.quality,
+    ratio: context.ratio,
+    expectedSize: context.outputSize,
+    aspectRatio: context.outputRatioLabel,
+    protectionContext: context.protectionContext,
+    operation: "fuse_images",
+    safeMarginPercent: 16,
+  });
+  return { processed, prompt, qualityCheck };
+}
+
+function buildFuseCompositionRetryPrompt(prompt: string, ratioText: string, target: { width: number; height: number }) {
+  return [
+    prompt,
+    "",
+    "自动构图复查：上一版 AI 合成疑似主体、Logo、标题或边缘信息贴边/被裁。",
+    `目标画幅：${ratioText}，目标尺寸 ${target.width}×${target.height}。`,
+    "重新合成：full composition, complete subject visible, no cropping, zoom out, larger safe margins.",
+    "主体、头发/手脚、产品包装、Logo、二维码、标题和底部信息放入中心 76% 安全区；四周 16%-18% 只放背景和光影。",
+    "保持光影、接触阴影、透视和色温匹配。",
+  ].join("\n");
+}
+
+function shouldRetryFuseQuality(qualityCheck: Awaited<ReturnType<typeof inspectImageQuality>>) {
+  const maxEdgeRatio = Math.max(
+    qualityCheck.edgeContentRatio || 0,
+    ...Object.values(qualityCheck.edgeContentRatios || {}).map((value) => Number(value) || 0),
+  );
+  return Boolean(
+    qualityCheck.compositionRisk ||
+      qualityCheck.hasWhiteBorder ||
+      qualityCheck.ratioMatched === false ||
+      qualityCheck.suspectedBlurredPadding ||
+      maxEdgeRatio > 0.32,
+  );
+}
+
+function fuseRiskValue(qualityCheck: Awaited<ReturnType<typeof inspectImageQuality>>) {
+  const maxEdgeRatio = Math.max(
+    qualityCheck.edgeContentRatio || 0,
+    ...Object.values(qualityCheck.edgeContentRatios || {}).map((value) => Number(value) || 0),
+  );
+  return (qualityCheck.compositionRisk ? 1 : 0) +
+    (qualityCheck.hasWhiteBorder ? 1 : 0) +
+    (qualityCheck.ratioMatched === false ? 1 : 0) +
+    (qualityCheck.suspectedBlurredPadding ? 1 : 0) +
+    maxEdgeRatio;
 }
 
 async function readBrandReferenceImages(formData: FormData) {

@@ -36,17 +36,17 @@ export function VersionStrip({
       <div className="flex gap-2 overflow-x-auto pb-1">
         {items.map((item) => (
           <button
-            className={`min-w-[156px] overflow-hidden rounded-[18px] border text-left transition ${
+            className={`min-w-[128px] overflow-hidden rounded-[16px] border text-left transition ${
               item.selected ? accentClassName : "border-white/10 bg-white/[0.04] hover:bg-white/[0.06]"
             }`}
             key={item.id}
             onClick={() => onSelect(item.id)}
             type="button"
           >
-            <ImageFrame alt={item.image.fileName || item.image.id || item.id} image={item.image} ratioStyle={item.ratioStyle} variant="thumbnail" />
-            <div className="p-2.5">
+            <ImageFrame alt={item.image.fileName || item.image.id || item.id} fit="contain" image={item.image} preserveRatio={false} style={{ height: 68 }} variant="thumbnail" />
+            <div className="p-2">
               <div className="truncate text-[11px] font-semibold text-white/80">{item.title}</div>
-              <div className="apple-caption mt-1 truncate">{item.subtitle}</div>
+              <div className="apple-caption mt-0.5 truncate">{item.subtitle}</div>
             </div>
           </button>
         ))}

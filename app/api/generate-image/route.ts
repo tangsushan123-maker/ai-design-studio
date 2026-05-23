@@ -102,23 +102,25 @@ export async function POST(request: Request) {
           protectionContext,
         });
         let final = first;
-        if (first.qualityCheck.compositionRisk) {
-          const retryPrompt = buildCompositionRetryPrompt(imagePrompt);
-          const retryResponse = await createImageRequest(retryPrompt).catch(() => null);
-          const retryItem = retryResponse?.data?.[0]
-            ? { ...retryResponse.data[0], prompt: retryPrompt }
-            : null;
-          if (retryItem) {
-            const retry = await processTextToImageResult(retryItem, retryPrompt, {
-              body,
-              exactSize,
-              outputSize,
-              ratio,
-              outputRatioLabel,
-              protectionContext,
-            }).catch(() => null);
-            if (retry && !retry.qualityCheck.compositionRisk) {
-              final = retry;
+        if (shouldRetryTextToImageQuality(first.qualityCheck)) {
+          for (let attempt = 1; attempt <= 2 && shouldRetryTextToImageQuality(final.qualityCheck); attempt += 1) {
+            const retryPrompt = buildCompositionRetryPrompt(imagePrompt, attempt);
+            const retryResponse = await createImageRequest(retryPrompt).catch(() => null);
+            const retryItem = retryResponse?.data?.[0]
+              ? { ...retryResponse.data[0], prompt: retryPrompt }
+              : null;
+            if (retryItem) {
+              const retry = await processTextToImageResult(retryItem, retryPrompt, {
+                body,
+                exactSize,
+                outputSize,
+                ratio,
+                outputRatioLabel,
+                protectionContext,
+              }).catch(() => null);
+              if (retry && (!shouldRetryTextToImageQuality(retry.qualityCheck) || textToImageRiskValue(retry.qualityCheck) < textToImageRiskValue(final.qualityCheck))) {
+                final = retry;
+              }
             }
           }
         }
@@ -128,7 +130,7 @@ export async function POST(request: Request) {
           quality: body.quality,
         });
         const savedStat = await stat(saved.path);
-        const qualityCheck = await inspectImageQuality(saved.path, {
+        const savedQualityCheck = await inspectImageQuality(saved.path, {
           quality: body.quality,
           ratio,
           expectedSize: outputSize,
@@ -136,7 +138,15 @@ export async function POST(request: Request) {
           aspectRatio: outputRatioLabel,
           protectionContext,
           operation: "text_to_image",
-          safeMarginPercent: safeMarginPercent(body.safeMargin),
+          safeMarginPercent: textToImageSafeMarginPercent({ body, ratio }),
+        });
+        const qualityCheck = tightenTextToImageCompositionRisk(savedQualityCheck, {
+          body,
+          exactSize,
+          outputSize,
+          ratio,
+          outputRatioLabel,
+          protectionContext,
         });
         const image = {
           id: saved.fileName,
@@ -190,9 +200,10 @@ async function processTextToImageResult(
   context: TextToImageProcessContext,
 ) {
   const raw = await imageResultToBuffer(item.b64_json, item.url);
+  const textToImageFitMode = "safe_no_crop";
   const processed = context.exactSize && context.body.customWidth && context.body.customHeight
-    ? await processToExactSize(raw, { width: context.body.customWidth, height: context.body.customHeight }, "png", "smart_outpaint")
-    : await processToTarget(raw, context.ratio, context.body.quality, "png", "smart_outpaint");
+    ? await processToExactSize(raw, { width: context.body.customWidth, height: context.body.customHeight }, "png", textToImageFitMode)
+    : await processToTarget(raw, context.ratio, context.body.quality, "png", textToImageFitMode);
   const actual = await readImageMetadata(processed);
   assertExactPixelSize({ width: actual.width, height: actual.height }, context.outputSize);
   const qualityCheck = await inspectImageQuality(processed, {
@@ -202,24 +213,94 @@ async function processTextToImageResult(
     aspectRatio: context.outputRatioLabel,
     protectionContext: context.protectionContext,
     operation: "text_to_image",
-    safeMarginPercent: safeMarginPercent(context.body.safeMargin),
+    safeMarginPercent: textToImageSafeMarginPercent(context),
   });
-  return { actual, processed, prompt, qualityCheck };
+  return { actual, processed, prompt, qualityCheck: tightenTextToImageCompositionRisk(qualityCheck, context) };
 }
 
-function buildCompositionRetryPrompt(prompt: string) {
+function buildCompositionRetryPrompt(prompt: string, attempt = 1) {
   return [
     prompt,
     "",
-    "自动构图复查：上一版疑似主体或标题贴边/被裁切，请重生成更完整构图。",
-    "强制修正：zoom out, smaller subject, more empty space, full body visible, subject fully inside frame, larger safe margins.",
-    "主体、IP、人物、产品、主标题和重要卖点必须全部进入画布内，四周留出更明显安全边距，不要贴边，不要截断，不要过度放大。",
+    `自动审稿失败 ${attempt}：上一版疑似裁切、贴边、比例异常、白边或模糊补边。`,
+    "重生要求：zoom out；主体和标题缩小 10%-20%；重要元素进入中心 76% 安全区；四周 18% 只放背景/出血装饰；Logo 只做 6%-12% 品牌识别；卖点最多 3-5 个。",
+    "禁止：裁切主体/文字、底部信息压边、白边、黑边、透明边、模糊/磨砂/玻璃补边、居中缩小图。",
+    attempt >= 2 ? "第二次重试：主体和标题再缩小 25%，边缘只保留背景。" : "",
   ].join("\n");
+}
+
+function shouldRetryTextToImageQuality(qualityCheck: Awaited<ReturnType<typeof inspectImageQuality>>) {
+  return Boolean(
+    qualityCheck.compositionRisk ||
+      qualityCheck.hasWhiteBorder ||
+      qualityCheck.ratioMatched === false ||
+      qualityCheck.suspectedBlurredPadding ||
+      (qualityCheck.edgeContentRatio || 0) > 0.38,
+  );
+}
+
+function textToImageRiskValue(qualityCheck: Awaited<ReturnType<typeof inspectImageQuality>>) {
+  const maxEdgeRatio = Math.max(
+    qualityCheck.edgeContentRatio || 0,
+    ...Object.values(qualityCheck.edgeContentRatios || {}).map((value) => Number(value) || 0),
+  );
+  return (qualityCheck.compositionRisk ? 1 : 0) +
+    (qualityCheck.hasWhiteBorder ? 1 : 0) +
+    (qualityCheck.ratioMatched === false ? 1 : 0) +
+    (qualityCheck.suspectedBlurredPadding ? 1 : 0) +
+    maxEdgeRatio;
 }
 
 function safeMarginPercent(value?: string) {
   const parsed = Number(String(value || "").replace("%", ""));
-  return [5, 10, 15, 20].includes(parsed) ? parsed : 10;
+  return [5, 10, 15, 20].includes(parsed) ? parsed : 15;
+}
+
+function textToImageSafeMarginPercent(context: Pick<TextToImageProcessContext, "body" | "ratio">) {
+  const ratioValue = context.ratio.width / Math.max(1, context.ratio.height);
+  const base = safeMarginPercent(context.body.safeMargin);
+  if (ratioValue < 0.92) return Math.max(base, 20);
+  if (ratioValue > 1.08) return Math.max(base, ratioValue > 2.2 ? 18 : 18);
+  return base;
+}
+
+function tightenTextToImageCompositionRisk<T extends {
+  compositionRisk?: boolean;
+  compositionRiskLabel?: string;
+  edgeContentRatio?: number;
+  edgeHotSide?: string;
+  edgeContentRatios?: Record<string, number>;
+  issues?: string[];
+  actions?: string[];
+  status?: string;
+  label?: string;
+}>(qualityCheck: T, context: TextToImageProcessContext): T {
+  if (qualityCheck.compositionRisk) return qualityCheck;
+  const ratioValue = context.ratio.width / Math.max(1, context.ratio.height);
+  const isPortrait = ratioValue < 0.92;
+  const isLandscape = ratioValue > 1.08;
+  const topRatio = qualityCheck.edgeContentRatios?.top ?? (qualityCheck.edgeHotSide === "top" ? qualityCheck.edgeContentRatio || 0 : 0);
+  const bottomRatio = qualityCheck.edgeContentRatios?.bottom ?? (qualityCheck.edgeHotSide === "bottom" ? qualityCheck.edgeContentRatio || 0 : 0);
+  const leftRatio = qualityCheck.edgeContentRatios?.left ?? (qualityCheck.edgeHotSide === "left" ? qualityCheck.edgeContentRatio || 0 : 0);
+  const rightRatio = qualityCheck.edgeContentRatios?.right ?? (qualityCheck.edgeHotSide === "right" ? qualityCheck.edgeContentRatio || 0 : 0);
+  const edgeRisks = [
+    { name: "左侧", risky: isPortrait && leftRatio > 0.18, ratio: leftRatio },
+    { name: "右侧", risky: isPortrait && rightRatio > 0.18, ratio: rightRatio },
+    { name: "顶部", risky: topRatio > (isPortrait ? 0.2 : isLandscape ? 0.18 : 0.24), ratio: topRatio },
+    { name: "底部", risky: bottomRatio > (isPortrait ? 0.2 : isLandscape ? 0.2 : 0.24), ratio: bottomRatio },
+  ].filter((item) => item.risky);
+  if (!edgeRisks.length) return qualityCheck;
+  const worst = edgeRisks.sort((a, b) => b.ratio - a.ratio)[0];
+  const issue = `文生图${worst.name}高对比内容偏多，疑似标题、主体、IP/产品边缘或底部信息贴边/被裁切。`;
+  return {
+    ...qualityCheck,
+    status: "composition_risk",
+    label: `${context.outputSize.width}×${context.outputSize.height}｜构图贴边`,
+    compositionRisk: true,
+    compositionRiskLabel: issue,
+    issues: [...(qualityCheck.issues || []), issue],
+    actions: [...(qualityCheck.actions || []), "自动重试：缩小主体和标题，增加四周安全边距"],
+  };
 }
 
 function normalizeTextToImageRequest(body: DesignRequest): DesignRequest {
@@ -229,10 +310,10 @@ function normalizeTextToImageRequest(body: DesignRequest): DesignRequest {
     ...body,
     aspectRatio: hasCustomSize ? "custom" : body.aspectRatio === "auto" ? inferTextToImageAspectRatio(text) : body.aspectRatio,
     compositionCompleteness: body.compositionCompleteness || "更完整",
-    safeMargin: body.safeMargin || "10%",
+    safeMargin: body.safeMargin || "15%",
     cameraDistance: body.cameraDistance || "中景",
     subjectScale: body.subjectScale || "中",
-    previewFit: body.previewFit === "cover" ? "cover" : "contain",
+    previewFit: "contain",
   };
 }
 
@@ -261,10 +342,10 @@ function designRequestFromFormData(formData: FormData): DesignRequest {
     sourceAnalysis: String(formData.get("sourceAnalysis") ?? ""),
     referenceImages: parseReferenceManifest(formData.get("referenceManifest")),
     compositionCompleteness: String(formData.get("compositionCompleteness") ?? "更完整"),
-    safeMargin: String(formData.get("safeMargin") ?? "10%"),
+    safeMargin: String(formData.get("safeMargin") ?? "15%"),
     cameraDistance: String(formData.get("cameraDistance") ?? "中景"),
     subjectScale: String(formData.get("subjectScale") ?? "中"),
-    previewFit: String(formData.get("previewFit") ?? "contain") === "cover" ? "cover" : "contain",
+    previewFit: "contain",
     protectionContext: parseProtectionContext(formData.get("protectionContext")),
   };
 }
@@ -273,7 +354,7 @@ function parseReferenceManifest(value: FormDataEntryValue | null): TextReference
   if (typeof value !== "string" || !value.trim()) return [];
   try {
     const parsed = JSON.parse(value) as TextReferenceImage[];
-    return Array.isArray(parsed) ? parsed.filter((item) => Boolean(item?.label)).slice(0, 6) : [];
+    return Array.isArray(parsed) ? parsed.filter((item) => Boolean(item?.label)).slice(0, 5) : [];
   } catch {
     return [];
   }
@@ -290,27 +371,31 @@ function parseProtectionContext(value: FormDataEntryValue | null) {
 
 async function readReferenceImages(formData: FormData) {
   const refs: Array<{ buffer: Buffer; fileName: string; mimeType: string }> = [];
-  for (let index = 1; index <= 6; index += 1) {
-    const item = await readReferenceImage(formData, index);
+  for (let index = 1; index <= 5; index += 1) {
+    const item = await readImageInput(formData, `referenceImage_${index}`, `referenceImageUrl_${index}`, `text-reference-${index}.png`);
+    if (item) refs.push(item);
+  }
+  for (let index = 1; index <= 3; index += 1) {
+    const item = await readImageInput(formData, `brandAsset_${index}`, `brandAssetUrl_${index}`, `brand-asset-${index}.png`);
     if (item) refs.push(item);
   }
   return refs;
 }
 
-async function readReferenceImage(formData: FormData, index: number) {
-  const file = formData.get(`referenceImage_${index}`) || formData.get(`brandAsset_${index}`);
-  const sourceUrl = String(formData.get(`referenceImageUrl_${index}`) ?? formData.get(`brandAssetUrl_${index}`) ?? "");
+async function readImageInput(formData: FormData, fileKey: string, urlKey: string, fallbackFileName: string) {
+  const file = formData.get(fileKey);
+  const sourceUrl = String(formData.get(urlKey) ?? "");
   if (file instanceof File) {
     return {
       buffer: Buffer.from(await file.arrayBuffer()),
-      fileName: file.name || `text-reference-${index}.png`,
+      fileName: file.name || fallbackFileName,
       mimeType: file.type || "image/png",
     };
   }
   if (sourceUrl) {
     return {
       buffer: await readPublicImageUrl(sourceUrl),
-      fileName: `text-reference-${index}.png`,
+      fileName: fallbackFileName,
       mimeType: "image/png",
     };
   }

@@ -15,6 +15,7 @@ export function ImageFrame({
   image,
   loading = "lazy",
   preserveRatio = true,
+  showCheckerboard = false,
   variant = "preview",
   style,
   ratioStyle,
@@ -26,6 +27,7 @@ export function ImageFrame({
   image: ImageShape;
   loading?: "eager" | "lazy";
   preserveRatio?: boolean;
+  showCheckerboard?: boolean;
   variant?: "thumbnail" | "preview" | "original";
   style?: CSSProperties;
   ratioStyle?: CSSProperties;
@@ -44,9 +46,11 @@ export function ImageFrame({
       className={`relative overflow-hidden border border-white/10 bg-[rgba(10,14,22,0.82)] ${className}`.trim()}
       style={{
         backgroundImage:
-          "linear-gradient(45deg, rgba(255,255,255,0.045) 25%, transparent 25%), linear-gradient(-45deg, rgba(255,255,255,0.045) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.045) 75%), linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.045) 75%)",
-        backgroundSize: "16px 16px",
-        backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+          showCheckerboard
+            ? "linear-gradient(45deg, rgba(255,255,255,0.045) 25%, transparent 25%), linear-gradient(-45deg, rgba(255,255,255,0.045) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.045) 75%), linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.045) 75%)"
+            : "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
+        backgroundSize: showCheckerboard ? "16px 16px" : "100% 100%",
+        backgroundPosition: showCheckerboard ? "0 0, 0 8px, 8px -8px, -8px 0px" : "center",
         ...frameStyle,
       }}
     >

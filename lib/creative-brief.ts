@@ -255,13 +255,13 @@ function projectLibraryDirections(
   return [
     {
       id: "A",
-      title: "方向 A · 项目稳定版",
-      strategy: "优先调用项目素材库，保持品牌色、历史风格和关键信息稳定，适合第一版正式提案。",
+      title: "方向 A · 成熟商业版",
+      strategy: "优先调用项目素材库，信息清晰、少文字、稳版式、品牌可信，适合第一版正式提案和投放。",
       prompt: [
         `基于当前项目素材库生成「${title}」。`,
         `用户需求：${prompt}`,
         `项目上下文：${context}`,
-        "方向 A：信息清晰、专业可信、版式稳定，优先使用项目已有 logo、品牌色、历史海报、真实照片、文案和活动资料。",
+        "方向 A：成熟商业版。主标题 / 核心卖点 / 辅助信息最多 3 层，卖点 3-5 个以内；Logo 只做品牌识别，不做主视觉；主体、标题、卖点分区清楚，适合客户提案和正式投放。",
         sharedPromptRules(missingMaterials),
       ].join("\n"),
       caveats: caveatsFromMissing(missingMaterials),
@@ -269,13 +269,13 @@ function projectLibraryDirections(
     },
     {
       id: "B",
-      title: "方向 B · 品牌传播版",
-      strategy: "在项目素材边界内增强视觉焦点和传播感，适合社媒、活动预热或主视觉探索。",
+      title: "方向 B · 创意主视觉版",
+      strategy: "在项目素材边界内增强视觉记忆点和传播感，但仍然相关、克制、完整，不堆砌无关元素。",
       prompt: [
         `基于当前项目素材库生成「${title}」。`,
         `用户需求：${prompt}`,
         `项目上下文：${context}`,
-        "方向 B：视觉更强、记忆点更明显，但不突破项目素材事实；用更大胆的构图、光影和层级增强传播。",
+        "方向 B：创意主视觉版。用更强视觉重心、主题相关道具、光影层次和构图节奏建立记忆点；仍要控制信息密度，不能编造真实信息，不能满屏贴纸或无关装饰。",
         sharedPromptRules(missingMaterials),
       ].join("\n"),
       caveats: caveatsFromMissing(missingMaterials),
@@ -294,13 +294,13 @@ function imageDirections(
   return [
     {
       id: "A",
-      title: "方向 A · 清晰改版",
-      strategy: "以参考图为准，保留主题、主色、主体和核心文字，优化信息层级和可信感。",
+      title: "方向 A · 成熟商业版",
+      strategy: "以参考图为准，保留主题、主色、主体和核心文字，压低信息噪音，优化层级和可信感。",
       prompt: [
         `参考上传图生成「${title}」改版方向。`,
         prompt ? `用户补充：${prompt}` : "",
         analysis,
-        "方向 A：信息清晰、专业信任、稳定表达。保留参考图核心元素，重点优化版式、对齐、留白、标题层级和可读性。",
+        "方向 A：成熟商业版。信息清晰、少文字、稳版式，保留参考图核心元素，重点优化对齐、留白、标题层级、卖点分组和可读性；Logo 不要过大。",
         sharedPromptRules(missingMaterials),
       ].filter(Boolean).join("\n"),
       caveats: caveatsFromMissing(missingMaterials),
@@ -308,13 +308,13 @@ function imageDirections(
     },
     {
       id: "B",
-      title: "方向 B · 传播强化",
-      strategy: "仍以参考图为来源，但强化视觉冲击、画面焦点和社媒传播感。",
+      title: "方向 B · 创意主视觉版",
+      strategy: "仍以参考图为来源，但强化主题相关的视觉记忆点和传播感，不做无关元素堆砌。",
       prompt: [
         `参考上传图生成「${title}」创意方向。`,
         prompt ? `用户补充：${prompt}` : "",
         analysis,
-        "方向 B：视觉更强、创意更明显、更适合传播。可以重构背景、光影、节奏和主视觉，但不要改变参考图真实信息。",
+        "方向 B：创意主视觉版。可以重构背景、光影、节奏和主视觉，但必须和主题强相关，仍要少字、完整、安全边距充分，不改变参考图真实信息。",
         sharedPromptRules(missingMaterials),
       ].filter(Boolean).join("\n"),
       caveats: caveatsFromMissing(missingMaterials),
@@ -333,13 +333,13 @@ function ideaDirections(
   return [
     {
       id: "A",
-      title: "方向 A · 专业清晰",
-      strategy: "先把一句话扩成可执行需求，强调信息清楚、专业可信和稳定表达。",
+      title: "方向 A · 成熟商业版",
+      strategy: "先把一句话扩成可执行商业设计需求，强调信息清楚、专业可信、少文字和稳定版式。",
       prompt: [
         `根据一句想法生成「${title}」灵感初稿。`,
         `用户想法：${prompt}`,
         completion,
-        "方向 A：信息清晰 / 专业信任 / 稳定表达。适合做给客户确认基础主题和信息层级。",
+        "方向 A：成熟商业版。主标题明确，核心卖点 3-5 个以内，主体/标题/卖点分区清楚，适合给客户确认基础主题和信息层级。",
         sharedPromptRules(missingMaterials),
       ].filter(Boolean).join("\n"),
       caveats: caveatsFromMissing(missingMaterials),
@@ -347,13 +347,13 @@ function ideaDirections(
     },
     {
       id: "B",
-      title: "方向 B · 视觉传播",
-      strategy: "保留需求补全的事实边界，用更强视觉主张探索传播型方案。",
+      title: "方向 B · 创意主视觉版",
+      strategy: "保留需求补全的事实边界，用更强视觉重心探索传播型方案，但控制信息密度。",
       prompt: [
         `根据一句想法生成「${title}」视觉创意初稿。`,
         `用户想法：${prompt}`,
         completion,
-        "方向 B：视觉更强 / 创意更明显 / 更适合传播。适合探索主视觉记忆点和传播海报方向。",
+        "方向 B：创意主视觉版。更强视觉记忆点和传播性，但视觉元素必须服务主题，不能硬凑科技线条、粒子、飘带、城市或无关人物；仍要完整、不拥挤。",
         sharedPromptRules(missingMaterials),
       ].filter(Boolean).join("\n"),
       caveats: caveatsFromMissing(missingMaterials),
@@ -369,6 +369,8 @@ function sharedPromptRules(missingMaterials: string[]) {
     missingMaterials.length ? missingMaterialsWarning : "",
     "缺少真实素材时只做灵感初稿，不要伪造正式品牌落版。",
     "画面中不要出现假电话、假地址、假 Logo、假二维码、虚构医生姓名或虚构机构背书。",
+    "商业成熟度：信息层级最多 3 层，卖点 3-5 个以内，Logo 默认只占画面宽度 6%-12%，主体/标题/卖点必须在中心安全区内。",
+    "输出完整性：不要裁切标题、主体、人物、产品、Logo 或底部信息；不要使用模糊补边、磨砂补边或居中缩小图。",
   ].filter(Boolean).join("\n");
 }
 

@@ -41,7 +41,8 @@ export async function POST(request: Request) {
     const isOutpaint = modeLabel.includes("扩图");
     const isAiResize = modeLabel.includes("AI改尺寸") || modeLabel.includes("4K导出");
     const exactSize = String(formData.get("exactSize") ?? "") === "true";
-    const fitMode = String(formData.get("fitMode") ?? "smart_relayout");
+    const requestedFitMode = String(formData.get("fitMode") ?? "smart_relayout");
+    const fitMode = requestedFitMode === "crop" || requestedFitMode === "pad" ? "smart_relayout" : requestedFitMode;
     const processingFitMode: ExactFitMode = fitMode === "pad" ? "pad" : "crop";
 
     let imageBuffer: Buffer;
@@ -81,6 +82,11 @@ export async function POST(request: Request) {
     const shouldUseAiOutpaint = (isOutpaint || (isAiResize && fitMode === "smart_outpaint")) && !keepOriginalRatio;
     const task = isOutpaint ? "outpaint" : isAiResize ? "resize" : "image_to_image";
     const isCreativeImageToImage = task === "image_to_image";
+    const isSmartResize = isAiResize && fitMode === "smart_relayout";
+    const isGeneratedResize = isSmartResize || shouldUseAiOutpaint;
+    const resultFitMode: ExactFitMode = (isCreativeImageToImage || isGeneratedResize || isOutpaint)
+      ? "safe_no_crop"
+      : processingFitMode;
     const sanitizedPromptText = isCreativeImageToImage ? sanitizeLegacyImageToImagePrompt(promptText) : promptText.trim();
     const userPrompt = sanitizedPromptText || (isCreativeImageToImage
       ? IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST
@@ -127,7 +133,7 @@ export async function POST(request: Request) {
     if (isAiResize && (fitMode === "crop" || fitMode === "pad")) {
       const processed = exactSize && customWidth && customHeight
         ? await processToExactSize(imageBuffer, outputSize, "png", processingFitMode)
-        : await processToTarget(imageBuffer, ratio, quality, "png");
+        : await processToTarget(imageBuffer, ratio, quality, "png", processingFitMode);
       const actual = await readImageMetadata(processed);
       if (exactSize) assertExactPixelSize({ width: actual.width, height: actual.height }, outputSize);
       const saved = await saveImageBuffer(processed, "png", {
@@ -173,13 +179,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ images: [image], prompt: responsePrompt, model });
     }
 
-    const preparedOutpaint = shouldUseAiOutpaint ? await prepareOutpaintInput(imageBuffer, ratio, direction) : null;
+    const preparedTargetCanvas = isGeneratedResize && !keepOriginalRatio ? await prepareOutpaintInput(imageBuffer, ratio, direction) : null;
     const openai = getOpenAI();
-    const requests = promptVariants.map(async (requestPrompt) => {
-      const editImageBuffer = preparedOutpaint?.image ?? imageBuffer;
-      const file = await toFile(editImageBuffer, preparedOutpaint ? "outpaint-canvas.png" : fileName, { type: preparedOutpaint ? "image/png" : mimeType });
+    const createEditRequest = async (requestPrompt: string) => {
+      const editImageBuffer = preparedTargetCanvas?.image ?? imageBuffer;
+      const file = await toFile(editImageBuffer, preparedTargetCanvas ? "target-ratio-canvas.png" : fileName, { type: preparedTargetCanvas ? "image/png" : mimeType });
       const brandFiles = await Promise.all(brandReferenceImages.map((item, index) => toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType })));
-      const mask = preparedOutpaint ? await toFile(preparedOutpaint.mask, "outpaint-mask.png", { type: "image/png" }) : undefined;
+      const mask = shouldUseAiOutpaint && preparedTargetCanvas ? await toFile(preparedTargetCanvas.mask, "outpaint-mask.png", { type: "image/png" }) : undefined;
       const result = await withTimeout(
         openai.images.edit({
           model,
@@ -189,7 +195,7 @@ export async function POST(request: Request) {
           output_format: "png" as const,
           background: "opaque" as const,
           prompt: requestPrompt,
-          size: (preparedOutpaint ? "auto" : keepOriginalRatio ? "auto" : getOpenAIRequestedSize(ratio, quality, model)) as "1024x1024",
+          size: (preparedTargetCanvas ? "auto" : keepOriginalRatio ? "auto" : getOpenAIRequestedSize(ratio, quality, model)) as "1024x1024",
           quality: quality === "standard" ? "medium" : "high",
           n: 1,
         }),
@@ -200,7 +206,8 @@ export async function POST(request: Request) {
         prompt: requestPrompt,
         items: result.data ?? [],
       };
-    });
+    };
+    const requests = promptVariants.map(createEditRequest);
     const settledResults = await Promise.allSettled(requests);
     const resultItems: Array<{ b64_json?: string | null; url?: string | null; prompt: string }> = settledResults.flatMap((result) =>
       result.status === "fulfilled" ? result.value.items.map((item) => ({ ...item, prompt: result.value.prompt })) : [],
@@ -215,24 +222,83 @@ export async function POST(request: Request) {
     const images = await Promise.all(
       resultItems.slice(0, targetCount).map(async (item, index) => {
         const imagePrompt = item.prompt || prompt;
-        const raw = await imageResultToBuffer(item.b64_json, item.url);
-        const processed = exactSize && customWidth && customHeight
-          ? await processToExactSize(raw, { width: customWidth, height: customHeight }, "png", processingFitMode)
-          : await processToTarget(raw, ratio, quality, "png");
-        const actual = await readImageMetadata(processed);
-        if (exactSize) assertExactPixelSize({ width: actual.width, height: actual.height }, outputSize);
-        const saved = await saveImageBuffer(processed, "png", {
+        let final = await processEditResult(item, imagePrompt, {
+          exactSize,
+          customWidth,
+          customHeight,
+          ratio,
+          quality,
+          outputSize,
+          outputRatioLabel,
+          protectionContext,
+          fitMode: resultFitMode,
+          operation: isOutpaint ? "outpaint" : isAiResize ? "resize" : "image_to_image",
+        });
+        if ((isCreativeImageToImage || isGeneratedResize || isOutpaint) && final.qualityCheck.compositionRisk) {
+          for (let attempt = 1; attempt <= 2 && final.qualityCheck.compositionRisk; attempt += 1) {
+            const retryPrompt = (isAiResize || isOutpaint)
+              ? buildResizeCompositionRetryPrompt(imagePrompt, attempt, outputRatioLabel, outputSize)
+              : buildImageToImageCompositionRetryPrompt(imagePrompt, attempt);
+            const retryResponse = await createEditRequest(retryPrompt).catch(() => null);
+            const retryItem = retryResponse?.items?.[0]
+              ? { ...retryResponse.items[0], prompt: retryPrompt }
+              : null;
+            if (retryItem) {
+              const retry = await processEditResult(retryItem, retryPrompt, {
+                exactSize,
+                customWidth,
+                customHeight,
+                ratio,
+                quality,
+                outputSize,
+                outputRatioLabel,
+                protectionContext,
+                fitMode: resultFitMode,
+                operation: isOutpaint ? "outpaint" : isAiResize ? "resize" : "image_to_image",
+              }).catch(() => null);
+              if (retry && (!retry.qualityCheck.compositionRisk || compositionRiskValue(retry.qualityCheck) < compositionRiskValue(final.qualityCheck))) {
+                final = retry;
+              }
+            }
+          }
+        }
+        const saved = await saveImageBuffer(final.processed, "png", {
           ratioLabel: outputRatioLabel,
           quality,
         });
         const savedStat = await stat(saved.path);
-        const qualityCheck = await inspectImageQuality(saved.path, {
+        const savedQualityCheck = await inspectImageQuality(saved.path, {
           quality,
           ratio,
           expectedSize: outputSize,
           fileSizeBytes: savedStat.size,
           aspectRatio: outputRatioLabel,
           protectionContext,
+          operation: isOutpaint ? "outpaint" : isAiResize ? "resize" : "image_to_image",
+          safeMarginPercent: editSafeMarginPercent({
+            exactSize,
+            customWidth,
+            customHeight,
+            ratio,
+            quality,
+            outputSize,
+            outputRatioLabel,
+            protectionContext,
+            fitMode: resultFitMode,
+            operation: isOutpaint ? "outpaint" : isAiResize ? "resize" : "image_to_image",
+          }),
+        });
+        const qualityCheck = tightenImageToImageCompositionRisk(savedQualityCheck, {
+          exactSize,
+          customWidth,
+          customHeight,
+          ratio,
+          quality,
+          outputSize,
+          outputRatioLabel,
+          protectionContext,
+          fitMode: resultFitMode,
+          operation: isOutpaint ? "outpaint" : isAiResize ? "resize" : "image_to_image",
         });
         const image = {
           id: saved.fileName,
@@ -240,7 +306,7 @@ export async function POST(request: Request) {
           originalUrl: saved.originalUrl,
           thumbnailUrl: saved.thumbnailUrl,
           previewUrl: saved.previewUrl,
-          prompt: imagePrompt,
+          prompt: final.prompt,
           variant: index + 1,
           ratio,
           mode: modeLabel,
@@ -248,7 +314,7 @@ export async function POST(request: Request) {
           aspectRatio: outputRatioLabel,
           quality,
           generatedAt,
-          outputSize: { width: actual.width, height: actual.height },
+          outputSize: { width: final.actual.width, height: final.actual.height },
           expectedOutputSize: outputSize,
           qualityCheck,
           fileSizeBytes: savedStat.size,
@@ -259,6 +325,7 @@ export async function POST(request: Request) {
           version: protectionContext.version,
           nodeOperation: isOutpaint ? "outpaint" : isAiResize ? "resize" : modeLabel === "图生图" ? "image_to_image" : "edit_image",
           fitMode,
+          outputFitMode: resultFitMode,
         };
         await saveImageMetadata(saved.fileName, image);
         return image;
@@ -270,6 +337,133 @@ export async function POST(request: Request) {
     const apiError = toApiError(error, "改图失败。");
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
   }
+}
+
+type EditResultProcessContext = {
+  exactSize: boolean;
+  customWidth?: number;
+  customHeight?: number;
+  ratio: PixelSize;
+  quality: QualityValue;
+  outputSize: PixelSize;
+  outputRatioLabel: string;
+  protectionContext: ReturnType<typeof parseProtectionContext>;
+  fitMode: ExactFitMode;
+  operation: "image_to_image" | "resize" | "outpaint";
+};
+
+async function processEditResult(
+  item: { b64_json?: string | null; url?: string | null },
+  prompt: string,
+  context: EditResultProcessContext,
+) {
+  const raw = await imageResultToBuffer(item.b64_json, item.url);
+  const processed = context.exactSize && context.customWidth && context.customHeight
+    ? await processToExactSize(raw, { width: context.customWidth, height: context.customHeight }, "png", context.fitMode)
+    : await processToTarget(raw, context.ratio, context.quality, "png", context.fitMode);
+  const actual = await readImageMetadata(processed);
+  if (context.exactSize) assertExactPixelSize({ width: actual.width, height: actual.height }, context.outputSize);
+  const qualityCheck = await inspectImageQuality(processed, {
+    quality: context.quality,
+    ratio: context.ratio,
+    expectedSize: context.outputSize,
+    aspectRatio: context.outputRatioLabel,
+    protectionContext: context.protectionContext,
+    operation: context.operation,
+    safeMarginPercent: editSafeMarginPercent(context),
+  });
+  return { actual, processed, prompt, qualityCheck: tightenImageToImageCompositionRisk(qualityCheck, context) };
+}
+
+function buildResizeCompositionRetryPrompt(prompt: string, attempt: number, ratioText: string, target: PixelSize) {
+  const targetRatio = target.width / Math.max(1, target.height);
+  const isPortrait = targetRatio < 0.92;
+  const orientationFix = isPortrait
+    ? "竖版：左右 18% 只放背景；标题、主体边缘、手脚、Logo、二维码和底部信息进中心安全区。"
+    : "横版：上下 18% 只放背景；标题顶部、主体底部、页脚和二维码进中心安全区。";
+  return [
+    prompt,
+    "",
+    `自动构图复查 ${attempt}：上一版改比例疑似裁切或贴边。`,
+    `目标：${ratioText} / ${target.width}×${target.height}，生成完整成品设计。`,
+    "修正：full poster visible, complete subject/text visible, no cropping, zoom out, larger safe margins；重要元素放中心 76%，四周 18% 只放背景。",
+    orientationFix,
+    "禁止：半张海报、两侧/上下磨砂补边、模糊补边、空白边、文字或主体触边。",
+    attempt >= 2 ? "第二次重试：整体再缩小 20%，底部信息上移，边缘只放背景。" : "",
+  ].join("\n");
+}
+
+function buildImageToImageCompositionRetryPrompt(prompt: string, attempt = 1) {
+  return [
+    prompt,
+    "",
+    `自动构图复查 ${attempt}：上一版图生图疑似文字、主体或边缘信息被裁。`,
+    "修正：zoom out；标题和主体缩小；完整文字/主体/横幅可见；四周至少 12% 只放背景。",
+    "超宽图：把完整成品放在垂直中心安全带，标题、Logo、主体、卖点和底部信息远离上下边缘。",
+    attempt >= 2 ? "第二次重试：标题缩小 20%，主体缩小 15%，边缘只放背景纹理。" : "",
+  ].join("\n");
+}
+
+function tightenImageToImageCompositionRisk<T extends {
+  compositionRisk?: boolean;
+  compositionRiskLabel?: string;
+  edgeContentRatio?: number;
+  edgeHotSide?: string;
+  edgeContentRatios?: Record<string, number>;
+  issues?: string[];
+  actions?: string[];
+  status?: string;
+  label?: string;
+}>(qualityCheck: T, context: EditResultProcessContext): T {
+  const ratioValue = context.ratio.width / Math.max(1, context.ratio.height);
+  const isWideBanner = context.operation === "image_to_image" && ratioValue > 2.2;
+  const isResizeTask = context.operation === "resize";
+  const isResizeLandscape = isResizeTask && ratioValue > 1.08;
+  const isResizePortrait = isResizeTask && ratioValue < 0.92;
+  const topRatio = qualityCheck.edgeContentRatios?.top ?? (qualityCheck.edgeHotSide === "top" ? qualityCheck.edgeContentRatio || 0 : 0);
+  const bottomRatio = qualityCheck.edgeContentRatios?.bottom ?? (qualityCheck.edgeHotSide === "bottom" ? qualityCheck.edgeContentRatio || 0 : 0);
+  const leftRatio = qualityCheck.edgeContentRatios?.left ?? (qualityCheck.edgeHotSide === "left" ? qualityCheck.edgeContentRatio || 0 : 0);
+  const rightRatio = qualityCheck.edgeContentRatios?.right ?? (qualityCheck.edgeHotSide === "right" ? qualityCheck.edgeContentRatio || 0 : 0);
+  const topEdgeRisk = isWideBanner && topRatio > 0.22;
+  const bottomEdgeRisk = isWideBanner && bottomRatio > 0.28;
+  const resizeTopRisk = isResizeTask && topRatio > (isResizePortrait ? 0.2 : 0.18);
+  const resizeBottomRisk = isResizeTask && bottomRatio > (isResizePortrait ? 0.2 : 0.2);
+  const resizeLeftRisk = (isResizePortrait || isResizeLandscape) && leftRatio > (isResizePortrait ? 0.18 : 0.2);
+  const resizeRightRisk = (isResizePortrait || isResizeLandscape) && rightRatio > (isResizePortrait ? 0.18 : 0.2);
+  const edgeRisks = [
+    { name: "左侧", risky: resizeLeftRisk, ratio: leftRatio },
+    { name: "右侧", risky: resizeRightRisk, ratio: rightRatio },
+    { name: "顶部", risky: topEdgeRisk || resizeTopRisk, ratio: topRatio },
+    { name: "底部", risky: bottomEdgeRisk || resizeBottomRisk, ratio: bottomRatio },
+  ].filter((item) => item.risky);
+  if (!edgeRisks.length || qualityCheck.compositionRisk) return qualityCheck;
+  const worst = edgeRisks.sort((a, b) => b.ratio - a.ratio)[0];
+  const taskName = context.operation === "resize" ? "改比例" : "图生图";
+  const issue = `${taskName}${worst.name}高对比内容偏多，疑似标题、主体、IP/产品边缘或底部信息贴边/被裁切。`;
+  return {
+    ...qualityCheck,
+    status: "composition_risk",
+    label: `${context.outputSize.width}×${context.outputSize.height}｜构图贴边`,
+    compositionRisk: true,
+    compositionRiskLabel: issue,
+    issues: [...(qualityCheck.issues || []), issue],
+    actions: [...(qualityCheck.actions || []), "自动重试：缩小标题和主体，增加四周安全边距"],
+  };
+}
+
+function editSafeMarginPercent(context: EditResultProcessContext) {
+  const ratioValue = context.ratio.width / Math.max(1, context.ratio.height);
+  if (context.operation === "resize") return ratioValue < 0.92 ? 20 : 18;
+  if (context.operation === "image_to_image" && ratioValue > 2.2) return 16;
+  return 12;
+}
+
+function compositionRiskValue(qualityCheck: { compositionRisk?: boolean; edgeContentRatio?: number; edgeContentRatios?: Record<string, number> }) {
+  const maxEdgeRatio = Math.max(
+    qualityCheck.edgeContentRatio || 0,
+    ...Object.values(qualityCheck.edgeContentRatios || {}).map((value) => Number(value) || 0),
+  );
+  return (qualityCheck.compositionRisk ? 1 : 0) + maxEdgeRatio;
 }
 
 async function readBrandReferenceImages(formData: FormData) {

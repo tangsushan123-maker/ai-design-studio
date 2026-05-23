@@ -64,12 +64,11 @@ import {
   type ProjectAssetRecord,
   type ProjectKnowledgeBase,
 } from "@/lib/project-system";
-import { findSizePresetByLabel, groupSizePresetsByCategory, sizePresets, type ResizeFitMode } from "@/lib/size-presets";
+import { findSizePresetByLabel, sizePresets, type ResizeFitMode } from "@/lib/size-presets";
 import { ImageFrame } from "@/components/workbench/image-frame";
 import { AssetLibraryPanel } from "@/components/workbench/asset-library-panel";
 import { HistoryPanel } from "@/components/workbench/history-panel";
 import { ProjectLibraryPanel } from "@/components/workbench/project-library-panel";
-import { ResultVariantCard } from "@/components/workbench/result-variant-card";
 import { TaskCenter } from "@/components/workbench/task-center";
 import { VersionStrip } from "@/components/workbench/version-strip";
 import {
@@ -137,7 +136,7 @@ type GeneratedImage = {
     height: number;
   };
   qualityCheck?: {
-    status?: "passed" | "pending" | "size_insufficient" | "ratio_mismatch" | "suspected_stretch" | "white_border" | "composition_risk" | "failed" | "empty";
+    status?: "passed" | "pending" | "size_insufficient" | "ratio_mismatch" | "suspected_stretch" | "white_border" | "composition_risk" | "blurred_padding" | "failed" | "empty";
     label?: string;
     issues?: string[];
     actions?: string[];
@@ -384,6 +383,8 @@ type TaskRecord = {
   inputs?: ImageAsset[];
   outputs?: ImageAsset[];
   resultCount?: number;
+  resultNodeIds?: string[];
+  resultOnCanvas?: boolean;
   progress?: number;
   progressLabel?: string;
   cancelled?: boolean;
@@ -586,6 +587,9 @@ type ProjectKind = "scratch" | "formal" | "temporary";
 
 const projectStorageKey = "ai-design-node-project-v1";
 const favoriteStorageKey = "ai-design-favorite-images-v1";
+const treeBranchHorizontalGap = 280;
+const treeBranchVerticalGap = 216;
+const treeResultHorizontalGap = 260;
 
 const defaultBrandAssetUsage: BrandAssetUsage = {
   usePrimaryColors: true,
@@ -665,7 +669,7 @@ const quickActions: Array<{ label: string; type: NodeKind; handle: string }> = [
 
 const textReferenceInputHandle = "image";
 const legacyTextReferenceHandles = ["ref1", "ref2", "ref3"] as const;
-const maxTextReferenceImages = 10;
+const maxTextReferenceImages = 5;
 
 const textReferenceRoleOptions: Array<{ value: TextReferenceRole; label: string }> = [
   { value: "person", label: "使用人物" },
@@ -689,9 +693,9 @@ const textReferenceWeightOptions: Array<{ value: TextReferenceWeight; label: str
 ];
 
 const imageTaskTimeoutMs = 600000;
+const successfulTaskAutoHideMs = 8000;
 
 const resizePresets = sizePresets;
-const resizePresetGroups = groupSizePresetsByCategory();
 
 const defaultParamsByKind: Record<NodeKind, Record<string, unknown>> = {
   image_input: {},
@@ -701,7 +705,7 @@ const defaultParamsByKind: Record<NodeKind, Record<string, unknown>> = {
     aspectRatio: "auto",
     quality: "standard",
     compositionCompleteness: "更完整",
-    safeMargin: "10%",
+    safeMargin: "15%",
     cameraDistance: "中景",
     subjectScale: "中",
     previewFit: "contain",
@@ -799,21 +803,6 @@ const inputHandlesByKind: Record<NodeKind, Array<{ id: string; label: string }>>
   output: [{ id: "image", label: "图片" }],
 };
 
-const executableNodeKinds = new Set<NodeKind>([
-  "text_to_image",
-  "image_to_image",
-  "fuse_images",
-  "outpaint",
-  "resize",
-  "remove_background",
-  "layer_output",
-  "replace_product",
-  "mask_edit",
-  "hd_redraw",
-  "upscale_4k",
-  "output",
-]);
-
 type WorkbenchModelInfo = {
   imageModel: string;
   analysisModel: string;
@@ -867,6 +856,7 @@ function NodeWorkflowWorkbench({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingImageNodeRef = useRef<string | null>(null);
   const saveTimerRef = useRef<number | null>(null);
+  const saveFeedbackTimerRef = useRef<number | null>(null);
   const edgeDeleteTimerRef = useRef<number | null>(null);
   const taskProgressTimersRef = useRef<Record<string, number>>({});
   const taskCleanupTimersRef = useRef<Record<string, number>>({});
@@ -875,6 +865,7 @@ function NodeWorkflowWorkbench({
   const projectLoadedRef = useRef(false);
   const { screenToFlowPosition, getViewport, setViewport, fitView } = useReactFlow<FlowNode, FlowEdge>();
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>([]);
+  const nodesRef = useRef<FlowNode[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => loadFavoriteIds());
   const [historyImages, setHistoryImages] = useState<ImageAsset[]>(() => {
@@ -906,7 +897,12 @@ function NodeWorkflowWorkbench({
   const [assetPanelOpen, setAssetPanelOpen] = useState(false);
   const [projectCreateOpen, setProjectCreateOpen] = useState(false);
   const [projectSaveState, setProjectSaveState] = useState<"saved" | "saving" | "error">("saved");
+  const [saveFeedback, setSaveFeedback] = useState<{ tone: "loading" | "success" | "error"; message: string } | null>(null);
   const [projectMemorySearchState, setProjectMemorySearchState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [homeOpen, setHomeOpen] = useState(true);
+  const [homeProjectPickerOpen, setHomeProjectPickerOpen] = useState(false);
+  const [homeBusy, setHomeBusy] = useState(false);
+  const [projectBootReady, setProjectBootReady] = useState(false);
   const [modelInfo, setModelInfo] = useState(initialModelInfo);
   const [status, setStatus] = useState("空画布。点击“添加节点”，或直接拖拽 / 粘贴图片。");
   const [creativeStartBusy, setCreativeStartBusy] = useState(false);
@@ -921,6 +917,25 @@ function NodeWorkflowWorkbench({
   const [pendingRunNodeId, setPendingRunNodeId] = useState<string | null>(null);
   const [pendingRunNodeIds, setPendingRunNodeIds] = useState<string[]>([]);
   const [maskEditorNodeId, setMaskEditorNodeId] = useState<string | null>(null);
+  nodesRef.current = nodes;
+  const hasTaskResultNodesOnCanvas = useCallback((task: Pick<TaskRecord, "resultNodeIds">) => {
+    if (!task.resultNodeIds?.length) return false;
+    const canvasNodeIds = new Set(nodesRef.current.map((node) => node.id));
+    return task.resultNodeIds.every((nodeId) => canvasNodeIds.has(nodeId));
+  }, []);
+  const scheduleSuccessfulTaskAutoHide = useCallback((taskId: string) => {
+    const existingTimer = taskCleanupTimersRef.current[taskId];
+    if (existingTimer) window.clearTimeout(existingTimer);
+    taskCleanupTimersRef.current[taskId] = window.setTimeout(() => {
+      setTasks((current) =>
+        current.filter((task) => {
+          if (task.id !== taskId) return true;
+          return task.status !== "completed" || !hasTaskResultNodesOnCanvas(task);
+        }),
+      );
+      delete taskCleanupTimersRef.current[taskId];
+    }, successfulTaskAutoHideMs);
+  }, [hasTaskResultNodesOnCanvas]);
   const passedImageModelOptions = useMemo(
     () => (modelInfo.modelsCache || []).filter((item) => item.capabilities.includes("image") && item.testStatus === "passed"),
     [modelInfo.modelsCache],
@@ -1006,6 +1021,12 @@ function NodeWorkflowWorkbench({
       taskCleanupTimersRef.current = {};
     };
   }, []);
+  useEffect(() => {
+    tasks.forEach((task) => {
+      if (task.status !== "completed" || !hasTaskResultNodesOnCanvas(task) || taskCleanupTimersRef.current[task.id]) return;
+      scheduleSuccessfulTaskAutoHide(task.id);
+    });
+  }, [hasTaskResultNodesOnCanvas, nodes, scheduleSuccessfulTaskAutoHide, tasks]);
 
   const onConnect: OnConnect = useCallback(
     (connection: Connection) => {
@@ -1117,12 +1138,14 @@ function NodeWorkflowWorkbench({
       })
       .finally(() => {
         projectLoadedRef.current = true;
+        setProjectBootReady(true);
         setProjectSaveState("saved");
       });
   }, [setEdges, setNodes, setViewport]);
 
   useEffect(() => {
     function onPaste(event: ClipboardEvent) {
+      if (homeOpen) return;
       const target = event.target as HTMLElement | null;
       const isTyping = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
       const hasImageFile = hasClipboardImageFile(event.clipboardData);
@@ -1147,7 +1170,7 @@ function NodeWorkflowWorkbench({
 
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [screenToFlowPosition]);
+  }, [homeOpen, screenToFlowPosition]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1696,6 +1719,28 @@ function NodeWorkflowWorkbench({
     setStatus("画布已清空，结果库图片不会删除。");
   }
 
+  function organizeCanvas() {
+    if (!nodes.length) return;
+    const arrangedNodes = arrangeWorkflowNodes(nodes, edges);
+    setNodes(arrangedNodes);
+    setStatus("已整理画布：输入在左，操作在中，结果在右。");
+    focusCanvasOnNodes(arrangedNodes.map((node) => node.id));
+  }
+
+  function nextStandaloneNodePosition() {
+    const center = getViewportCenter();
+    if (!nodes.length) return center;
+    const connectedTargets = new Set(edges.map((edge) => edge.target));
+    const roots = nodes.filter((node) => !connectedTargets.has(node.id));
+    const laneNodes = roots.length ? roots : nodes;
+    const leftX = Math.min(...nodes.map((node) => node.position.x));
+    const bottomY = Math.max(...laneNodes.map((node) => node.position.y + estimateWorkflowNodeHeight(node)));
+    return avoidNodeOverlap({
+      x: Number.isFinite(leftX) ? leftX : center.x,
+      y: Number.isFinite(bottomY) ? bottomY + 78 : center.y,
+    });
+  }
+
   function scheduleEdgeDelete(edgeId: string) {
     if (edgeDeleteTimerRef.current) window.clearTimeout(edgeDeleteTimerRef.current);
     setEdges((current) =>
@@ -1764,7 +1809,7 @@ function NodeWorkflowWorkbench({
     if (!source) return;
     const sourceImage = (source.data.output || source.data.image || null) as ImageAsset | null;
     const transparentDefaults = type === "remove_background" && sourceImage ? transparentNodeDefaults(sourceImage) : {};
-    const next = addNode(type, { x: source.position.x + nodeAutoSpacingX(source), y: source.position.y + 12 }, undefined, true, {
+    const next = addNode(type, nextTreeChildPosition(source), undefined, true, {
       ...transparentDefaults,
       ...paramsOverride,
     });
@@ -1783,6 +1828,25 @@ function NodeWorkflowWorkbench({
     focusNodeParams(next.id);
     setMenu(null);
     setStatus(nodeCreationHint(type, true));
+  }
+
+  function nextTreeChildPosition(source: FlowNode, options: { xGap?: number; yOffset?: number } = {}) {
+    const branchIndex = edges.filter((edge) => edge.source === source.id).length;
+    const x = source.position.x + (options.xGap || nodeAutoSpacingX(source));
+    const y = source.position.y + (options.yOffset ?? 12) + branchIndex * treeBranchVerticalGap;
+    return avoidNodeOverlap({ x, y });
+  }
+
+  function avoidNodeOverlap(position: XYPosition) {
+    let next = { ...position };
+    for (let attempts = 0; attempts < 12; attempts += 1) {
+      const collides = nodes.some((node) =>
+        Math.abs(node.position.x - next.x) < 260 && Math.abs(node.position.y - next.y) < 250,
+      );
+      if (!collides) return next;
+      next = { ...next, y: next.y + treeBranchVerticalGap };
+    }
+    return next;
   }
 
   function addComposerImageAsReference(file: File) {
@@ -1821,8 +1885,7 @@ function NodeWorkflowWorkbench({
     const node = nodes.find((item) => item.id === nodeId);
     if (!node) return [];
     if (node.data.kind === "image_input") return node.data.output ? [node.data.output] as ImageAsset[] : [];
-    const canRunLocally = (node.data.kind === "resize" && ["crop", "pad"].includes(stringParam(node.data.params.fitMode))) ||
-      (node.data.kind === "upscale_4k" && stringParam(node.data.params.fitMode) !== "ai_redraw") ||
+    const canRunLocally = (node.data.kind === "upscale_4k" && stringParam(node.data.params.fitMode) !== "ai_redraw") ||
       (node.data.kind === "remove_background" && transparentCutoutModeParam(node.data.params.cutoutMode) !== "ai_regenerate");
     if (!modelInfo.hasKey && node.data.kind !== "output" && !canRunLocally) {
       markNodeFailed(nodeId, "请先配置 OpenAI API Key。");
@@ -1875,9 +1938,11 @@ function NodeWorkflowWorkbench({
         ...createResultLineage(sourceImage, taskId, image.variant || 1),
         ...strategyMeta,
       }));
+      let resultNodeIds: string[] = [];
       if (outputs.length) {
-        const qualityBlocked = isQualityGateBlocked(outputs[0]);
-        const qualityMessage = outputs[0]?.qualityCheck?.issues?.[0] || outputs[0]?.qualityCheck?.label || "质检未通过";
+        const blockedOutput = outputs.find((item) => isQualityGateBlocked(item));
+        const qualityBlocked = Boolean(blockedOutput);
+        const qualityMessage = blockedOutput?.qualityCheck?.issues?.[0] || blockedOutput?.qualityCheck?.label || "质检未通过";
         if (sourceImage) {
           const nextIds = outputs.map((item) => item.id || item.fileName || item.url).filter(Boolean);
           appendNextImageIds(sourceImage, nextIds);
@@ -1904,15 +1969,16 @@ function NodeWorkflowWorkbench({
               : item,
           ),
         );
-        const resultNodeIds = addOutputImageNodes(node, outputs);
+        resultNodeIds = addOutputImageNodes(node, outputs);
         focusCanvasOnNodes([node.id, ...resultNodeIds]);
       } else {
         setNodeStatus(nodeId, "completed");
       }
       stopTaskProgress(taskId);
       cancelledTaskIdsRef.current.delete(taskId);
-      const qualityBlocked = isQualityGateBlocked(outputs[0]);
-      const qualityMessage = outputs[0]?.qualityCheck?.issues?.[0] || outputs[0]?.qualityCheck?.label || "质检未通过";
+      const blockedOutput = outputs.find((item) => isQualityGateBlocked(item));
+      const qualityBlocked = Boolean(blockedOutput);
+      const qualityMessage = blockedOutput?.qualityCheck?.issues?.[0] || blockedOutput?.qualityCheck?.label || "质检未通过";
       const endedAt = Date.now();
       updateTask(taskId, {
         status: qualityBlocked ? "failed" : "completed",
@@ -1921,14 +1987,15 @@ function NodeWorkflowWorkbench({
         result: outputs[0],
         outputs,
         resultCount: outputs.length,
+        resultNodeIds,
         saveDurationMs: endedAt - saveStartedAt,
         progress: 100,
-        progressLabel: qualityBlocked ? `质检未通过：${outputs[0]?.qualityCheck?.label || "请处理后再交付"}` : completedTaskLabel(outputs.length, outputs[0]),
+        progressLabel: qualityBlocked ? `质检未通过：${blockedOutput ? qualityBadgeLabel(blockedOutput) : "请处理后再交付"}` : completedTaskLabel(outputs.length, outputs[0]),
         error: qualityBlocked ? qualityMessage : undefined,
       });
       setStatus(
         qualityBlocked
-          ? `${node.data.title} 完成，但质检未通过：${outputs[0]?.qualityCheck?.label || "请检查尺寸和白边"}。画布右侧已生成 ${outputs.length} 个结果节点。`
+          ? `${node.data.title} 完成，但质检未通过：${blockedOutput ? qualityBadgeLabel(blockedOutput) : "请检查尺寸和白边"}。画布右侧已生成 ${outputs.length} 个结果节点。`
           : `${node.data.title} 完成：${outputs.length} 张，耗时 ${formatDuration(endedAt - requestStartedAt)}。画布右侧已生成结果节点。`,
       );
       return outputs;
@@ -1941,31 +2008,6 @@ function NodeWorkflowWorkbench({
       updateTask(taskId, { status: "failed", stage: "failed", endedAt: Date.now(), error: friendlyMessage, progress: 100, progressLabel: taskFailureHint(friendlyMessage) });
       setStatus(friendlyMessage);
       return [];
-    }
-  }
-
-  async function runToNode(nodeId: string) {
-    const ordered = collectUpstreamNodes(nodeId);
-    for (const id of ordered) {
-      const node = nodes.find((item) => item.id === id);
-      if (!node || node.data.kind === "image_input") continue;
-      if (node.data.output) continue;
-      await runNode(id);
-    }
-    await runNode(nodeId);
-  }
-
-  async function runWholeWorkflow() {
-    const ordered = topologicalNodes();
-    const runnable = ordered.filter((node) => executableNodeKinds.has(node.data.kind));
-    if (!runnable.length) {
-      setStatus("当前画布还没有可运行节点。");
-      return;
-    }
-
-    await Promise.all(runnable.filter((node) => !hasIncomingEdges(node.id)).map((node) => runNode(node.id)));
-    for (const node of runnable.filter((item) => hasIncomingEdges(item.id))) {
-      await runToNode(node.id);
     }
   }
 
@@ -2037,10 +2079,13 @@ function NodeWorkflowWorkbench({
   function buildTextToImageConstraintText(node: FlowNode, visibleRequestText: string, references: TextReferenceImage[]) {
     const base = buildNodeProjectConstraintText(node, visibleRequestText);
     if (!references.length) return base;
+    const strongReferenceMode = shouldUseStrongTextReferenceMode(visibleRequestText);
     return [
       base,
       `带图片参考的文生图：以文字需求为主，连接到“图片参考”入口的图片作为素材参考参与生成；最多读取 ${maxTextReferenceImages} 张。`,
-      "这不是图生图，不要以某一张参考图为底稿复刻；删除或未连接的图片不得继续出现在生成结果里。",
+      strongReferenceMode
+        ? "用户要求 1:1 / 复刻 / 保持版式配色时：第 1 张图片作为主参考，锁定版式骨架、配色比例、信息区位置和视觉重心；其余图片只按角色补充素材。"
+        : "这不是图生图，不要以某一张参考图为底稿复刻；删除或未连接的图片不得继续出现在生成结果里。",
     ]
       .filter(Boolean)
       .join("\n");
@@ -2225,7 +2270,8 @@ function NodeWorkflowWorkbench({
     const image = resolveInputImage(node.id, "image");
     if (!image) throw new Error(`${node.data.title} 需要连接一张图片。`);
     const params = node.data.params;
-    const fitMode = stringParam(params.fitMode) || (force4k ? "keep_ratio" : "smart_relayout");
+    const requestedFitMode = stringParam(params.fitMode) || (force4k ? "keep_ratio" : "smart_relayout");
+    const fitMode = !force4k && ["crop", "pad"].includes(requestedFitMode) ? "smart_relayout" : requestedFitMode;
     if (force4k) {
       const target = resolveUpscaleTargetFromParams(image, params);
       if (fitMode === "ai_redraw") {
@@ -2269,6 +2315,7 @@ function NodeWorkflowWorkbench({
       return [imageFromSavedResponse(await response.json(), "4K无损导出", image.prompt)];
     }
     const ratio = ratioParam(params.targetRatio);
+    const resizeParams = { ...params, fitMode };
     const fallbackSize = stringParam(params.targetSize) || defaultTargetSizeForRatio(ratio);
     const targetSize = customSize(params).width && customSize(params).height ? customSize(params) : parseTargetSize(fallbackSize);
     const formData = new FormData();
@@ -2277,8 +2324,8 @@ function NodeWorkflowWorkbench({
     formData.append(
       "prompt",
       enrichPrompt(
-        buildResizePrompt(params, ratio),
-        buildNodeProjectConstraintText(node, buildResizePrompt(params, ratio)),
+        buildResizePrompt(resizeParams, ratio),
+        buildNodeProjectConstraintText(node, buildResizePrompt(resizeParams, ratio)),
       ),
     );
     formData.append("adType", "通用设计");
@@ -2290,7 +2337,7 @@ function NodeWorkflowWorkbench({
     formData.append("keepOriginalRatio", "false");
     formData.append("modeLabel", "AI改尺寸");
     formData.append("exactSize", "true");
-    formData.append("fitMode", stringParam(params.fitMode) || "smart_relayout");
+    formData.append("fitMode", fitMode);
     appendProtectionContext(formData, "resize", [image], node);
     const response = await fetch("/api/edit-image", { method: "POST", body: formData });
     return imagesFromResponse(response);
@@ -2615,16 +2662,15 @@ function NodeWorkflowWorkbench({
 
   function addOutputImageNodes(sourceNode: FlowNode, images: ImageAsset[]) {
     if (!images.length) return [];
-    const isLayerOutput = sourceNode.data.kind === "layer_output";
     const previewFit = sourceNode.data.kind === "text_to_image" ? textToImagePreviewFit(sourceNode.data.params) : "contain";
-    const baseX = sourceNode.position.x + 390;
-    const baseY = sourceNode.position.y - (isLayerOutput && images.length > 1 ? 156 : images.length > 1 ? 78 : 0);
+    const baseX = sourceNode.position.x + treeResultHorizontalGap;
+    const yPositions = resultBranchYPositions(sourceNode.position.y, images);
     const resultNodes: FlowNode[] = images.map((image, index) => ({
       id: `node_result_${Date.now()}_${index}_${Math.random().toString(16).slice(2, 6)}`,
       type: "image_input",
       position: {
-        x: baseX + (isLayerOutput ? 0 : (index % 2) * 324),
-        y: baseY + (isLayerOutput ? index * 316 : Math.floor(index / 2) * 276),
+        x: baseX,
+        y: yPositions[index] || sourceNode.position.y,
       },
       data: {
         title: outputNodeTitle(image, index),
@@ -2656,6 +2702,17 @@ function NodeWorkflowWorkbench({
     return resultNodes.map((node) => node.id);
   }
 
+  function resultBranchYPositions(sourceY: number, images: ImageAsset[]) {
+    const spacings = images.map((image) => Math.max(148, Math.min(224, imageNodePreviewMetrics(image).estimatedNodeHeight + 18)));
+    const total = spacings.length <= 1 ? 0 : spacings.slice(0, -1).reduce((sum, value) => sum + value, 0);
+    let cursor = sourceY - total / 2;
+    return images.map((_, index) => {
+      const y = cursor;
+      cursor += spacings[index] || treeBranchVerticalGap;
+      return Math.round(y);
+    });
+  }
+
   function createLayerOutputNodeFromHistory(
     image: ImageAsset,
     options: LayerOutputOptions = { includeBackground: true, includeTextLayer: true },
@@ -2668,7 +2725,7 @@ function NodeWorkflowWorkbench({
     const source = findCanvasNodeByImage(image) || addNode("image_input", getViewportCenter(), { ...image, source: image.source || "history" }, false);
     const operation = addNode(
       "layer_output",
-      { x: source.position.x + nodeAutoSpacingX(source), y: source.position.y + 12 },
+      nextTreeChildPosition(source),
       undefined,
       true,
       {
@@ -2718,7 +2775,7 @@ function NodeWorkflowWorkbench({
     const source = addNode("image_input", getViewportCenter(), { ...image, source: "history" });
     const operation = addNode(
       kind,
-      { x: source.position.x + 360, y: source.position.y + 12 },
+      nextTreeChildPosition(source),
       undefined,
       true,
       kind === "resize"
@@ -2771,7 +2828,7 @@ function NodeWorkflowWorkbench({
     const source = addNode("image_input", getViewportCenter(), { ...image, source: "history" });
     const operation = addNode(
       "mask_edit",
-      { x: source.position.x + 360, y: source.position.y + 12 },
+      nextTreeChildPosition(source),
       undefined,
       true,
       {
@@ -2825,7 +2882,7 @@ function NodeWorkflowWorkbench({
     const source = addNode("image_input", getViewportCenter(), { ...sourceImage, source: "history" });
     const operation = addNode(
       "image_to_image",
-      { x: source.position.x + 360, y: source.position.y + 18 },
+      nextTreeChildPosition(source, { yOffset: 18 }),
       undefined,
       true,
       {
@@ -3102,47 +3159,6 @@ function NodeWorkflowWorkbench({
     );
   }
 
-  function collectUpstreamNodes(nodeId: string) {
-    const visited = new Set<string>();
-    const ordered: string[] = [];
-
-    function visit(id: string) {
-      for (const edge of edges.filter((item) => item.target === id)) {
-        if (!visited.has(edge.source)) {
-          visited.add(edge.source);
-          visit(edge.source);
-          ordered.push(edge.source);
-        }
-      }
-    }
-
-    visit(nodeId);
-    return ordered;
-  }
-
-  function topologicalNodes() {
-    const visited = new Set<string>();
-    const ordered: FlowNode[] = [];
-
-    function visit(node: FlowNode) {
-      if (visited.has(node.id)) return;
-      visited.add(node.id);
-      edges
-        .filter((edge) => edge.target === node.id)
-        .map((edge) => nodes.find((item) => item.id === edge.source))
-        .filter((item): item is FlowNode => Boolean(item))
-        .forEach(visit);
-      ordered.push(node);
-    }
-
-    nodes.forEach(visit);
-    return ordered;
-  }
-
-  function hasIncomingEdges(nodeId: string) {
-    return edges.some((edge) => edge.target === nodeId);
-  }
-
   function getViewportCenter() {
     const rect = wrapperRef.current?.getBoundingClientRect();
     if (!rect) return { x: 120, y: 120 };
@@ -3228,21 +3244,59 @@ function NodeWorkflowWorkbench({
       throw new Error(`连接项目保存接口失败：${error instanceof Error ? error.message : "网络连接失败"}`);
     });
     if (!response.ok) throw new Error(await readProjectSaveError(response));
-    setLastSaveDurationMs(Math.round(performance.now() - startedAt));
-    if (localCacheWarning) setStatus(`项目已保存；${localCacheWarning}`);
+    const durationMs = Math.round(performance.now() - startedAt);
+    setLastSaveDurationMs(durationMs);
     void refreshProjectList();
     void refreshMaterialLibraries();
+    return {
+      durationMs,
+      localCacheWarning,
+      payloadBytes: payloadText.length,
+    };
   }
 
-  async function saveProject() {
+  function showSaveFeedback(tone: "loading" | "success" | "error", message: string, autoHideMs = tone === "success" ? 5200 : tone === "error" ? 9000 : 0) {
+    if (saveFeedbackTimerRef.current) {
+      window.clearTimeout(saveFeedbackTimerRef.current);
+      saveFeedbackTimerRef.current = null;
+    }
+    setSaveFeedback({ tone, message });
+    if (autoHideMs > 0) {
+      saveFeedbackTimerRef.current = window.setTimeout(() => {
+        setSaveFeedback(null);
+        saveFeedbackTimerRef.current = null;
+      }, autoHideMs);
+    }
+  }
+
+  async function saveProject(options: { manual?: boolean } = {}) {
+    const manual = Boolean(options.manual);
     const payload = currentProjectPayload();
     setProjectSaveState("saving");
+    if (manual) {
+      const message = `正在保存项目「${payload.name || projectName || "AI 设计项目"}」...`;
+      setStatus(message);
+      showSaveFeedback("loading", message);
+    }
     try {
-      await persistProjectPayload(payload);
+      const result = await persistProjectPayload(payload);
       setProjectSaveState("saved");
+      if (manual) {
+        const detail = `保存成功：项目「${payload.name || projectName || "AI 设计项目"}」已保存。${formatFileSize(result.payloadBytes)}，${formatDuration(result.durationMs)}。`;
+        const message = result.localCacheWarning ? `${detail} ${result.localCacheWarning}` : detail;
+        setStatus(message);
+        showSaveFeedback("success", message);
+      } else if (result.localCacheWarning) {
+        setStatus(`项目已保存；${result.localCacheWarning}`);
+      }
+      return true;
     } catch (error) {
       setProjectSaveState("error");
-      setStatus(error instanceof Error ? error.message : "项目保存失败：未知错误。");
+      const message = error instanceof Error ? error.message : "项目保存失败：未知错误。";
+      const displayMessage = message.startsWith("项目保存失败") || message.startsWith("保存项目失败") ? message : `项目保存失败：${message}`;
+      setStatus(displayMessage);
+      if (manual) showSaveFeedback("error", displayMessage);
+      return false;
     }
   }
 
@@ -3377,7 +3431,7 @@ function NodeWorkflowWorkbench({
     const response = await fetch(`/api/project?id=${encodeURIComponent(id)}`);
     if (!response.ok) {
       setStatus("打开项目失败。");
-      return;
+      return false;
     }
     const project = (await response.json()) as ProjectPayload;
     setProjectId(project.id || id);
@@ -3408,6 +3462,7 @@ function NodeWorkflowWorkbench({
     setStatus(`已打开项目：${project.name || "AI 设计项目"}`);
     void refreshProjectList();
     void refreshMaterialLibraries();
+    return true;
   }
 
   async function deleteProject(id: string) {
@@ -3501,7 +3556,7 @@ function NodeWorkflowWorkbench({
     const source = findCanvasNodeByImage(image) || addNode("image_input", getViewportCenter(), { ...image, source: image.source || "history" }, false);
     const operation = addNode(
       "layer_output",
-      { x: source.position.x + nodeAutoSpacingX(source), y: source.position.y + 12 },
+      nextTreeChildPosition(source),
       undefined,
       true,
       {
@@ -3727,6 +3782,55 @@ function NodeWorkflowWorkbench({
       });
     }
     void refreshMaterialLibraries();
+    return true;
+  }
+
+  async function enterNewProjectFromHome() {
+    if (!projectBootReady || homeBusy) return;
+    setHomeBusy(true);
+    setHomeProjectPickerOpen(false);
+    setHomeOpen(false);
+    try {
+      await createNewProject();
+    } finally {
+      setHomeBusy(false);
+    }
+  }
+
+  async function openProjectFromHome(id: string) {
+    if (!projectBootReady || homeBusy) return;
+    setHomeBusy(true);
+    try {
+      const opened = await loadProject(id);
+      if (opened) {
+        setHomeProjectPickerOpen(false);
+        setHomeOpen(false);
+      }
+    } catch {
+      setStatus("打开项目失败。");
+    } finally {
+      setHomeBusy(false);
+    }
+  }
+
+  function showHomeProjectPicker() {
+    setHomeProjectPickerOpen(true);
+    void refreshProjectList();
+  }
+
+  if (homeOpen) {
+    return (
+      <ProjectHomeScreen
+        activeProjectId={projectId}
+        busy={homeBusy || !projectBootReady}
+        formatUpdatedAt={formatGeneratedAt}
+        onCreate={() => void enterNewProjectFromHome()}
+        onOpen={(id) => void openProjectFromHome(id)}
+        onShowProjects={showHomeProjectPicker}
+        pickerOpen={homeProjectPickerOpen}
+        projects={projectList}
+      />
+    );
   }
 
   return (
@@ -3774,18 +3878,18 @@ function NodeWorkflowWorkbench({
               setProjectPanelOpen(false);
             }}
           />
+          <Link
+            className={`flex items-center justify-center rounded-[18px] border transition apple-button text-white/72 ${
+              leftRailOpen ? "w-full flex-col gap-1 px-1 py-2.5" : "size-10 px-0 py-0"
+            }`}
+            href="/settings"
+            onClick={() => void saveProject()}
+            title="设置"
+          >
+            <KeyRound className="size-4" />
+            {leftRailOpen ? <span className="text-[11px] leading-none opacity-80">设置</span> : null}
+          </Link>
         </div>
-        <Link
-          className={`apple-button mt-auto flex items-center justify-center gap-1.5 text-white/66 ${
-            leftRailOpen ? "w-full flex-col px-1 py-2.5" : "size-10"
-          }`}
-          href="/settings"
-          onClick={() => void saveProject()}
-          title="API 配置"
-        >
-          <KeyRound className="size-4" />
-          {leftRailOpen ? <span className="text-[11px] leading-none text-white/56">API</span> : null}
-        </Link>
       </aside>
 
       {projectPanelOpen ? (
@@ -3875,7 +3979,19 @@ function NodeWorkflowWorkbench({
                 {modelInfo.hasKey ? "API 正常" : "API 未配置"}
               </span>
             </div>
-            {status ? <div className="apple-caption mt-2 line-clamp-1">{status}</div> : null}
+            {saveFeedback ? (
+              <div
+                className={`mt-2 rounded-xl border px-2.5 py-1.5 text-[11px] leading-4 ${
+                  saveFeedback.tone === "error"
+                    ? "border-[#ff6b5f]/20 bg-[#ff6b5f]/12 text-[#ffb4a8]"
+                    : saveFeedback.tone === "success"
+                      ? "border-[#74e3c5]/20 bg-[#74e3c5]/12 text-[#adf8e5]"
+                      : "border-white/12 bg-white/[0.06] text-white/66"
+                }`}
+              >
+                {saveFeedback.message}
+              </div>
+            ) : status ? <div className="apple-caption mt-2 line-clamp-1">{status}</div> : null}
           </div>
           <div className="pointer-events-auto flex shrink-0 items-center gap-2">
             {projectKind === "temporary" ? (
@@ -3888,14 +4004,14 @@ function NodeWorkflowWorkbench({
                 转正式
               </button>
             ) : null}
-            {nodes.length ? (
+            {nodes.length > 1 ? (
               <button
-                className="apple-button-primary flex h-9 items-center gap-1.5 px-3.5 text-[11px] font-semibold"
-                onClick={() => void runWholeWorkflow()}
+                className="apple-button flex h-9 shrink-0 items-center gap-1.5 px-3 text-[11px] font-medium"
+                onClick={organizeCanvas}
                 type="button"
               >
-                <Sparkles className="size-3.5" />
-                运行
+                <ScanLine className="size-3.5" />
+                整理
               </button>
             ) : null}
             {nodes.length ? (
@@ -3910,11 +4026,12 @@ function NodeWorkflowWorkbench({
             ) : null}
             <button
               className="apple-button flex h-9 shrink-0 items-center gap-1.5 px-3 text-[11px] font-medium"
-              onClick={() => void saveProject()}
+              disabled={projectSaveState === "saving"}
+              onClick={() => void saveProject({ manual: true })}
               type="button"
             >
               <Check className="size-3.5" />
-              保存
+              {projectSaveState === "saving" ? "保存中" : projectSaveState === "error" ? "重新保存" : "保存"}
             </button>
             <button
               className="apple-button flex h-9 shrink-0 items-center gap-1.5 px-3 text-[11px] font-medium"
@@ -3933,7 +4050,7 @@ function NodeWorkflowWorkbench({
             y={82}
             onClose={() => setNodeMenuOpen(false)}
             onSelect={(type) => {
-              const node = addNode(type, getViewportCenter());
+              const node = addNode(type, nextStandaloneNodePosition());
               if (type !== "image_input") focusNodeParams(node.id);
               setStatus(nodeCreationHint(type, false));
             }}
@@ -4050,8 +4167,6 @@ function NodeWorkflowWorkbench({
             historyHasMore={historyHasMore}
             historyLoadingMore={historyLoadingMore}
             projectId={projectId}
-            projectName={projectName}
-            modelInfo={modelInfo}
             tabHint={rightPanelTabHint}
             tabHintTick={rightPanelTabTick}
             onDeleteHistory={(image) => void deleteHistoryImage(image)}
@@ -4075,9 +4190,8 @@ function NodeWorkflowWorkbench({
             onPreview={setLightboxImage}
             onCreateLayerOutputNode={(image) => createLayerOutputNodeFromHistory(image)}
             onClose={() => setRightPanelOpen(false)}
-            onSaveBeforeNavigate={() => void saveProject()}
             selectedNode={selectedNode}
-            tasks={tasks}
+            tasks={tasks.map((task) => ({ ...task, resultOnCanvas: hasTaskResultNodesOnCanvas(task) }))}
             onCancelTask={cancelTask}
             onDeleteTask={removeTask}
             onDeleteFinishedTasks={removeFinishedTasks}
@@ -4147,6 +4261,99 @@ function NodeWorkflowWorkbench({
           }}
         />
       ) : null}
+    </main>
+  );
+}
+
+function ProjectHomeScreen({
+  activeProjectId,
+  busy,
+  formatUpdatedAt,
+  onCreate,
+  onOpen,
+  onShowProjects,
+  pickerOpen,
+  projects,
+}: {
+  activeProjectId: string;
+  busy: boolean;
+  formatUpdatedAt: (value: string) => string;
+  onCreate: () => void;
+  onOpen: (id: string) => void;
+  onShowProjects: () => void;
+  pickerOpen: boolean;
+  projects: ProjectSummary[];
+}) {
+  return (
+    <main className="apple-shell flex h-screen items-center justify-center overflow-hidden p-5 text-[#f5f7fb]">
+      <section className="apple-panel-strong w-full max-w-[560px] rounded-[30px] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.34)] sm:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[20px] font-semibold text-white/92">AI 设计工作台</div>
+            <div className="apple-caption mt-1 truncate">先选择项目，再进入节点画布。</div>
+          </div>
+          <span className="apple-pill shrink-0 px-2.5 py-1 text-[11px]">{busy ? "准备中" : "就绪"}</span>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button
+            className="apple-button-primary flex min-h-[96px] flex-col items-start justify-between rounded-[22px] px-4 py-3 text-left text-[#07121f] disabled:opacity-55"
+            disabled={busy}
+            onClick={onCreate}
+            type="button"
+          >
+            <Plus className="size-5" />
+            <span className="text-[17px] font-semibold">{busy ? "正在准备" : "新建项目"}</span>
+          </button>
+          <button
+            className="apple-button flex min-h-[96px] flex-col items-start justify-between rounded-[22px] px-4 py-3 text-left text-white/82 disabled:opacity-55"
+            disabled={busy}
+            onClick={onShowProjects}
+            type="button"
+          >
+            <FolderOpen className="size-5" />
+            <span className="text-[17px] font-semibold">打开项目</span>
+          </button>
+        </div>
+
+        {pickerOpen ? (
+          <div className="mt-4 max-h-[46vh] overflow-auto rounded-[22px] border border-white/10 bg-white/[0.035] p-2">
+            {projects.length ? (
+              <div className="space-y-2">
+                {projects.map((project) => (
+                  <button
+                    className={`apple-interactive-card flex w-full items-center gap-3 p-3 text-left ${project.id === activeProjectId ? "is-selected" : ""}`}
+                    disabled={busy}
+                    key={project.id}
+                    onClick={() => onOpen(project.id)}
+                    type="button"
+                  >
+                    {project.coverUrl ? (
+                      <span
+                        aria-hidden="true"
+                        className="size-12 shrink-0 rounded-[14px] border border-white/10 bg-cover bg-center"
+                        style={{ backgroundImage: `url(${project.coverUrl})` }}
+                      />
+                    ) : (
+                      <span className="flex size-12 shrink-0 items-center justify-center rounded-[14px] border border-white/10 bg-white/[0.055] text-white/42">
+                        <FolderOpen className="size-5" />
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-semibold text-white/84">{project.name}</span>
+                      <span className="apple-caption mt-0.5 block truncate">
+                        {(project.assetCount || 0)} 素材 · {project.updatedAt ? formatUpdatedAt(project.updatedAt) : "刚刚"}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="apple-empty-state px-4 py-8 text-center text-[12px] text-white/46">暂无项目</div>
+            )}
+          </div>
+        ) : null}
+      </section>
     </main>
   );
 }
@@ -4224,57 +4431,61 @@ function DraftProfileInput({ label, onChange, placeholder, value }: { label: str
 
 const ImageInputNode = memo(function ImageInputNode({ id, data, selected }: NodeProps<FlowNode>) {
   const image = data.image || data.output || null;
-  const ratio = imageRatio(image);
-  const width = image ? Math.min(320, Math.max(190, ratio >= 1 ? 300 : 220)) : 260;
-  const height = image ? Math.round(width / ratio) : 180;
+  const metrics = imageNodePreviewMetrics(image);
   const previewFit = textToImagePreviewFit(data.params);
+  const showUploadButton = !image;
+  const nodeTitle = image ? imageNodeTitle(image, data.title) : data.title;
+  const nodeMeta = image ? compactImageMeta(image) : "输入 image";
 
   return (
     <section
-      className={`apple-node-card group rounded-[22px] p-2.5 text-white ${selected ? "is-input-selected" : ""}`}
-      style={{ width: width + 20 }}
+      className={`apple-node-card group rounded-[20px] p-2 text-white ${selected ? "is-input-selected" : ""}`}
+      style={{ width: metrics.nodeWidth }}
     >
       <Handle id="source" position={Position.Left} type="target" className="!size-3 !border-white/40 !bg-[#0c0d11]" />
       <Handle id="image" position={Position.Right} type="source" className="!size-3 !border-[#74e3c5] !bg-[#74e3c5]" />
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate text-[12px] font-semibold text-white/86">{data.title}</div>
-          <div className="apple-caption mt-0.5 truncate">{image ? "图片节点" : "输入 image"}</div>
+          <div className="truncate text-[11px] font-semibold text-white/88">{nodeTitle}</div>
+          <div className="apple-caption mt-0.5 truncate text-[10px]">{nodeMeta}</div>
         </div>
+        {showUploadButton ? (
+          <button
+            className="apple-button nodrag flex size-6 shrink-0 items-center justify-center text-white/62"
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = "image/png,image/jpeg,image/webp";
+              input.onchange = () => {
+                const file = input.files?.[0];
+                if (file) data.onImageFile?.(id, file);
+              };
+              input.click();
+            }}
+            title="上传图片"
+            type="button"
+          >
+            <ImagePlus className="size-3.5" />
+          </button>
+        ) : null}
         <button
-          className="apple-button nodrag flex size-7 shrink-0 items-center justify-center text-white/62"
-          onClick={() => {
-            const input = document.createElement("input");
-            input.type = "file";
-            input.accept = "image/png,image/jpeg,image/webp";
-            input.onchange = () => {
-              const file = input.files?.[0];
-              if (file) data.onImageFile?.(id, file);
-            };
-            input.click();
-          }}
-          title="替换图片"
-          type="button"
-        >
-          <ImagePlus className="size-4" />
-        </button>
-        <button
-          className="apple-button-danger nodrag flex size-7 shrink-0 items-center justify-center opacity-0 transition group-hover:opacity-100"
+          className="apple-button-danger nodrag flex size-6 shrink-0 items-center justify-center opacity-0 transition group-hover:opacity-100"
           onClick={() => data.onDelete?.(id)}
           title="删除节点"
           type="button"
         >
-          <Trash2 className="size-3.5" />
+          <Trash2 className="size-3" />
         </button>
       </div>
       {image ? (
         Array.isArray(data.outputs) && data.outputs.length > 1 ? (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-1.5">
             {data.outputs.slice(0, 2).map((item, index) => (
               <button
-                className="apple-node-well nodrag relative overflow-hidden rounded-[16px]"
+                className="apple-node-well nodrag relative block overflow-hidden rounded-[14px]"
                 key={`${item.id}-${index}`}
                 onClick={() => data.onPreview?.(item)}
+                style={{ ...compactThumbStyle(item, 108, 74), margin: "0 auto" }}
                 title={`查看第 ${index + 1} 张结果`}
                 type="button"
               >
@@ -4284,24 +4495,29 @@ const ImageInputNode = memo(function ImageInputNode({ id, data, selected }: Node
                   image={item}
                   fit={previewFit}
                   imgClassName="pointer-events-none"
-                  preserveRatio
-                  ratioStyle={imageRatioStyle(item)}
+                  preserveRatio={false}
+                  showCheckerboard={shouldShowCheckerboard(item)}
+                  style={{ height: "100%", width: "100%" }}
                   variant="thumbnail"
                 />
-                <span className="apple-pill absolute right-2 top-2 z-10 px-2 py-1 text-[10px] shadow-lg">方案 {index + 1}</span>
               </button>
             ))}
           </div>
         ) : (
-          <button className="apple-node-well nodrag relative block overflow-hidden rounded-[16px]" onClick={() => data.onPreview?.(image)} type="button">
-            <ImageFrame alt={data.title} className="pointer-events-none" fit={previewFit} image={image} imgClassName="pointer-events-none" preserveRatio ratioStyle={imageRatioStyle(image)} variant="thumbnail" />
+          <button
+            className="apple-node-well nodrag relative block overflow-hidden rounded-[14px]"
+            onClick={() => data.onPreview?.(image)}
+            style={{ height: metrics.previewHeight, margin: "0 auto", width: metrics.previewWidth }}
+            type="button"
+          >
+            <ImageFrame alt={data.title} className="pointer-events-none" fit={previewFit} image={image} imgClassName="pointer-events-none" preserveRatio={false} showCheckerboard={shouldShowCheckerboard(image)} style={{ height: "100%", width: "100%" }} variant="thumbnail" />
           </button>
         )
       ) : (
-        <label className="apple-node-well nodrag flex cursor-pointer flex-col items-center justify-center rounded-[16px] border-dashed p-5 text-center" style={{ height }}>
-          <ImagePlus className="mb-2 size-8 text-white/48" />
-          <span className="text-[11px] font-medium text-white/72">上传 / 拖拽 / 粘贴图片</span>
-          <span className="apple-caption mt-1">PNG · JPG · WebP</span>
+        <label className="apple-node-well nodrag flex cursor-pointer flex-col items-center justify-center rounded-[14px] border-dashed p-4 text-center" style={{ height: metrics.previewHeight }}>
+          <ImagePlus className="mb-1.5 size-7 text-white/48" />
+          <span className="text-[10.5px] font-medium text-white/72">上传 / 拖拽 / 粘贴图片</span>
+          <span className="apple-caption mt-1 text-[10px]">PNG · JPG · WebP</span>
           <input
             className="hidden"
             accept="image/png,image/jpeg,image/webp"
@@ -4314,7 +4530,7 @@ const ImageInputNode = memo(function ImageInputNode({ id, data, selected }: Node
         </label>
       )}
       {Array.isArray(data.outputs) && data.outputs.length > 2 ? (
-        <div className="apple-caption mt-2 rounded-2xl border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+        <div className="apple-caption mt-1.5 rounded-2xl border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
           还有 {data.outputs.length - 2} 张
         </div>
       ) : null}
@@ -4330,10 +4546,16 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
   const isRunning = data.status === "running" || data.status === "queued" || data.status === "saving";
   const isTerminalOutput = data.kind === "output";
   const previewFit = data.kind === "text_to_image" ? textToImagePreviewFit(data.params) : "contain";
+  const singleOutput = output && outputs.length === 1 ? output : null;
+  const hasVisualOutput = Boolean(singleOutput || outputs.length > 1);
+  const contentShellClass = hasVisualOutput || data.kind === "mask_edit"
+    ? "apple-node-well space-y-1.5 rounded-[16px] p-1.5"
+    : "space-y-1 rounded-[14px] border border-white/[0.055] bg-white/[0.025] px-2 py-1.5";
 
   return (
     <section
-      className={`apple-node-card group relative w-[292px] rounded-[22px] p-3 text-white ${data.status === "failed" ? "is-danger" : selected ? "is-selected" : ""}`}
+      className={`apple-node-card group relative rounded-[22px] p-2.5 text-white ${data.status === "failed" ? "is-danger" : selected ? "is-selected" : ""}`}
+      style={{ width: operationNodeWidth(data, outputs) }}
     >
       {inputs.map((input, index) => (
         <div key={input.id} className="absolute left-[-36px] flex items-center gap-1.5 text-[10px] text-white/42" style={{ top: 62 + index * 28 }}>
@@ -4344,29 +4566,29 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
       {!isTerminalOutput ? (
         <Handle id="image" position={Position.Right} type="source" className="!size-3 !border-[#8fa7ff] !bg-[#8fa7ff]" />
       ) : null}
-      <div className="mb-3 flex items-start gap-2">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.07] text-[#c8d4ff]">
-          {catalog?.icon || <Layers className="size-4" />}
+      <div className="mb-2.5 flex items-start gap-2">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.07] text-[#c8d4ff]">
+          {catalog?.icon || <Layers className="size-3.5" />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="truncate text-[12px] font-semibold text-white/88">{data.title}</h3>
+            <h3 className="truncate text-[11px] font-semibold text-white/88">{data.title}</h3>
             <StatusDot status={data.status || "idle"} />
-            <span className="apple-caption shrink-0">{taskStatusLabel(data.status || "idle")}</span>
+            <span className="apple-caption shrink-0 text-[10px]">{taskStatusLabel(data.status || "idle")}</span>
           </div>
-          <p className="apple-caption mt-1 line-clamp-1 leading-5">{data.subtitle || catalog?.description}</p>
+          <p className="apple-caption mt-1 line-clamp-1 leading-4">{data.subtitle || catalog?.description}</p>
         </div>
         <button
-          className="apple-button-danger nodrag flex size-7 shrink-0 items-center justify-center opacity-0 transition group-hover:opacity-100"
+          className="apple-button-danger nodrag flex size-6 shrink-0 items-center justify-center opacity-0 transition group-hover:opacity-100"
           onClick={() => data.onDelete?.(id)}
           title="删除节点"
           type="button"
         >
-          <Trash2 className="size-3.5" />
+          <Trash2 className="size-3" />
         </button>
       </div>
 
-      <div className="apple-node-well space-y-2 rounded-[16px] p-2.5">
+      <div className={contentShellClass}>
         {data.kind === "mask_edit" ? (
           <div className="space-y-2">
             <button
@@ -4385,31 +4607,42 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
             ) : null}
           </div>
         ) : null}
-        <NodeSummary data={data} />
-        {output ? (
-          outputs.length > 1 ? (
-            <div className="mt-2 grid grid-cols-2 gap-2">
+        {singleOutput ? (
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+            <CompactOutputSummary images={outputs} />
+            <button
+              className="apple-node-well nodrag relative block overflow-hidden rounded-[12px]"
+              onClick={() => data.onPreview?.(singleOutput)}
+              style={compactThumbStyle(singleOutput, 72, 64)}
+              title="查看结果"
+              type="button"
+            >
+              <ImageFrame alt={data.title} className="pointer-events-none" fit={previewFit} image={singleOutput} imgClassName="pointer-events-none" preserveRatio={false} showCheckerboard={shouldShowCheckerboard(singleOutput)} style={{ height: "100%", width: "100%" }} variant="thumbnail" />
+            </button>
+          </div>
+        ) : (
+          <>
+            {outputs.length ? <CompactOutputSummary images={outputs} /> : <NodeSummary data={data} />}
+            {output && outputs.length > 1 ? (
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
               {outputs.slice(0, 2).map((item, index) => (
                 <button
-                  className="apple-node-well nodrag relative overflow-hidden rounded-[14px]"
+                  className="apple-node-well nodrag relative block overflow-hidden rounded-[12px]"
                   key={`${item.id}-${index}`}
                   onClick={() => data.onPreview?.(item)}
+                  style={{ ...compactThumbStyle(item, 108, 68), margin: "0 auto" }}
                   title={`查看第 ${index + 1} 张结果`}
                   type="button"
                 >
-                  <ImageFrame alt={`${data.title}-${index + 1}`} className="pointer-events-none" fit={previewFit} image={item} imgClassName="pointer-events-none" preserveRatio ratioStyle={imageRatioStyle(item)} variant="thumbnail" />
-                  <span className="apple-pill absolute right-2 top-2 px-2 py-1 text-[10px] shadow-lg">{outputNodeTitle(item, index)}</span>
+                  <ImageFrame alt={`${data.title}-${index + 1}`} className="pointer-events-none" fit={previewFit} image={item} imgClassName="pointer-events-none" preserveRatio={false} showCheckerboard={shouldShowCheckerboard(item)} style={{ height: "100%", width: "100%" }} variant="thumbnail" />
                 </button>
               ))}
             </div>
-          ) : (
-            <button className="apple-node-well nodrag relative mt-2 block w-full overflow-hidden rounded-xl" onClick={() => data.onPreview?.(output)} type="button">
-              <ImageFrame alt={data.title} className="pointer-events-none" fit={previewFit} image={output} imgClassName="pointer-events-none" preserveRatio ratioStyle={imageRatioStyle(output)} variant="thumbnail" />
-            </button>
-          )
-        ) : null}
+            ) : null}
+          </>
+        )}
         {outputs.length > 2 ? (
-          <div className="apple-caption mt-2 rounded-2xl border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
+          <div className="apple-caption mt-1.5 rounded-2xl border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
             还有 {outputs.length - 2} 张
           </div>
         ) : null}
@@ -4417,7 +4650,7 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
       </div>
 
       <button
-        className="apple-button-primary nodrag mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 text-[11px] font-semibold disabled:opacity-45"
+        className="apple-button-primary nodrag mt-2.5 inline-flex h-8 w-full items-center justify-center gap-1.5 text-[10.5px] font-semibold disabled:opacity-45"
         disabled={isRunning}
         onClick={() => data.onRun?.(id)}
         type="button"
@@ -4458,6 +4691,33 @@ function NodeSummary({ data }: { data: WorkflowNodeData }) {
   if (data.kind === "upscale_4k") return <SummaryLine label="4K无损导出" value={`${upscaleTargetDisplayLabel(stringParam(params.targetSize) || "长边3840")} · ${resizeFitModeLabel(stringParam(params.fitMode))}`} />;
   if (data.kind === "output") return <SummaryLine label="格式" value={(stringParam(params.format) || "png").toUpperCase()} />;
   return <SummaryLine label="要求" value={stringParam(params.prompt) || "在右侧填写参数"} />;
+}
+
+function CompactOutputSummary({ images }: { images: ImageAsset[] }) {
+  const firstImage = images[0];
+  return (
+    <div className="flex min-w-0 items-baseline gap-1.5 px-0.5 py-0.5">
+      <div className="shrink-0 truncate text-[10px] font-semibold text-white/78">
+        {images.length > 1 ? `${images.length} 个方案` : imageNodeTitle(firstImage, "方案一")}
+      </div>
+      {firstImage ? <div className="apple-caption min-w-0 truncate text-[9.5px]">{compactImageMeta(firstImage)}</div> : null}
+    </div>
+  );
+}
+
+function operationNodeWidth(data: WorkflowNodeData, outputs: ImageAsset[]) {
+  if (data.kind === "output") return 224;
+  if (data.kind === "layer_output") return 252;
+  if (outputs.length > 1) return 256;
+  if (outputs.length === 1 && outputs[0]) {
+    const ratio = imageRatio(outputs[0]);
+    if (ratio < 0.78) return 224;
+    if (ratio > 1.65) return 248;
+    return 236;
+  }
+  if (data.kind === "resize" || data.kind === "upscale_4k" || data.kind === "hd_redraw") return 236;
+  if (data.kind === "text_to_image" || data.kind === "image_to_image") return 248;
+  return 248;
 }
 
 function textReferenceNodeItems(data: WorkflowNodeData) {
@@ -4510,24 +4770,43 @@ function SizePresetSelect({
   value: string;
 }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-[9px] text-white/34">{label}</span>
-      <select
-        className="apple-select h-9 w-full rounded-xl px-3 text-[11px] text-white/76 outline-none"
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      >
-        {resizePresetGroups.map((group) => (
-          <optgroup key={group.id} label={group.label}>
-            {group.presets.map((preset) => (
-              <option key={preset.id} value={preset.label}>
-                {preset.label} · {preset.targetSize}
-              </option>
-            ))}
-          </optgroup>
+    <div>
+      <span className="mb-1.5 block text-[9px] text-white/34">{label}</span>
+      <div className="grid grid-cols-3 gap-1.5">
+        {resizePresets.map((preset) => (
+          <button
+            className={`flex h-9 items-center justify-center gap-1.5 rounded-xl border px-2 text-[11px] transition ${
+              value === preset.label
+                ? "border-white/40 bg-white text-black shadow-[0_10px_28px_rgba(255,255,255,0.14)]"
+                : "border-white/10 bg-white/[0.045] text-white/62 hover:border-white/18 hover:bg-white/[0.08]"
+            }`}
+            key={preset.id}
+            onClick={() => onChange(preset.label)}
+            type="button"
+          >
+            <RatioGlyph ratio={preset.targetRatio} selected={value === preset.label} />
+            <span>{preset.label}</span>
+          </button>
         ))}
-      </select>
-    </label>
+      </div>
+    </div>
+  );
+}
+
+function RatioGlyph({ ratio, selected }: { ratio: string; selected: boolean }) {
+  const [rawWidth, rawHeight] = ratio === "custom" ? [5, 4] : ratio.split(":").map((item) => Number(item) || 1);
+  const width = Math.max(8, Math.min(18, rawWidth >= rawHeight ? 18 : Math.round((rawWidth / rawHeight) * 18)));
+  const height = Math.max(8, Math.min(18, rawHeight > rawWidth ? 18 : Math.round((rawHeight / rawWidth) * 18)));
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-[18px] w-[18px] items-center justify-center ${selected ? "text-black" : "text-white/62"}`}
+    >
+      <span
+        className={`block rounded-[3px] border ${selected ? "border-black/70 bg-black/10" : "border-current bg-white/[0.04]"}`}
+        style={{ height, width }}
+      />
+    </span>
   );
 }
 
@@ -4976,8 +5255,6 @@ function RightPanel({
   historyHasMore,
   historyLoadingMore,
   projectId,
-  projectName,
-  modelInfo,
   tabHint,
   tabHintTick,
   onDeleteHistory,
@@ -4992,7 +5269,6 @@ function RightPanel({
   onPreview,
   onCreateLayerOutputNode,
   onClose,
-  onSaveBeforeNavigate,
   selectedNode,
   tasks,
   onCancelTask,
@@ -5008,8 +5284,6 @@ function RightPanel({
   historyHasMore: boolean;
   historyLoadingMore: boolean;
   projectId: string;
-  projectName: string;
-  modelInfo: WorkbenchModelInfo;
   tabHint: RightPanelTab;
   tabHintTick: number;
   onDeleteHistory: (image: ImageAsset) => void;
@@ -5024,7 +5298,6 @@ function RightPanel({
   onPreview: (image: ImageAsset) => void;
   onCreateLayerOutputNode: (image: ImageAsset) => void;
   onClose: () => void;
-  onSaveBeforeNavigate?: () => void;
   selectedNode: FlowNode | null;
   tasks: TaskRecord[];
   onCancelTask: (taskId: string) => void;
@@ -5066,21 +5339,15 @@ function RightPanel({
         <div className="mb-3 flex items-center justify-between gap-2">
           <div>
             <div className="text-[16px] font-semibold text-white/90">检查器</div>
-            <div className="mt-0.5 text-[11px] text-white/38">{modelInfo.hasKey ? "API 已配置" : "未配置 API"}</div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Link className="apple-button-primary px-3 py-1.5 text-[11px] font-semibold" href="/settings" onClick={() => void onSaveBeforeNavigate?.()}>
-              API
-            </Link>
-            <button
-              className="apple-button flex size-7 items-center justify-center text-white/56"
-              onClick={onClose}
-              title="收起右侧面板"
-              type="button"
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
+          <button
+            className="apple-button flex size-7 items-center justify-center text-white/56"
+            onClick={onClose}
+            title="收起右侧面板"
+            type="button"
+          >
+            <X className="size-3.5" />
+          </button>
         </div>
         <div className="apple-panel grid grid-cols-3 gap-1 p-0.5">
           {[
@@ -5136,30 +5403,16 @@ function RightPanel({
         <div className="min-h-0 flex-1 overflow-auto p-3">
           <div className="space-y-3">
             {selectedOutputs.length ? (
-              <section className="space-y-3">
-                <div className="apple-surface-section px-3 py-2">
-                  <div className="apple-section-title">当前节点结果</div>
-                  <div className="apple-caption mt-1">当前选中节点</div>
-                </div>
               <NodeResultsPanel
                 images={selectedOutputs}
-                onDelete={onDeleteHistory}
-                onFork={(image) => onDuplicateBranch(image, { forkBranch: true })}
-                onLayerOutputNode={(image) => onCreateLayerOutputNode(image)}
-                onOptimize={(image) => onEditImage(image)}
                 onPreview={onPreview}
-                onResize={(image) => onResizeHistory(image)}
               />
-              </section>
             ) : null}
             <HistoryPanel
               emptyState={<EmptyPanel icon={<FileImage className="size-8" />} title="暂无结果" description="" />}
               formatFileSize={formatFileSize}
-              formatGeneratedAt={formatGeneratedAt}
-              groupHistoryImages={(images, groupBy) => groupHistoryImages(images as ImageAsset[], groupBy)}
               historyMatchesFilter={(image, filter, currentProjectId) => historyMatchesFilter(image as ImageAsset, filter, currentProjectId)}
               historyMatchesQuery={(image, query) => historyMatchesQuery(image as ImageAsset, query)}
-              imageRatioStyle={(image) => imageRatioStyle(image as ImageAsset)}
               images={visibleHistoryImages}
               hasMoreFromServer={historyHasMore}
               loadingMore={historyLoadingMore}
@@ -5255,7 +5508,6 @@ function NodeInspectorPanel({
           <InlineChipRow label="边距" value={textToImageSafeMargin(params)} options={["5%", "10%", "15%", "20%"]} onChange={(value) => onParamChange(node.id, "safeMargin", value)} />
           <InlineChipRow label="镜头" value={textToImageCameraDistance(params)} options={["近景", "中景", "远景", "自动"]} onChange={(value) => onParamChange(node.id, "cameraDistance", value)} />
           <InlineChipRow label="主体" value={textToImageSubjectScale(params)} options={["大", "中", "小"]} onChange={(value) => onParamChange(node.id, "subjectScale", value)} />
-          <InlineChipRow label="预览" value={textToImagePreviewFit(params) === "cover" ? "填充显示" : "完整显示"} options={["完整显示", "填充显示"]} onChange={(value) => onParamChange(node.id, "previewFit", value === "填充显示" ? "cover" : "contain")} />
         </InspectorSection>
       ) : null}
 
@@ -5293,8 +5545,8 @@ function NodeInspectorPanel({
       {node.data.kind === "resize" ? (
         <InspectorSection title="改尺寸">
           <SizePresetSelect
-            label="尺寸"
-            value={findSizePresetByLabel(stringParam(params.sizePreset))?.label || activeResizePresetLabel(node.data)}
+            label="比例"
+            value={stringParam(params.sizePreset) === "自定义" ? "自定义" : findSizePresetByLabel(stringParam(params.sizePreset))?.label || activeResizePresetLabel(node.data)}
             onChange={(label) => {
               const preset = findSizePresetByLabel(label);
               if (!preset) return;
@@ -5304,16 +5556,18 @@ function NodeInspectorPanel({
               onParamChange(node.id, "fitMode", preset.recommendedMode);
             }}
           />
-          <InspectorInput
-            label="目标宽高"
-            placeholder="例如 1080x1920"
-            value={stringParam(params.targetSize) || "1920x1080"}
-            onChange={(value) => {
-              onParamChange(node.id, "targetSize", value);
-              onParamChange(node.id, "targetRatio", inferRatioFromTargetSize(value));
-              onParamChange(node.id, "sizePreset", "自定义");
-            }}
-          />
+          {ratioParam(params.targetRatio) === "custom" || stringParam(params.sizePreset) === "自定义" ? (
+            <InspectorInput
+              label="自定义宽高"
+              placeholder="例如 1920x1080"
+              value={stringParam(params.targetSize) || "1920x1080"}
+              onChange={(value) => {
+                onParamChange(node.id, "targetSize", value);
+                onParamChange(node.id, "targetRatio", inferRatioFromTargetSize(value));
+                onParamChange(node.id, "sizePreset", "自定义");
+              }}
+            />
+          ) : null}
           <InlineChipRow
             label="处理"
             value={resizeFitModeLabel(stringParam(params.fitMode))}
@@ -5532,49 +5786,40 @@ function InspectorTextarea({
 
 function NodeResultsPanel({
   images,
-  onDelete,
-  onFork,
-  onLayerOutputNode,
-  onOptimize,
   onPreview,
-  onResize,
 }: {
   images: ImageAsset[];
-  onDelete: (image: ImageAsset) => void;
-  onFork: (image: ImageAsset) => void;
-  onLayerOutputNode: (image: ImageAsset) => void;
-  onOptimize: (image: ImageAsset) => void;
   onPreview: (image: ImageAsset) => void;
-  onResize: (image: ImageAsset) => void;
 }) {
   if (!images.length) {
     return <EmptyPanel icon={<Images className="size-8" />} title="暂无结果" description="" />;
   }
 
   return (
-    <div className="space-y-3">
-      <div className="columns-1 gap-3 [column-fill:_balance]">
-        {images.map((image, index) => (
-          <ResultVariantCard
-            badgeLabel={qualityBadgeLabel(image)}
-            description={image.materialCopy || image.prompt ? shortenPrompt(image.materialCopy || image.prompt || "", 42) : ""}
-            key={`${image.id}-${index}`}
+    <div className="grid grid-cols-2 gap-2">
+      {images.map((image, index) => (
+        <button
+          className="apple-surface-section group min-w-0 overflow-hidden p-1.5 text-left transition hover:bg-white/[0.07]"
+          key={`${image.id}-${index}`}
+          onClick={() => onPreview(image)}
+          title={image.branchLabel || image.fileName || `方案 ${image.variant || index + 1}`}
+          type="button"
+        >
+          <ImageFrame
+            alt={image.branchLabel || image.fileName || `方案 ${image.variant || index + 1}`}
+            className="rounded-[14px] border-white/8"
+            fit="contain"
             image={image}
-            imageRatioStyle={imageRatioStyle(image)}
-            meta={[image.targetSize || imageSizeLabel(image), image.aspectRatio, image.model, formatGeneratedAt(image.generatedAt)]
-              .filter((item) => item && item !== "unknown")
-              .join(" · ")}
-            onDelete={() => onDelete(image)}
-            onDownload={() => void downloadImageFile(image, "png")}
-            onFork={() => onFork(image)}
-            onLayerOutputNode={canLayerOutput(image) ? () => onLayerOutputNode(image) : undefined}
-            onOptimize={() => onOptimize(image)}
-            onPreview={() => onPreview(image)}
-            onResize={() => onResize(image)}
-            title={image.branchLabel || `方案 ${image.variant || index + 1}`}
+            preserveRatio={false}
+            showCheckerboard={shouldShowCheckerboard(image)}
+            style={{ ...compactThumbStyle(image, 124, 76), margin: "0 auto" }}
+            variant="thumbnail"
           />
-        ))}
-      </div>
+          <div className="mt-1.5 truncate px-1 text-[10px] font-semibold text-white/64">
+            {image.branchLabel || `方案 ${image.variant || index + 1}`}
+          </div>
+        </button>
+      ))}
     </div>
   );
 }
@@ -5769,6 +6014,13 @@ function ImageLightbox({
       });
     return Array.from(branchMap.values()).sort((a, b) => (a.variant || 0) - (b.variant || 0));
   }, [historyImages, image]);
+  const actualSizeLabel = imageSizeLabel(image);
+  const expectedSizeLabel = image.expectedOutputSize ? `${image.expectedOutputSize.width} × ${image.expectedOutputSize.height}px` : "";
+  const lightboxTitle = `${image.branchLabel || `方案 ${image.variant || 1}`} · ${image.mode || image.materialType || "预览"}`;
+  const lightboxMeta = [
+    actualSizeLabel,
+    image.fileSizeBytes ? formatFileSize(image.fileSizeBytes) : "",
+  ].filter(Boolean).join(" · ");
 
   async function runAction(label: string, action: () => void | Promise<void>) {
     setMessage(`${label}中...`);
@@ -5823,33 +6075,24 @@ function ImageLightbox({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(10,15,24,0.6)] p-2 backdrop-blur-2xl sm:p-5" onClick={onClose}>
-      <div className="apple-panel-strong flex max-h-[94vh] w-[min(1420px,97vw)] flex-col overflow-hidden rounded-[22px] shadow-[0_30px_100px_rgba(0,0,0,0.34)] sm:rounded-[28px]" onClick={(event) => event.stopPropagation()}>
+      <div className="apple-panel-strong flex max-h-[94vh] w-[min(1280px,97vw)] flex-col overflow-hidden rounded-[22px] shadow-[0_30px_100px_rgba(0,0,0,0.34)] sm:rounded-[28px]" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div className="min-w-0">
             <div className="mb-1 flex items-center gap-2">
               <button className="apple-button rounded-full px-2.5 py-1 text-[10px]" onClick={onClose} type="button">返回结果</button>
-              <span className="apple-pill px-2 py-1 text-[9px]">独立方案编辑</span>
             </div>
-            <div className="truncate text-[14px] font-semibold text-white/88">{image.branchLabel || `方案 ${image.variant || 1}`} · {image.fileName || image.mode || "图片预览"}</div>
-            <div className="apple-meta mt-0.5">{image.targetSize || imageSizeLabel(image)} · {formatFileSize(image.fileSizeBytes)} · {image.model || "unknown"}</div>
+            <div className="truncate text-[14px] font-semibold text-white/88">{lightboxTitle}</div>
+            {lightboxMeta ? <div className="apple-meta mt-0.5">{lightboxMeta}</div> : null}
           </div>
           <div className="flex items-center gap-2">
-            {showLayerEditor ? <button className="apple-button rounded-full px-3 py-1.5 text-[11px]" onClick={() => void runAction("保存排版", () => onSaveLayers(layers))} type="button">保存排版</button> : null}
-            {canLayerOutput(image) ? <button className="apple-button-primary rounded-full px-3 py-1.5 text-[11px] font-semibold" onClick={startLayerOutputNode} type="button">分层拆图</button> : null}
-            <button className="apple-button rounded-full px-3 py-1.5 text-[11px]" onClick={() => setActiveEditTool("transparent")} type="button">透明抠图</button>
-            <button className="apple-button rounded-full px-3 py-1.5 text-[11px]" onClick={() => void runAction("下载 PNG", () => downloadImageFile(image, "png"))} type="button">导出</button>
             <button aria-label="关闭预览" className="apple-button flex size-8 items-center justify-center text-white/62" onClick={onClose} type="button">
               <X className="size-4" />
             </button>
           </div>
         </div>
-        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-white/[0.035] lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-white/[0.035] lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-h-0 p-3 sm:p-4">
-            <div className="relative flex h-full min-h-[420px] items-center justify-center overflow-hidden rounded-[24px] border border-white/10 bg-[rgba(8,12,20,0.72)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-              <div className="absolute left-3 top-3 z-10 flex max-w-[calc(100%-96px)] items-center gap-1.5">
-                <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] shadow-[0_10px_28px_rgba(0,0,0,0.25)] backdrop-blur-xl ${qualityTone(image)}`}>{qualityBadgeLabel(image)}</span>
-                <span className="apple-pill max-w-[180px] truncate px-2.5 py-1 text-[10px] shadow-[0_10px_28px_rgba(0,0,0,0.25)]">{image.targetSize || imageSizeLabel(image)}</span>
-              </div>
+            <div className="relative flex h-full min-h-[320px] items-center justify-center overflow-hidden rounded-[24px] border border-white/10 bg-[rgba(8,12,20,0.72)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
               {showLayerEditor ? (
                 <button className="apple-button absolute right-3 top-3 z-10 rounded-full px-2.5 py-1 text-[10px]" onClick={() => setShowGuides((value) => !value)} type="button">
                   {showGuides ? "隐藏辅助线" : "显示辅助线"}
@@ -5903,18 +6146,7 @@ function ImageLightbox({
           <aside className="min-h-0 overflow-auto border-t border-white/10 bg-white/[0.06] p-3 backdrop-blur-2xl sm:p-4 lg:border-l lg:border-t-0">
             <div className="space-y-3">
               <section className="apple-surface-section p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="apple-pill px-2.5 py-1 text-[10px]">
-                    {image.branchLabel || `方案 ${image.variant || 1}`}
-                  </span>
-                  <span className="apple-pill px-2.5 py-1 text-[10px]">
-                    {image.targetSize || imageSizeLabel(image)}
-                  </span>
-                  <span className={`rounded-full border px-2.5 py-1 text-[10px] ${qualityTone(image)}`}>
-                    {qualityBadgeLabel(image)}
-                  </span>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-1 rounded-[16px] border border-white/10 bg-white/[0.055] p-1">
+                <div className="grid grid-cols-2 gap-1 rounded-[16px] border border-white/10 bg-white/[0.055] p-1">
                   {[
                     ["actions", "操作"],
                     ["info", "详情"],
@@ -5964,10 +6196,9 @@ function ImageLightbox({
                         onClick={() => onOpenVersion(variantImage)}
                         type="button"
                       >
-	                        <ImageFrame alt={variantImage.fileName || variantImage.id || `方案 ${index + 1}`} className="rounded-none border-0" fit="contain" image={variantImage} preserveRatio={false} variant="thumbnail" style={{ height: 86 }} />
+	                        <ImageFrame alt={variantImage.fileName || variantImage.id || `方案 ${index + 1}`} className="rounded-none border-0" fit="contain" image={variantImage} preserveRatio={false} variant="thumbnail" style={{ height: 68 }} />
                         <div className="p-2">
                           <div className="truncate text-[11px] font-semibold text-white/80">{variantImage.branchLabel || `方案 ${variantImage.variant || index + 1}`}</div>
-                          <div className="apple-caption mt-0.5 truncate">{variantImage.targetSize || imageSizeLabel(variantImage)}</div>
                         </div>
                       </button>
                     ))}
@@ -6000,7 +6231,7 @@ function ImageLightbox({
                 <>
                   <section className="apple-surface-section p-3">
                     <div className="apple-section-title">编辑当前方案</div>
-                    <div className="apple-caption mt-1">先选操作并确认设置，再创建任务。这里只影响当前这张图。</div>
+                    <div className="apple-caption mt-1">先选操作，再确认参数。</div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       {[
                         ["optimize", "二次优化"],
@@ -6031,7 +6262,7 @@ function ImageLightbox({
                   {activeEditTool === "optimize" ? (
                     <section className="apple-surface-section p-3">
                       <div className="apple-section-title">二次优化设置</div>
-                      <div className="apple-caption mt-1">写清楚这次要优化什么，确认后才会创建基于当前图的新节点。</div>
+                      <div className="apple-caption mt-1">只写这次要改什么。</div>
                       <textarea
                         className="apple-textarea mt-2 min-h-[84px] w-full resize-none px-3 py-2 text-[12px] leading-5 outline-none"
                         onChange={(event) => setOptimizePrompt(event.target.value)}
@@ -6047,7 +6278,7 @@ function ImageLightbox({
                   {activeEditTool === "mask" ? (
                     <section className="apple-surface-section p-3">
                       <div className="apple-section-title">局部修改设置</div>
-                      <div className="apple-caption mt-1">先写要改的内容，再涂抹要处理的区域。没涂抹的部分保持不变。</div>
+                      <div className="apple-caption mt-1">写要求，再涂抹区域。</div>
                       <textarea
                         className="apple-textarea mt-2 min-h-[84px] w-full resize-none px-3 py-2 text-[12px] leading-5 outline-none"
                         onChange={(event) => setMaskPrompt(event.target.value)}
@@ -6067,25 +6298,30 @@ function ImageLightbox({
 
                   {activeEditTool === "resize" ? (
                     <section className="apple-surface-section p-3">
-                      <div className="apple-section-title">改尺寸设置</div>
-                      <div className="apple-caption mt-1">先选目标比例和像素尺寸。默认严格铺满，避免白边。</div>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {ratioOptions.map((value) => (
+                      <div className="apple-section-title">改比例</div>
+                      <div className="apple-caption mt-1">选择常用比例；自定义再填写宽高。</div>
+                      <div className="mt-2 grid grid-cols-3 gap-1.5">
+                        {resizePresets.map((preset) => (
                           <button
-                            className={`${resizeRatio === value ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[10px]`}
-                            key={value}
+                            className={`flex h-9 items-center justify-center gap-1.5 rounded-xl border px-2 text-[11px] transition ${
+                              resizeRatio === preset.targetRatio
+                                ? "border-white/40 bg-white text-black shadow-[0_10px_28px_rgba(255,255,255,0.14)]"
+                                : "border-white/10 bg-white/[0.045] text-white/62 hover:border-white/18 hover:bg-white/[0.08]"
+                            }`}
+                            key={preset.id}
                             onClick={() => {
-                              setResizeRatio(value);
-                              setResizeSize(defaultTargetSizeForRatio(value));
+                              setResizeRatio(preset.targetRatio);
+                              setResizeSize(preset.targetSize);
                             }}
                             type="button"
                           >
-                            {ratioOptionLabel(value)}
+                            <RatioGlyph ratio={preset.targetRatio} selected={resizeRatio === preset.targetRatio} />
+                            <span>{preset.label}</span>
                           </button>
                         ))}
                       </div>
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <MiniInput label="目标尺寸 px" value={resizeSize} onChange={setResizeSize} />
+                      <div className={`mt-2 ${resizeRatio === "custom" ? "grid grid-cols-2 gap-2" : ""}`}>
+                        {resizeRatio === "custom" ? <MiniInput label="自定义宽高" value={resizeSize} onChange={setResizeSize} /> : null}
                         <label className="block">
                           <span className="apple-field-label mb-1 block">处理方式</span>
                           <select className="apple-select h-9 w-full px-3 text-[11px] text-white/76 outline-none" value={resizeFitMode} onChange={(event) => setResizeFitMode(event.target.value as HistoryResizeOptions["fitMode"])}>
@@ -6108,7 +6344,7 @@ function ImageLightbox({
                   {activeEditTool === "upscale" ? (
                     <section className="apple-surface-section p-3">
                       <div className="apple-section-title">4K无损导出设置</div>
-                      <div className="apple-caption mt-1">默认只按原比例放大，不重绘、不裁切、不改文字。</div>
+                      <div className="apple-caption mt-1">默认只放大，不重绘。</div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {upscaleSizeOptionsForImage(image).map((value) => (
                           <button className={`${upscaleSize === value ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[10px]`} key={value} onClick={() => setUpscaleSize(value)} type="button">
@@ -6183,8 +6419,8 @@ function ImageLightbox({
                   <section className="apple-surface-section p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <div className="apple-section-title">高级排版</div>
-                        <div className="apple-caption mt-1">图层、文字位置和辅助线只在需要手动排版时打开。</div>
+                        <div className="apple-section-title">排版</div>
+                        <div className="apple-caption mt-1">需要时再打开图层。</div>
                       </div>
                       <button className="apple-button shrink-0 rounded-full px-3 py-1.5 text-[10px]" onClick={() => setShowLayerEditor((value) => !value)} type="button">
                         {showLayerEditor ? "收起" : "打开"}
@@ -6213,15 +6449,12 @@ function ImageLightbox({
               {sidebarTab === "info" ? (
                 <>
                   <section className="apple-surface-section p-3">
-                    <div className="apple-section-title">当前方案信息</div>
+                    <div className="apple-section-title">详情</div>
                     <div className="mt-2 space-y-1.5 text-[10px] leading-4 text-white/52">
-                      <DetailLine label="方案" value={image.branchLabel || `方案 ${image.variant || 1}`} />
-                      <DetailLine label="文件" value={image.fileName || image.id} />
-                      <DetailLine label="尺寸" value={imageSizeLabel(image)} />
-                      <DetailLine label="目标" value={image.expectedOutputSize ? `${image.expectedOutputSize.width} × ${image.expectedOutputSize.height}px` : "未记录"} />
+                      {expectedSizeLabel && expectedSizeLabel !== actualSizeLabel ? <DetailLine label="目标" value={expectedSizeLabel} /> : null}
                       <DetailLine label="模型" value={image.model || "unknown"} />
+                      <DetailLine label="质检" value={qualityBadgeLabel(image)} />
                       {image.qualityCheck?.clarityCheckLabel ? <DetailLine label="清晰度" value={image.qualityCheck.clarityCheckLabel} /> : null}
-                      <DetailLine label="任务" value={image.sourceTaskId || image.version?.taskId || "未记录"} />
                       <DetailLine label="版本" value={`${branchVersions.length} 个版本`} />
                       {image.sourceStrategyTitle ? <DetailLine label="来源" value={image.sourceStrategyTitle} /> : null}
                     </div>
@@ -6250,7 +6483,7 @@ function ImageLightbox({
                     </div>
                   ) : (
                     <div className="rounded-[14px] border border-[#74e3c5]/18 bg-[#74e3c5]/10 p-3 text-[10px] leading-5 text-[#adf8e5]">
-                      当前没有明显质检异常，可继续精修或直接导出。
+                      质检正常。
                     </div>
                   )}
                 </>
@@ -6291,24 +6524,19 @@ function TransparentCutoutPanel({
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <div className="apple-section-title">透明抠图</div>
-          <div className="apple-caption mt-1">先选处理方式，再输出真透明 PNG。棋盘格只用于预览，不会写进文件。</div>
+          <div className="apple-caption mt-1">输出透明 PNG。</div>
         </div>
-        <span className="apple-pill shrink-0 px-2.5 py-1 text-[10px]">{imageSizeLabel(image)}</span>
       </div>
 
       <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2 rounded-[16px] border border-white/10 bg-white/[0.05] p-2">
-        <ImageFrame alt={image.fileName || image.id} image={image} preserveRatio={false} variant="thumbnail" style={{ height: 72 }} />
+        <ImageFrame alt={image.fileName || image.id} image={image} preserveRatio={false} variant="thumbnail" style={{ height: 60 }} />
         <div className="min-w-0 py-0.5">
           <div className="truncate text-[11px] font-semibold text-white/78">{image.fileName || image.mode || "当前图片"}</div>
-          <div className="mt-1 space-y-1 text-[10px] leading-4 text-white/42">
-            <DetailLine label="尺寸" value={imageSizeLabel(image)} />
-            <DetailLine label="透明" value={image.alphaCheck?.hasTransparentPixels ? `已有透明像素 ${(Number(image.alphaCheck.transparentPixelRatio || 0) * 100).toFixed(1)}%` : "未检测到透明像素"} />
-          </div>
         </div>
       </div>
 
       <div className="mt-3 rounded-[14px] border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-3 py-2 text-[10px] leading-5 text-[#adf8e5]">
-        推荐：{transparentCutoutModeLabel(recommendation.mode)}。{recommendation.reason || "系统会根据图片边缘复杂度判断。"}
+        推荐：{transparentCutoutModeLabel(recommendation.mode)}
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -6390,78 +6618,67 @@ function LayerOutputPanel({
   const [includeTextLayer, setIncludeTextLayer] = useState(true);
   const [maskStrength, setMaskStrength] = useState<"soft" | "normal" | "strong">("normal");
   const [keepGlow, setKeepGlow] = useState(true);
-	  const [outputCroppedText, setOutputCroppedText] = useState(true);
-	  const [activeStep, setActiveStep] = useState(-1);
-	  const [running, setRunning] = useState(false);
-	  const primaryTextLayer = output?.layers?.textRebuilt || output?.layers?.textLayer || null;
-	  const layerCards = output ? [
-	    output.layers?.background ? {
-	      key: "background",
-	      title: "无文字背景",
-	      fileName: "background_no_text.png",
-	      image: output.layers.background,
-	      note: "repair_mask 内局部修复，mask 外强制使用原图像素",
-	    } : null,
-	    primaryTextLayer ? {
-	      key: "text",
-	      title: output.layers?.textRebuilt ? "高清文字重建版" : "原图文字抠图版",
-	      fileName: "text_full.png",
-	      image: primaryTextLayer,
-	      note: primaryTextLayer.alphaCheck?.message || (output.layers?.textRebuilt ? "OCR 识别后重绘透明文字，不带背景碎片" : "从原图像素提取文字，适合简单背景"),
-	    } : null,
-	    output.layers?.textRebuilt && output.layers?.textCutout ? {
-	      key: "textCutout",
-	      title: "原图文字抠图版",
-	      fileName: "text_cutout.png",
-	      image: output.layers.textCutout,
-	      note: "仅适合简单图；复杂海报可能带背景残片，作为对照保留",
-	    } : null,
-	  ].filter((item): item is { key: string; title: string; fileName: string; image: ImageAsset; note: string } => Boolean(item?.image)) : [];
-	  const debugLayerCards = output && process.env.NODE_ENV !== "production" ? [
-	    (output.layers?.original || output.layers?.fullPreview) ? {
-	      key: "original",
-	      title: "original.png",
-	      fileName: "original.png",
-	      image: output.layers.original || output.layers.fullPreview,
-	      note: "输入原图",
-	    } : null,
-	    output.layers?.textAlphaMask || output.layers?.mask ? {
-	      key: "textAlphaMask",
-	      title: "text_alpha_mask.png",
-	      fileName: "text_alpha_mask.png",
-	      image: output.layers.textAlphaMask || output.layers.mask,
-	      note: "精细文字 alpha 蒙版，用于导出透明文字",
-	    } : null,
-	    output.layers?.repairMask ? {
-	      key: "repairMask",
-	      title: "repair_mask.png",
-	      fileName: "repair_mask.png",
-	      image: output.layers.repairMask,
-	      note: "扩大后的背景修复蒙版",
-	    } : null,
-	    output.layers?.backgroundFirstPass ? {
-	      key: "backgroundFirstPass",
-	      title: "background_first_pass.png",
-	      fileName: "background_first_pass.png",
-	      image: output.layers.backgroundFirstPass,
-	      note: "AI 局部修复首轮结果，最终图会锁回 mask 外原图",
-	    } : null,
-	  ].filter((item): item is { key: string; title: string; fileName: string; image: ImageAsset; note: string } => Boolean(item?.image)) : [];
-	  const textLayer = output?.layers.textLayer;
-	  const textCropped = output?.layers.textCropped;
-	  const alphaPassed = Boolean(textLayer?.alphaCheck?.hasAlphaChannel && textLayer.alphaCheck.hasTransparentPixels);
-	  const progressSteps = [
-	    "读取当前图片",
-	    "检测文字区域",
-	    "判断简单抠图 / 混合提取 / 高清重建",
-	    "生成 text_alpha_mask",
-	    "生成 repair_mask",
-	    "局部 inpaint 背景",
-	    "锁回 mask 外原图",
-	    "导出文字抠图版 / 高清重建版",
-	    "检测透明通道",
-	    "完成",
-	  ];
+  const [outputCroppedText, setOutputCroppedText] = useState(true);
+  const [activeStep, setActiveStep] = useState(-1);
+  const [running, setRunning] = useState(false);
+  const primaryTextLayer = output?.layers?.textRebuilt || output?.layers?.textLayer || null;
+  const layerCards = output ? [
+    output.layers?.background ? {
+      key: "background",
+      title: "无文字背景",
+      fileName: "background_no_text.png",
+      image: output.layers.background,
+      note: "局部去字，保留其他画面",
+    } : null,
+    primaryTextLayer ? {
+      key: "text",
+      title: output.layers?.textRebuilt ? "高清文字重建版" : "原图文字抠图版",
+      fileName: "text_full.png",
+      image: primaryTextLayer,
+      note: primaryTextLayer.alphaCheck?.message || (output.layers?.textRebuilt ? "透明文字，无背景碎片" : "原像素提取"),
+    } : null,
+    output.layers?.textRebuilt && output.layers?.textCutout ? {
+      key: "textCutout",
+      title: "原图文字抠图版",
+      fileName: "text_cutout.png",
+      image: output.layers.textCutout,
+      note: "简单图对照",
+    } : null,
+  ].filter((item): item is { key: string; title: string; fileName: string; image: ImageAsset; note: string } => Boolean(item?.image)) : [];
+  const debugLayerCards = output && process.env.NODE_ENV !== "production" ? [
+    (output.layers?.original || output.layers?.fullPreview) ? {
+      key: "original",
+      title: "original.png",
+      fileName: "original.png",
+      image: output.layers.original || output.layers.fullPreview,
+      note: "输入原图",
+    } : null,
+    output.layers?.textAlphaMask || output.layers?.mask ? {
+      key: "textAlphaMask",
+      title: "text_alpha_mask.png",
+      fileName: "text_alpha_mask.png",
+      image: output.layers.textAlphaMask || output.layers.mask,
+      note: "文字蒙版",
+    } : null,
+    output.layers?.repairMask ? {
+      key: "repairMask",
+      title: "repair_mask.png",
+      fileName: "repair_mask.png",
+      image: output.layers.repairMask,
+      note: "修复蒙版",
+    } : null,
+    output.layers?.backgroundFirstPass ? {
+      key: "backgroundFirstPass",
+      title: "background_first_pass.png",
+      fileName: "background_first_pass.png",
+      image: output.layers.backgroundFirstPass,
+      note: "首轮背景",
+    } : null,
+  ].filter((item): item is { key: string; title: string; fileName: string; image: ImageAsset; note: string } => Boolean(item?.image)) : [];
+  const textLayer = output?.layers.textLayer;
+  const textCropped = output?.layers.textCropped;
+  const alphaPassed = Boolean(textLayer?.alphaCheck?.hasAlphaChannel && textLayer.alphaCheck.hasTransparentPixels);
+  const progressSteps = ["读取图片", "检测文字", "生成蒙版", "修复背景", "导出 PNG", "完成"];
 
   async function runSplit(options?: Partial<LayerOutputOptions>) {
     const requestOptions = {
@@ -6473,18 +6690,18 @@ function LayerOutputPanel({
     };
     if (!requestOptions.includeBackground && !requestOptions.includeTextLayer) return;
     setRunning(true);
-	    setActiveStep(0);
-	    await wait(120);
-	    setActiveStep(1);
-	    await wait(120);
-	    setActiveStep(2);
-	    try {
-	      await onRegenerate(requestOptions);
-	      setActiveStep(requestOptions.includeBackground ? 6 : 6);
-	      await wait(120);
-	      setActiveStep(7);
-	      await wait(120);
-	      setActiveStep(8);
+    setActiveStep(0);
+    await wait(120);
+    setActiveStep(1);
+    await wait(120);
+    setActiveStep(2);
+    try {
+      await onRegenerate(requestOptions);
+      setActiveStep(3);
+      await wait(120);
+      setActiveStep(4);
+      await wait(120);
+      setActiveStep(5);
     } finally {
       setRunning(false);
     }
@@ -6493,21 +6710,19 @@ function LayerOutputPanel({
   return (
     <section className="apple-surface-section p-3">
       <div className="mb-3 flex items-start justify-between gap-3">
-	        <div>
-	          <div className="apple-section-title">分层拆图</div>
-	          <div className="apple-caption mt-1">复杂海报默认高清文字重建，背景只在 repair_mask 内局部修复。</div>
+        <div>
+          <div className="apple-section-title">分层拆图</div>
+          <div className="apple-caption mt-1">输出背景和文字 PNG。</div>
         </div>
-        <span className="apple-pill shrink-0 px-2.5 py-1 text-[10px]">{imageSizeLabel(image)}</span>
       </div>
 
       <div className="rounded-[16px] border border-white/10 bg-white/[0.05] p-2">
         <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-          <ImageFrame alt={image.fileName || image.id} image={image} preserveRatio={false} variant="thumbnail" style={{ height: 72 }} />
+          <ImageFrame alt={image.fileName || image.id} image={image} preserveRatio={false} variant="thumbnail" style={{ height: 60 }} />
           <div className="min-w-0 py-0.5">
             <div className="truncate text-[11px] font-semibold text-white/78">{image.fileName || image.mode || "当前图片"}</div>
             <div className="mt-1 space-y-1 text-[10px] leading-4 text-white/42">
-              <DetailLine label="尺寸" value={imageSizeLabel(image)} />
-              <DetailLine label="大小" value={formatFileSize(image.fileSizeBytes)} />
+              {image.fileSizeBytes ? <DetailLine label="大小" value={formatFileSize(image.fileSizeBytes)} /> : null}
             </div>
           </div>
         </div>
@@ -6517,19 +6732,19 @@ function LayerOutputPanel({
         <LayerOutputOption
           checked={includeBackground}
           label="生成无文字背景"
-          note="只处理文字蒙版区域，尽量不改动其他画面。"
+          note="去文字，保留画面"
           onChange={setIncludeBackground}
         />
         <LayerOutputOption
-	          checked={includeTextLayer}
-	          label="生成文字透明 PNG"
-	          note="简单图硬抠；复杂海报自动重建文字，避免背景碎片。"
+          checked={includeTextLayer}
+          label="生成文字透明 PNG"
+          note="简单图抠图，复杂图重建"
           onChange={setIncludeTextLayer}
         />
         <div className="rounded-[14px] border border-white/10 bg-white/[0.035] p-2.5">
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="text-[11px] font-semibold text-white/68">蒙版强度</span>
-            <span className="text-[9px] text-white/34">标准适合大多数海报</span>
+            <span className="text-[9px] text-white/34">默认标准</span>
           </div>
           <div className="grid grid-cols-3 gap-1.5">
             {[
@@ -6553,13 +6768,13 @@ function LayerOutputPanel({
         <LayerOutputOption
           checked={keepGlow}
           label="保留发光阴影"
-          note="蒙版会覆盖文字边缘、描边、阴影和光晕。"
+          note="保留描边、阴影、光晕"
           onChange={setKeepGlow}
         />
         <LayerOutputOption
           checked={outputCroppedText}
           label="输出裁剪版文字 PNG"
-          note="额外生成一张自动裁剪到文字边界的透明 PNG。"
+          note="另存裁剪版"
           onChange={setOutputCroppedText}
         />
       </div>
@@ -6593,26 +6808,15 @@ function LayerOutputPanel({
 
       {output ? (
         <div className="mt-3 space-y-3">
-          <div className="rounded-[14px] border border-white/10 bg-white/[0.055] p-2">
-            <div className="mb-2 text-[10px] font-semibold text-white/58">结果</div>
-            <button className="grid w-full grid-cols-[58px_minmax(0,1fr)] items-center gap-2 text-left" onClick={() => onPreview(image)} type="button">
-              <ImageFrame alt="原图" image={image} preserveRatio={false} variant="thumbnail" style={{ height: 48 }} />
-              <div className="min-w-0">
-                <div className="truncate text-[11px] font-semibold text-white/76">原图</div>
-                <div className="truncate text-[9px] text-white/36">{imageSizeLabel(image)}</div>
-              </div>
-            </button>
-          </div>
-
           {textLayer ? (
             <div className={`rounded-[14px] border px-3 py-2 text-[10px] leading-5 ${
               alphaPassed ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]" : "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffb4a8]"
             }`}>
-	              {alphaPassed ? "文字 PNG 透明检测通过。" : "文字 PNG 透明检测未通过。"} {textLayer.alphaCheck?.message || ""}
-	              {textCropped ? (
-	                <button className="ml-2 underline decoration-white/20 underline-offset-4" onClick={() => onDownload(textCropped, "text_cropped.png")} type="button">
-	                  下载裁剪版
-	                </button>
+              {alphaPassed ? "文字 PNG 透明检测通过。" : "文字 PNG 透明检测未通过。"}
+              {textCropped ? (
+                <button className="ml-2 underline decoration-white/20 underline-offset-4" onClick={() => onDownload(textCropped, "text_cropped.png")} type="button">
+                  下载裁剪版
+                </button>
               ) : null}
             </div>
           ) : null}
@@ -6624,8 +6828,8 @@ function LayerOutputPanel({
             <LayerOutputError message={output.errors.textLayer} onRetry={() => void runSplit({ includeBackground: false, includeTextLayer: true })} retryLabel="重新生成文字 PNG" />
           ) : null}
 
-	          <div className="grid gap-2">
-	            {layerCards.map((item) => (
+          <div className="grid gap-2">
+            {layerCards.map((item) => (
               <LayerOutputCard
                 fileName={item.fileName}
                 image={item.image}
@@ -6637,33 +6841,34 @@ function LayerOutputPanel({
                 onSaveToProject={onSaveToProject}
                 title={item.title}
               />
-	            ))}
-	          </div>
+            ))}
+          </div>
 
-	          {debugLayerCards.length ? (
-	            <div className="rounded-[16px] border border-white/10 bg-white/[0.035] p-2">
-	              <div className="mb-2 text-[10px] font-semibold text-white/58">调试输出</div>
-	              <div className="grid grid-cols-2 gap-2">
-	                {debugLayerCards.map((item) => (
-	                  <button className="min-w-0 text-left" key={item.key} onClick={() => onPreview(item.image)} type="button">
-	                    <ImageFrame alt={item.title} className="rounded-[12px]" image={item.image} preserveRatio={false} variant="thumbnail" style={{ height: 74 }} />
-	                    <div className="mt-1 truncate text-[9px] text-white/44">{item.title}</div>
-	                  </button>
-	                ))}
-	              </div>
-	            </div>
-	          ) : null}
-
-          {output.metadata?.metadataUrl ? (
-            <a
-              className="apple-button flex w-full items-center justify-center gap-2 px-3 py-2 text-[11px] text-white/62"
-              href={output.metadata.metadataUrl}
-              rel="noreferrer"
-              target="_blank"
-            >
-              <FileImage className="size-3.5" />
-              查看 metadata
-            </a>
+          {debugLayerCards.length || output.metadata?.metadataUrl ? (
+            <details className="rounded-[16px] border border-white/10 bg-white/[0.035] p-2">
+              <summary className="cursor-pointer text-[10px] font-semibold text-white/58">调试信息</summary>
+              {debugLayerCards.length ? (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {debugLayerCards.map((item) => (
+                    <button className="min-w-0 text-left" key={item.key} onClick={() => onPreview(item.image)} type="button">
+                      <ImageFrame alt={item.title} className="rounded-[12px]" image={item.image} preserveRatio={false} variant="thumbnail" style={{ height: 62 }} />
+                      <div className="mt-1 truncate text-[9px] text-white/44">{item.title}</div>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {output.metadata?.metadataUrl ? (
+                <a
+                  className="apple-button mt-2 flex w-full items-center justify-center gap-2 px-3 py-2 text-[11px] text-white/62"
+                  href={output.metadata.metadataUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <FileImage className="size-3.5" />
+                  元数据
+                </a>
+              ) : null}
+            </details>
           ) : null}
         </div>
       ) : null}
@@ -6740,12 +6945,11 @@ function LayerOutputCard({
 }) {
   return (
     <div className="rounded-[16px] border border-white/10 bg-white/[0.045] p-2">
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="mb-2 min-w-0">
         <div className="min-w-0">
           <div className="truncate text-[11px] font-semibold text-white/76">{title}</div>
           <div className="truncate text-[9px] text-white/36" title={note}>{note}</div>
         </div>
-        <span className="apple-pill shrink-0 px-2 py-0.5 text-[9px]">{imageSizeLabel(image)}</span>
       </div>
       <button className="block w-full" onClick={() => onPreview(image)} type="button">
         <ImageFrame
@@ -6753,8 +6957,9 @@ function LayerOutputCard({
           className="rounded-[12px]"
           image={image}
           preserveRatio={false}
+          showCheckerboard={shouldShowCheckerboard(image)}
           variant="preview"
-          style={{ height: 112 }}
+          style={{ height: 84 }}
         />
       </button>
       <div className="mt-2 grid grid-cols-2 gap-1.5">
@@ -7211,9 +7416,10 @@ function ToolbarButton({
 
 function SummaryLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[58px_1fr] gap-2 text-[10px] leading-4">
-      <span className="apple-caption shrink-0">{label}：</span>
-      <span className="line-clamp-2 min-w-0 text-white/62" title={value}>{value}</span>
+    <div className="flex min-w-0 items-center gap-1.5 text-[10px] leading-4">
+      <span className="apple-caption shrink-0">{label}</span>
+      <span className="h-1 w-1 shrink-0 rounded-full bg-white/18" />
+      <span className="min-w-0 truncate text-white/62" title={value}>{value}</span>
     </div>
   );
 }
@@ -8059,11 +8265,13 @@ function largePreviewFrameStyle(image: Pick<ImageAsset, "outputSize" | "width" |
   const width = image?.outputSize?.width || image?.width || 1;
   const height = image?.outputSize?.height || image?.height || 1;
   const ratio = Math.max(0.18, Math.min(8, width / Math.max(1, height)));
+  const heightBudget = ratio < 0.76 ? "(94vh - 220px)" : ratio > 2.4 ? "(94vh - 260px)" : "(94vh - 240px)";
+  const maxWidth = ratio < 0.76 ? 460 : ratio > 2.4 ? 920 : ratio > 1.18 ? 840 : 640;
   return {
     aspectRatio: `${Math.max(1, width)} / ${Math.max(1, height)}`,
-    width: `min(100%, calc((94vh - 132px) * ${ratio}))`,
+    width: `min(100%, ${maxWidth}px, calc(${heightBudget} * ${ratio}))`,
     maxWidth: "100%",
-    maxHeight: "calc(94vh - 132px)",
+    maxHeight: `calc${heightBudget}`,
   };
 }
 
@@ -8158,14 +8366,36 @@ function taskKindFromLabel(label: string): NodeKind {
 
 function completedTaskLabel(count: number, image?: ImageAsset) {
   const size = image ? imageSizeLabel(image) : "";
-  return [`完成 ${count || 1} 张`, size, image?.qualityCheck?.label].filter(Boolean).join(" · ");
+  const quality = image ? qualityBadgeLabel(image) : "";
+  return [`完成 ${count || 1} 张`, size, quality && quality !== "待检查" ? quality : ""].filter(Boolean).join(" · ");
 }
 
 function outputNodeTitle(image: ImageAsset, index: number) {
   if (image.materialType === "无文字背景") return "无文字背景";
   if (image.materialType === "文字透明PNG") return "文字透明 PNG";
   if (image.materialType) return image.materialType;
-  return image.branchLabel?.replace(/^.*?(方案\s*\d+)$/u, "$1") || `方案 ${image.variant || index + 1}`;
+  return `方案${chineseNumber(image.variant || index + 1)}`;
+}
+
+function imageNodeTitle(image: ImageAsset, fallback: string) {
+  if (image.materialType) return outputNodeTitle(image, image.variant ? image.variant - 1 : 0);
+  const variant = image.variant || variantNumberFromLabel(image.branchLabel || fallback);
+  return variant ? `方案${chineseNumber(variant)}` : fallback;
+}
+
+function compactImageMeta(image: ImageAsset) {
+  return [image.targetSize || imageSizeLabel(image), image.fileSizeBytes ? formatFileSize(image.fileSizeBytes) : ""].filter(Boolean).join(" · ");
+}
+
+function variantNumberFromLabel(value: string) {
+  const match = value.match(/方案\s*(\d+)/u);
+  return match ? Number(match[1]) || 0 : 0;
+}
+
+function chineseNumber(value: number) {
+  const labels = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+  if (value >= 1 && value <= 10) return labels[value];
+  return String(value);
 }
 
 function taskFailureHint(message: string) {
@@ -8178,11 +8408,159 @@ function taskFailureHint(message: string) {
 function nodeAutoSpacingX(node: FlowNode) {
   if (node.type === "image_input") {
     const image = node.data.image || node.data.output || null;
-    const ratio = imageRatio(image as ImageAsset | null);
-    const width = image ? Math.min(320, Math.max(190, ratio >= 1 ? 300 : 220)) + 20 : 280;
-    return Math.max(430, width + 170);
+    const width = imageNodePreviewMetrics(image as ImageAsset | null).nodeWidth;
+    return Math.max(treeBranchHorizontalGap, width + 120);
   }
-  return 430;
+  return treeBranchHorizontalGap;
+}
+
+function arrangeWorkflowNodes(nodes: FlowNode[], edges: FlowEdge[]) {
+  if (nodes.length <= 1) return nodes;
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const validEdges = edges.filter((edge) => nodeById.has(edge.source) && nodeById.has(edge.target));
+  const originalOrder = new Map(nodes.map((node, index) => [node.id, index]));
+  const incoming = new Map<string, FlowEdge[]>();
+  validEdges.forEach((edge) => {
+    incoming.set(edge.target, [...(incoming.get(edge.target) || []), edge]);
+  });
+
+  const primaryParent = new Map<string, string>();
+  incoming.forEach((targetEdges, targetId) => {
+    const sorted = [...targetEdges].sort((a, b) => {
+      const handleDiff = layoutHandlePriority(a.targetHandle) - layoutHandlePriority(b.targetHandle);
+      if (handleDiff) return handleDiff;
+      const sourceA = nodeById.get(a.source);
+      const sourceB = nodeById.get(b.source);
+      const yDiff = (sourceA?.position.y || 0) - (sourceB?.position.y || 0);
+      return yDiff || (originalOrder.get(a.source) || 0) - (originalOrder.get(b.source) || 0);
+    });
+    if (sorted[0]) primaryParent.set(targetId, sorted[0].source);
+  });
+
+  const primaryChildren = new Map<string, string[]>();
+  primaryParent.forEach((sourceId, targetId) => {
+    primaryChildren.set(sourceId, [...(primaryChildren.get(sourceId) || []), targetId]);
+  });
+  primaryChildren.forEach((children) => {
+    children.sort((a, b) => compareLayoutNodes(nodeById.get(a), nodeById.get(b), originalOrder));
+  });
+
+  const roots = nodes
+    .filter((node) => !primaryParent.has(node.id))
+    .sort((a, b) => compareLayoutRoots(a, b, primaryChildren, originalOrder));
+  if (!roots.length) roots.push([...nodes].sort((a, b) => compareLayoutNodes(a, b, originalOrder))[0]);
+
+  const positioned = new Map<string, XYPosition>();
+  const visited = new Set<string>();
+  const baseX = 0;
+  let cursorY = 0;
+
+  function layoutSubtree(nodeId: string, depth: number, topY: number): number {
+    const node = nodeById.get(nodeId);
+    if (!node || visited.has(nodeId)) return 0;
+    visited.add(nodeId);
+    const nodeHeight = estimateWorkflowNodeHeight(node);
+    const children = (primaryChildren.get(nodeId) || []).filter((childId) => !visited.has(childId));
+    if (!children.length) {
+      positioned.set(nodeId, { x: baseX + depth * 310, y: topY });
+      return nodeHeight + 54;
+    }
+
+    let childCursor = topY;
+    const childRanges: Array<{ y: number; height: number }> = [];
+    children.forEach((childId) => {
+      const childHeight = layoutSubtree(childId, depth + 1, childCursor);
+      const childPosition = positioned.get(childId);
+      if (childPosition && childHeight) {
+        childRanges.push({ y: childPosition.y, height: estimateWorkflowNodeHeight(nodeById.get(childId) as FlowNode) });
+        childCursor += childHeight;
+      }
+    });
+
+    if (!childRanges.length) {
+      positioned.set(nodeId, { x: baseX + depth * 310, y: topY });
+      return nodeHeight + 54;
+    }
+
+    const first = childRanges[0];
+    const last = childRanges[childRanges.length - 1];
+    const childrenCenter = (first.y + last.y + last.height) / 2;
+    const subtreeHeight = Math.max(childCursor - topY - 54, nodeHeight);
+    positioned.set(nodeId, {
+      x: baseX + depth * 310,
+      y: Math.max(topY, Math.round(childrenCenter - nodeHeight / 2)),
+    });
+    return subtreeHeight + 54;
+  }
+
+  roots.forEach((root) => {
+    const blockHeight = layoutSubtree(root.id, 0, cursorY);
+    cursorY += Math.max(blockHeight, estimateWorkflowNodeHeight(root) + 72);
+  });
+
+  nodes
+    .filter((node) => !visited.has(node.id))
+    .sort((a, b) => compareLayoutNodes(a, b, originalOrder))
+    .forEach((node) => {
+      positioned.set(node.id, { x: baseX, y: cursorY });
+      cursorY += estimateWorkflowNodeHeight(node) + 72;
+    });
+
+  return nodes.map((node) => ({
+    ...node,
+    position: positioned.get(node.id) || node.position,
+  }));
+}
+
+function estimateWorkflowNodeHeight(node: FlowNode) {
+  if (node.data.kind === "image_input") {
+    const image = (node.data.image || node.data.output || null) as ImageAsset | null;
+    return imageNodePreviewMetrics(image).estimatedNodeHeight + (node.data.outputs && node.data.outputs.length > 2 ? 24 : 0);
+  }
+  const outputs = Array.isArray(node.data.outputs) ? node.data.outputs : node.data.output ? [node.data.output] : [];
+  if (outputs.length > 1) return 172;
+  if (outputs.length === 1) return 148;
+  if (node.data.kind === "mask_edit") return 156;
+  return 128;
+}
+
+function compareLayoutRoots(a: FlowNode, b: FlowNode, children: Map<string, string[]>, originalOrder: Map<string, number>) {
+  const childDiff = Number(Boolean(children.get(b.id)?.length)) - Number(Boolean(children.get(a.id)?.length));
+  if (childDiff) return childDiff;
+  return compareLayoutNodes(a, b, originalOrder);
+}
+
+function compareLayoutNodes(a: FlowNode | undefined, b: FlowNode | undefined, originalOrder: Map<string, number>) {
+  if (!a || !b) return a ? -1 : b ? 1 : 0;
+  const kindDiff = layoutKindPriority(a) - layoutKindPriority(b);
+  if (kindDiff) return kindDiff;
+  const variantDiff = imageVariantForLayout(a) - imageVariantForLayout(b);
+  if (variantDiff) return variantDiff;
+  const yDiff = a.position.y - b.position.y;
+  return yDiff || a.position.x - b.position.x || (originalOrder.get(a.id) || 0) - (originalOrder.get(b.id) || 0);
+}
+
+function layoutKindPriority(node: FlowNode) {
+  if (node.data.kind === "text_to_image") return 0;
+  if (node.data.kind === "image_input" && !node.data.output && !node.data.image) return 1;
+  if (node.data.kind === "image_input") return 2;
+  if (node.data.kind === "fuse_images") return 3;
+  if (node.data.kind === "resize" || node.data.kind === "outpaint") return 4;
+  if (node.data.kind === "remove_background" || node.data.kind === "layer_output") return 5;
+  if (node.data.kind === "output") return 7;
+  return 6;
+}
+
+function layoutHandlePriority(handle?: string | null) {
+  if (!handle || handle === "image" || handle === "source") return 0;
+  if (handle === "imageA" || handle === "sourceImage") return 1;
+  if (handle === "imageB" || handle === "productImage") return 2;
+  return 3;
+}
+
+function imageVariantForLayout(node: FlowNode) {
+  const image = (node.data.output || node.data.image || node.data.outputs?.[0] || null) as ImageAsset | null;
+  return image?.variant || variantNumberFromLabel(image?.branchLabel || node.data.title || "") || 0;
 }
 
 function imageKey(image: Pick<ImageAsset, "fileName" | "id" | "url">) {
@@ -8316,7 +8694,7 @@ function isTaskPossiblyStuck(task: TaskRecord) {
 
 function isQualityGateBlocked(image?: ImageAsset) {
   const status = image?.qualityCheck?.status;
-  return status === "size_insufficient" || status === "ratio_mismatch" || status === "white_border" || status === "failed" || status === "empty";
+  return status === "size_insufficient" || status === "ratio_mismatch" || status === "white_border" || status === "composition_risk" || status === "blurred_padding" || status === "failed" || status === "empty";
 }
 
 function nodeOperationLabel(value?: string) {
@@ -8427,11 +8805,11 @@ function buildImageRecommendations(image: ImageAsset | null): Array<{ label: str
   }
 
   if (ratio > 1.25) {
-    recommendations.push({ label: "转竖版 9:16", reason: "横图适合转短视频封面或竖版海报。", type: "resize", handle: "image", params: { targetRatio: "9:16", targetSize: "1080x1920", sizePreset: "9:16", fitMode: "smart_relayout" } });
+    recommendations.push({ label: "转 9:16", reason: "转成竖版比例。", type: "resize", handle: "image", params: { targetRatio: "9:16", targetSize: "1080x1920", sizePreset: "9:16", fitMode: "smart_relayout" } });
   } else if (ratio < 0.8) {
-    recommendations.push({ label: "转横版 16:9", reason: "竖图适合扩成横版屏幕或视频封面。", type: "resize", handle: "image", params: { targetRatio: "16:9", targetSize: "1920x1080", sizePreset: "16:9", fitMode: "smart_relayout" } });
+    recommendations.push({ label: "转 16:9", reason: "转成横版比例。", type: "resize", handle: "image", params: { targetRatio: "16:9", targetSize: "1920x1080", sizePreset: "16:9", fitMode: "smart_relayout" } });
   } else {
-    recommendations.push({ label: "小红书封面", reason: "接近方图，适合改成 3:4 信息流封面。", type: "resize", handle: "image", params: { targetRatio: "3:4", targetSize: "1080x1440", sizePreset: "小红书", fitMode: "smart_relayout" } });
+    recommendations.push({ label: "转 3:4", reason: "转成常用竖图比例。", type: "resize", handle: "image", params: { targetRatio: "3:4", targetSize: "1080x1440", sizePreset: "3:4", fitMode: "smart_relayout" } });
   }
 
   recommendations.push({ label: "局部涂抹修改", reason: "只修补指定区域，保护未涂抹内容。", type: "mask_edit", handle: "image" });
@@ -8445,24 +8823,21 @@ function buildOutpaintPrompt(params: Record<string, unknown>) {
   const targetRatio = stringParam(params.targetRatio) || "16:9";
   const targetSize = stringParam(params.targetSize);
   return [
-    userPrompt || "保持原图核心内容不变，扩展成完整的新比例设计稿。",
-    `本次任务是 AI 扩图 / outpainting，不是普通改尺寸，不要拉伸、不要简单留白、不要裁掉主体。`,
-    `目标比例：${targetRatio}${targetSize ? `，目标尺寸参考：${targetSize}` : ""}。扩展方向：${direction}。`,
-    "请把原图放在合理位置，向外补全背景、光影、材质、空间、装饰元素和版式延展，让画面成为完整设计稿。",
-    "必须保留原图标题、人物、产品、电话、地址等关键信息；如果原图里明确存在 Logo 或二维码，也要一起保留，不要自行发明。",
-    "如果是广告设计，优先保证远距离识别、主标题清楚、信息层级稳定，外扩区域只做设计补全和视觉增强。",
+    userPrompt || "保持原图核心内容，扩展成完整新比例设计稿。",
+    `AI 扩图：目标 ${targetRatio}${targetSize ? ` / ${targetSize}` : ""}，方向 ${direction}。`,
+    "向外补全背景、光影、空间和版式延展；不要拉伸、白边、模糊边框或裁掉主体。",
+    "保留原图真实标题、人物、产品、Logo、二维码和关键信息，不自行发明。",
   ].join("\n");
 }
 
 function buildMaskEditPrompt(params: Record<string, unknown>) {
   const userPrompt = stringParam(params.prompt);
   return [
-    "这是局部涂抹修补，不是整图重绘。",
-    "请只修改用户涂抹的区域，其他部分尽量保持不变，不要扩大影响范围。",
-    "如果原图里真实存在标题、机构名、电话、地址、Logo、二维码或主体人物，请保留原有版式和内容；不要因为项目记忆自行新增这些元素。",
-    "如果涂抹区域包含文字，请按用户要求修补文字，但不要凭空新增别的文案。",
+    "局部涂抹修补：只改涂抹区，其他区域保持原图。",
+    "保留原有标题、机构名、电话、地址、Logo、二维码和主体人物；不要因项目记忆自行新增。",
+    "涂抹区含文字时，只按用户要求修补，不凭空加文案。",
     userPrompt ? `用户修补要求：${userPrompt}` : "用户修补要求：请根据涂抹区域自然修补，让画面更完整、更干净。",
-    "输出要像真实商业设计稿，边缘自然，风格统一，不要有明显补丁感。",
+    "边缘自然，风格统一，不要补丁感。",
   ].join("\n");
 }
 
@@ -8473,28 +8848,26 @@ function buildResizePrompt(params: Record<string, unknown>, ratio: AspectRatioVa
   const userPrompt = stringParam(params.prompt);
   return [
     userPrompt ? `用户改尺寸要求：${userPrompt}` : "",
-    "这是 AI 改尺寸 / resize 重绘，不是导出，也不是普通缩放。",
+    "AI 改尺寸 / resize 重绘。",
     fitMode === "keep_ratio"
-      ? "请保持原图比例和构图方向，按目标尺寸导出，不要改变版式和未指定内容。注意：这不是高清重绘，不能把普通放大当成清晰度提升。"
-      : `请把这张图重新设计成 ${preset}，目标尺寸参考 ${targetSize}，让整体版式、层级、留白、文字位置和视觉重心都适配新尺寸。禁止左右或上下出现模糊补边、磨砂补边、玻璃边框、空白边、黑边或白边。`,
+      ? "保持原图比例和构图方向，只按目标尺寸导出，不改变版式和未指定内容。"
+      : `重新设计成 ${preset}，目标尺寸 ${targetSize}，版式、层级、留白、文字位置和视觉重心适配新尺寸。`,
     fitMode === "keep_ratio"
-      ? "这是保持比例放大，不要加白边、不要裁切、不要改比例。"
+      ? "保持比例放大：不要加边、裁切或改比例。"
       : fitMode === "pad"
-      ? "当前用户选择“留白填充”，可以保留完整画面并补充背景，但最终文件尺寸必须严格符合目标尺寸。"
+      ? "补背景保完整：可补充背景，但不能白边或空边。"
       : fitMode === "crop"
-        ? "当前用户选择“居中裁切”，请让主体尽量位于合理边距内，最终文件尺寸必须严格符合目标尺寸。"
+        ? "安全裁切：主体和文字必须留在安全区。"
         : fitMode === "smart_outpaint"
-          ? "当前用户选择“扩图补画”，请保持原构图，向外补全背景和画面内容，禁止只加白边，最终文件尺寸必须严格符合目标尺寸。"
-          : "当前用户选择“智能改版”。请根据目标尺寸重新设计版式，不要简单裁切、缩放或拉伸原图。请重新安排标题、Logo、主体、卖点和背景，使画面适合目标比例；不要把原图缩小放中间再用两侧虚化背景填满。",
+          ? "扩图补画：保持原构图，向外补全背景和内容，禁止白边。"
+          : "智能改版：按目标比例重排标题、Logo、主体、卖点和背景；不要简单裁切、拉伸或两侧虚化补边。",
     fitMode === "smart_relayout"
-      ? "智能改版流程：先识别原图里的 Logo、主标题、副标题、主体人物/产品/IP形象、卖点信息、二维码/电话地址、背景、装饰元素和底部信息；再判断信息层级；最后按目标横竖比例重新规划阅读顺序和画面重心。"
+      ? "构图：先识别元素和信息层级，再重排阅读顺序；重要元素进中心 76% 安全区，四周 18% 只放背景和出血装饰。"
       : "",
     fitMode === "keep_ratio"
-      ? "导出目标：获得真实目标像素尺寸，同时尽量保持边缘干净、文字不变形。若原图本身模糊，请先用高清重绘。"
-      : "改尺寸目标：适配目标比例并保持主体、文字和品牌信息安全，避免文字变形，避免改变未指定内容。",
-    "请保留原图核心内容、标题、人物、产品、电话、地址和关键品牌信息；如果原图明确有 Logo 或二维码，也要一起保护，不要自行生成。",
-    "如果原图是广告图或海报，请重新组织为新的商业设计稿，保证清晰、专业、可直接使用。",
-    stringParam(params.prompt) ? `用户补充要求：${stringParam(params.prompt)}` : "",
+      ? "目标：真实目标像素尺寸，文字不变形。"
+      : "目标：适配目标比例，主体、文字和品牌信息完整安全。",
+    "保留原图核心内容、标题、人物、产品、电话、地址、Logo 和二维码；不要自行生成真实信息。",
   ]
     .filter(Boolean)
     .join("\n");
@@ -8515,8 +8888,7 @@ function resizeFitModeLabel(value: string) {
   if (value === "smart_outpaint") return "扩图补画";
   if (value === "keep_ratio") return "4K无损导出";
   if (value === "ai_redraw") return "AI高清重绘";
-  if (value === "crop") return "居中裁切";
-  if (value === "pad") return "留白填充";
+  if (value === "crop" || value === "pad") return "智能改版";
   return "智能改版";
 }
 
@@ -8525,8 +8897,6 @@ function resizeFitModeValue(label: string) {
   if (label === "扩图补画" || label === "智能扩图") return "smart_outpaint";
   if (label === "保持比例放大" || label === "4K无损导出") return "keep_ratio";
   if (label === "AI高清重绘") return "ai_redraw";
-  if (label === "居中裁切") return "crop";
-  if (label === "留白填充") return "pad";
   return "smart_relayout";
 }
 
@@ -8534,6 +8904,7 @@ function defaultTargetSizeForRatio(value: AspectRatioValue) {
   if (value === "auto") return "1920x1080";
   if (value === "custom") return "1920x1080";
   if (value === "4:3") return "1440x1080";
+  if (value === "9.75:1") return "3900x400";
   return resizePresets.find((preset) => preset.targetRatio === value)?.targetSize || "1920x1080";
 }
 
@@ -8544,7 +8915,7 @@ function textToImageCompositionCompleteness(params: Record<string, unknown>) {
 
 function textToImageSafeMargin(params: Record<string, unknown>) {
   const value = stringParam(params.safeMargin);
-  return ["5%", "10%", "15%", "20%"].includes(value) ? value : "10%";
+  return ["5%", "10%", "15%", "20%"].includes(value) ? value : "15%";
 }
 
 function textToImageCameraDistance(params: Record<string, unknown>) {
@@ -8557,8 +8928,9 @@ function textToImageSubjectScale(params: Record<string, unknown>) {
   return ["大", "中", "小"].includes(value) ? value : "中";
 }
 
-function textToImagePreviewFit(params?: Record<string, unknown>) {
-  return stringParam(params?.previewFit) === "cover" ? "cover" : "contain";
+function textToImagePreviewFit(_params?: Record<string, unknown>): "contain" {
+  void _params;
+  return "contain";
 }
 
 function withClientTimeout<T>(promise: Promise<T>, ms: number, message: string) {
@@ -8621,6 +8993,10 @@ function normalizeTextReferenceRole(value: unknown, fallback: TextReferenceRole 
 
 function normalizeTextReferenceWeight(value: unknown, fallback: TextReferenceWeight = "medium"): TextReferenceWeight {
   return value === "low" || value === "medium" || value === "high" ? value : fallback;
+}
+
+function shouldUseStrongTextReferenceMode(prompt: string) {
+  return /1\s*[:：比]\s*1|一比一|复刻|仿照|照着|照抄|同款|稍微修改|轻微修改|小改|保持版式|版式不变|保持配色|配色不变|板式配色|版式配色|按这个版式|用这个版式|沿用版式|沿用配色/.test(prompt);
 }
 
 function textReferenceRoleLabel(value: unknown) {
@@ -8705,6 +9081,47 @@ function imageRatio(image: ImageAsset | null) {
   return Math.max(0.08, Math.min(12, width / Math.max(1, height)));
 }
 
+function shouldShowCheckerboard(image: ImageAsset | null | undefined) {
+  const text = `${image?.mode || ""} ${image?.fileName || ""} ${image?.materialType || ""}`.toLowerCase();
+  return Boolean(image?.alphaCheck?.hasTransparentPixels || /透明|transparent|alpha|cutout|text-layer|文字层/.test(text));
+}
+
+function compactThumbStyle(image: ImageAsset, maxWidth: number, maxHeight: number) {
+  const ratio = imageRatio(image);
+  let width = maxWidth;
+  let height = width / ratio;
+  if (height > maxHeight) {
+    height = maxHeight;
+    width = height * ratio;
+  }
+  return {
+    height: Math.max(42, Math.round(height)),
+    width: Math.max(42, Math.round(width)),
+  };
+}
+
+function imageNodePreviewMetrics(image: ImageAsset | null) {
+  if (!image) {
+    return {
+      previewWidth: 180,
+      previewHeight: 116,
+      nodeWidth: 198,
+      estimatedNodeHeight: 168,
+    };
+  }
+
+  const ratio = imageRatio(image);
+  const nodeWidth = ratio >= 2.8 ? 164 : ratio >= 1.35 ? 170 : ratio >= 0.82 ? 158 : 148;
+  const previewHeight = ratio >= 2.8 ? 76 : ratio >= 1.35 ? 88 : ratio >= 0.82 ? 102 : 114;
+  const previewWidth = Math.max(48, Math.min(nodeWidth - 16, Math.round(previewHeight * ratio)));
+  return {
+    previewWidth,
+    previewHeight,
+    nodeWidth,
+    estimatedNodeHeight: previewHeight + 52,
+  };
+}
+
 function imageSizeLabel(image: ImageAsset) {
   if (image.outputSize?.width && image.outputSize?.height) return `${image.outputSize.width} × ${image.outputSize.height}px`;
   if (image.width && image.height) return `${image.width} × ${image.height}px`;
@@ -8713,18 +9130,33 @@ function imageSizeLabel(image: ImageAsset) {
 }
 
 function qualityBadgeLabel(image: ImageAsset) {
-  if (image.qualityCheck?.label) return image.qualityCheck.label.replace(/\s/g, "");
+  if (image.qualityCheck?.label) {
+    const compact = image.qualityCheck.label.replace(/\s/g, "");
+    const withoutSize = compact.replace(/^\d{2,5}[×xX]\d{2,5}(?:px)?(?:[|｜·:：-])?/u, "");
+    if (withoutSize) return withoutSize;
+  }
+  const status = image.qualityCheck?.status;
+  if (status === "passed") return "合格";
+  if (status === "pending") return "待检查";
+  if (status === "size_insufficient") return "尺寸不足";
+  if (status === "ratio_mismatch") return "比例异常";
+  if (status === "suspected_stretch") return "疑似拉伸";
+  if (status === "white_border") return "有白边";
+  if (status === "composition_risk") return "构图风险";
+  if (status === "blurred_padding") return "疑似补边";
+  if (status === "failed") return "质检失败";
+  if (status === "empty") return "空结果";
   const size = image.outputSize || (image.width && image.height ? { width: image.width, height: image.height } : null);
   if (!size) return "待检查";
-  if (image.quality === "4k" && Math.max(size.width, size.height) < 3840) return `${size.width}×${size.height}｜未达到4K`;
-  if (image.quality === "4k") return `${size.width}×${size.height}｜4K待检查`;
-  return `${size.width}×${size.height}`;
+  if (image.quality === "4k" && Math.max(size.width, size.height) < 3840) return "未达4K";
+  if (image.quality === "4k") return "4K待检查";
+  return "待检查";
 }
 
 function qualityTone(image: ImageAsset) {
   const status = image.qualityCheck?.status;
   if (status === "passed") return "bg-[#74e3c5]/12 text-[#adf8e5] border-[#74e3c5]/18";
-  if (status === "composition_risk") return "bg-[#ffe1a0]/12 text-[#ffe1a0] border-[#ffe1a0]/18";
+  if (status === "composition_risk" || status === "blurred_padding") return "bg-[#ffe1a0]/12 text-[#ffe1a0] border-[#ffe1a0]/18";
   if (status === "size_insufficient" || status === "ratio_mismatch" || status === "suspected_stretch" || status === "white_border" || status === "failed" || status === "empty") {
     return "bg-[#ff6b5f]/12 text-[#ffb4a8] border-[#ff6b5f]/18";
   }
@@ -8734,45 +9166,10 @@ function qualityTone(image: ImageAsset) {
 function historyMatchesFilter(image: ImageAsset, filter: string, projectId: string) {
   if (filter === "全部") return true;
   const date = image.generatedAt ? new Date(image.generatedAt) : null;
-  const now = Date.now();
-  if (filter === "今天") return Boolean(date && date.toDateString() === new Date().toDateString());
-  if (filter === "最近7天") return Boolean(date && now - date.getTime() <= 7 * 24 * 60 * 60 * 1000);
-  if (filter === "本项目") return image.projectId === projectId;
-  if (filter === "4K") return image.quality === "4k" || Boolean(image.outputSize && Math.max(image.outputSize.width, image.outputSize.height) >= 3840);
-  if (filter === "横版") return imageRatio(image) > 1.08;
-  if (filter === "竖版") return imageRatio(image) < 0.92;
-  if (filter === "方图") return imageRatio(image) >= 0.92 && imageRatio(image) <= 1.08;
-  if (filter === "成功") return !["failed", "empty", "size_insufficient", "ratio_mismatch", "suspected_stretch", "white_border"].includes(image.qualityCheck?.status || "");
-  if (filter === "失败") return ["failed", "empty", "size_insufficient", "ratio_mismatch", "suspected_stretch", "white_border"].includes(image.qualityCheck?.status || "");
-  if (filter === "已收藏") return Boolean(image.favorite);
+  if (filter === "今日") return Boolean(date && date.toDateString() === new Date().toDateString());
+  if (filter === "项目") return image.projectId === projectId;
+  if (filter === "收藏") return Boolean(image.favorite);
   return true;
-}
-
-function groupHistoryImages(images: ImageAsset[], groupBy: string) {
-  if (groupBy === "不分组") return [{ label: "全部", images }];
-  const groups = new Map<string, ImageAsset[]>();
-  for (const image of images) {
-    const label = historyGroupLabel(image, groupBy);
-    groups.set(label, [...(groups.get(label) || []), image]);
-  }
-  return Array.from(groups.entries()).map(([label, groupImages]) => ({ label, images: groupImages }));
-}
-
-function historyGroupLabel(image: ImageAsset, groupBy: string) {
-  if (groupBy === "日期") {
-    const date = image.generatedAt ? new Date(image.generatedAt) : null;
-    return date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString("zh-CN") : "未知日期";
-  }
-  if (groupBy === "项目") return image.projectId ? "当前项目/项目图" : "未绑定项目";
-  if (groupBy === "尺寸") {
-    const ratio = imageRatio(image);
-    if (ratio > 1.08) return "横版";
-    if (ratio < 0.92) return "竖版";
-    return "方图";
-  }
-  if (groupBy === "操作") return nodeOperationLabel(image.nodeOperation || image.mode);
-  if (groupBy === "质检") return image.qualityCheck?.label || qualityBadgeLabel(image);
-  return "全部";
 }
 
 function historyMatchesQuery(image: ImageAsset, query: string) {
@@ -8973,37 +9370,25 @@ function buildProjectConstraintText(
   const visibleRequests = resolveVisibleProjectInfoRequests(visibleRequestText || text);
   const brandAssetContext = buildBrandAssetContextPack(profile, brandAssets, visibleRequestText || text);
   const profileNotes = [
-    profile.organizationName ? `项目记忆-机构名称：${profile.organizationName}` : "",
+    profile.organizationName ? `机构名称：${profile.organizationName}` : "",
     projectProfileColors(profile).length ? `品牌色：${projectProfileColors(profile).join("、")}` : "",
-    visibleRequests.logo && profile.logoName ? `本次明确要求使用 Logo：${profile.logoName}` : "",
-    visibleRequests.phone && profile.phone ? `本次明确要求使用联系电话：${profile.phone}` : "",
-    visibleRequests.address && profile.address ? `本次明确要求使用地址：${profile.address}` : "",
-    visibleRequests.qr && profile.qrCodeNote ? `本次明确要求使用二维码：${profile.qrCodeNote}` : "",
+    visibleRequests.logo && profile.logoName ? `用户要求 Logo：${profile.logoName}` : "",
+    visibleRequests.phone && profile.phone ? `用户要求电话：${profile.phone}` : "",
+    visibleRequests.address && profile.address ? `用户要求地址：${profile.address}` : "",
+    visibleRequests.qr && profile.qrCodeNote ? `用户要求二维码：${profile.qrCodeNote}` : "",
     profile.commonCopy ? `常用文案：${profile.commonCopy}` : "",
     profile.forbiddenContent ? `禁改内容：${profile.forbiddenContent}` : "",
-    profile.commonSizes ? `常用尺寸：${profile.commonSizes}` : "",
     profile.styleNotes ? `风格说明：${profile.styleNotes}` : "",
-    profile.phone && !visibleRequests.phone ? `项目记忆-电话：${profile.phone}。仅供校对和需要时引用，本次不要主动写进画面。` : "",
-    profile.address && !visibleRequests.address ? `项目记忆-地址：${profile.address}。仅供校对和需要时引用，本次不要主动写进画面。` : "",
-    profile.logoName && !visibleRequests.logo ? `项目记忆-Logo：${profile.logoName}。用户未明确要求时不要生成 Logo，也不要预留 Logo 占位。` : "",
-    profile.qrCodeNote && !visibleRequests.qr ? `项目记忆-二维码：${profile.qrCodeNote}。用户未明确要求时不要生成二维码，也不要预留二维码占位。` : "",
-    profile.keepText ? "keepText：仅保护用户明确给出的可见文字；项目记忆中的电话、地址不要自动上画。" : "",
-    profile.keepLogo ? "keepLogo：只有用户明确要求放 Logo，才使用项目 Logo；否则不要自行生成或预留。" : "",
-    profile.keepQrCode ? "keepQrCode：只有用户明确要求放二维码，才使用二维码；否则不要自行生成或预留。" : "",
-    profile.keepFace ? "keepFace：人脸、专家照片和人物识别度不要改变。" : "",
-    profile.keepMainSubject ? "keepMainSubject：主体、产品、主视觉结构不要改变。" : "",
+    profile.keepFace ? "保护人脸/人物识别度。" : "",
+    profile.keepMainSubject ? "保护主体、产品和主视觉识别度。" : "",
     profile.onlyEditMaskedArea ? "onlyEditMaskedArea：局部修改时只允许修改涂抹区域。" : "",
-    !profile.keepLogo && !profile.logoName ? "未提供 Logo 时不要自行生成，也不要强行预留 Logo 占位。" : "",
-    !profile.keepQrCode && !profile.qrCodeNote ? "未提供二维码时不要自行生成，也不要强行预留二维码占位。" : "",
   ].filter(Boolean);
   const notes = [text.trim(), brandAssetContext, ...profileNotes, taskContextNotes || ""].filter(Boolean).join("\n");
   if (!textProtectionMode) return notes;
   return [
     notes,
-    "文字保护模式：只保护用户明确要求出现在画面里的文字和资产；项目记忆里的电话、地址、Logo、二维码不是默认画面元素。",
-    "文字保护流程占位：后续 OCR 接入后，只对画面中真实存在或用户明确要求的文字/Logo/二维码做位置保护和程序化回贴。",
-    "最终成图必须完整铺满目标尺寸，不要出现白边、白底托板、海报贴在画布上的留边效果；除非用户明确要求，否则不要故意留白。",
-    "如果项目资料和用户需求里没有明确提供 Logo 或二维码，不要自行生成，也不要预留固定占位。",
+    "规则：只保护用户明确要求或原图真实存在的文字/Logo/二维码；项目记忆不自动上画。",
+    "成图完整铺满目标尺寸，不要白边、托板、相框边或故意留白。",
   ]
     .filter(Boolean)
     .join("\n");
@@ -9025,11 +9410,10 @@ function buildBrandAssetContextPack(profile: ProjectProfile, brandAssets: ImageA
   ]));
   const visibleRequests = resolveVisibleProjectInfoRequests(visibleRequestText);
   const lines = [
-    "【项目品牌资产】",
+    "【项目素材】",
     profile.organizationName ? `机构名称：${profile.organizationName}` : "",
     usage.usePrimaryColors && primaryColors.length ? `项目主色：${primaryColors.join("、")}` : "",
     usage.useSecondaryColors && secondaryColors.length ? `辅助配色：${secondaryColors.join("、")}` : "",
-    usage.useSecondaryColors && profile.colorPalettes ? `品牌配色方案：${splitProfileLines(profile.colorPalettes).join("；")}` : "",
     usage.useLogo && (profile.logoName || logoAssets.length) ? `Logo：${[profile.logoName, assetNames(logoAssets)].filter(Boolean).join("；")}` : "",
     usage.useIpImage && ipAssets.length ? `IP形象：${assetNames(ipAssets)}` : "",
     usage.useContact && profile.phone ? `电话：${profile.phone}` : "",
@@ -9038,24 +9422,11 @@ function buildBrandAssetContextPack(profile: ProjectProfile, brandAssets: ImageA
     usage.useCopy && profile.commonCopy ? `常用宣传语：${splitProfileLines(profile.commonCopy).join("；")}` : "",
     usage.useForbiddenRules && profile.forbiddenContent ? `禁止事项：${splitProfileLines(profile.forbiddenContent).join("；")}` : "",
     backgroundAssets.length ? `常用背景：${assetNames(backgroundAssets)}` : "",
-    "",
-    "【生成要求】",
-    usage.usePrimaryColors && primaryColors.length ? "请优先使用项目主色，保持品牌统一。" : "",
-    usage.useSecondaryColors && secondaryColors.length ? "辅助色、强调色、背景色和文字色只作为配色约束，不要把色值当成可见文字。" : "",
-    usage.useLogo && !logoAssets.length && !profile.logoName ? "当前未提供 Logo，不要自行生成 Logo，也不要预留 Logo 占位。" : "",
-    usage.useLogo && (logoAssets.length || profile.logoName) ? "Logo 必须基于项目资料或上传文件，不要改错、重绘或虚构新 Logo。" : "",
-    usage.useIpImage && ipAssets.length ? "IP形象只参考当前项目素材库中的 IP/医生形象，不要混用其他项目素材。" : "",
-    usage.useContact && (profile.phone || profile.address) ? "需要出现电话地址时，必须使用项目资料中的准确内容，不要自行编写。" : "",
-    usage.useContact && !profile.phone && !profile.address ? "当前未提供电话地址，不要编造联系方式或地址。" : "",
-    usage.useQrCode && !qrAssets.length && !profile.qrCodeNote ? "当前未提供二维码，不要自行生成假二维码，也不要预留二维码占位。" : "",
-    usage.useCopy && profile.commonCopy ? "常用宣传语可以作为标题/卖点候选；未明确要求时不要堆满文案。" : "",
     visibleRequests.phone && !profile.phone ? "用户要求电话但项目资料未填写电话：请提示缺少电话，不要编造。" : "",
     visibleRequests.address && !profile.address ? "用户要求地址但项目资料未填写地址：请提示缺少地址，不要编造。" : "",
     visibleRequests.logo && !profile.logoName && !logoAssets.length ? "用户要求 Logo 但项目素材库未提供 Logo：不要编造 Logo。" : "",
     visibleRequests.qr && !profile.qrCodeNote && !qrAssets.length ? "用户要求二维码但项目素材库未提供二维码：不要生成假二维码。" : "",
-    "素材优先级：当前项目素材库 > 本次上传图片 > 用户输入 > 行业常识补全 > 公共风格库。",
-    "不同项目的品牌资产不能混用；只能调用当前项目自己的资料和素材。",
-    "不能在没有素材的情况下乱编机构信息、电话、地址、Logo、二维码。",
+    "调用规则：只用当前项目素材；电话/地址/Logo/二维码只有用户明确要求或开关启用才上画；缺失则不编造。",
     missingBrandAssetWarning(profile, brandAssets),
   ].filter(Boolean);
   return lines.length > 3 ? lines.join("\n") : "";

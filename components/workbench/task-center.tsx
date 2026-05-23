@@ -33,6 +33,7 @@ export type TaskCenterTask = {
   inputs?: TaskCenterImage[];
   outputs?: TaskCenterImage[];
   resultCount?: number;
+  resultOnCanvas?: boolean;
   progress?: number;
   progressLabel?: string;
   deferred?: boolean;
@@ -84,7 +85,20 @@ export function TaskCenter({
   const visibleTimelineTasks = timelineTasks.slice(0, visibleCount);
   const finishedCount = tasks.filter(isFinishedTask).length;
   const runningCount = tasks.filter((task) => !isDeferredQueuedTask(task) && (task.status === "queued" || task.status === "running" || task.status === "saving")).length;
-  const failedCount = tasks.filter((task) => task.status === "failed").length;
+  const attentionTasks = visibleTimelineTasks.filter((task) =>
+    task.status === "failed" ||
+    task.status === "cancelled" ||
+    isTaskPossiblyStuck(task) ||
+    (task.status === "completed" && !task.resultOnCanvas));
+  const attentionIds = new Set(attentionTasks.map((task) => task.id));
+  const runningTasks = visibleTimelineTasks.filter((task) =>
+    !attentionIds.has(task.id) && (task.status === "queued" || task.status === "running" || task.status === "saving"));
+  const completedTasks = visibleTimelineTasks.filter((task) => task.status === "completed" && task.resultOnCanvas);
+  const attentionCount = timelineTasks.filter((task) =>
+    task.status === "failed" ||
+    task.status === "cancelled" ||
+    isTaskPossiblyStuck(task) ||
+    (task.status === "completed" && !task.resultOnCanvas)).length;
 
   function renderTask(task: TaskCenterTask) {
     const stuck = isTaskPossiblyStuck(task);
@@ -92,7 +106,7 @@ export function TaskCenter({
     const previewImages = resultImages.length ? resultImages.slice(0, 2) : task.inputs?.[0] ? [task.inputs[0]] : [];
     const previewImage = previewImages[0] || null;
     const canStop = task.status === "running" || task.status === "saving" || (task.status === "queued" && !task.deferred);
-    const canRetry = task.status !== "completed" && !canStop;
+    const canRetry = (task.status !== "completed" || !task.resultOnCanvas) && !canStop;
     const elapsedMs = (task.endedAt || now) - task.startedAt;
     const modelMs = task.modelDurationMs || (task.requestStartedAt && (task.status === "running" || task.status === "saving") ? now - task.requestStartedAt : undefined);
     const saveMs = task.saveDurationMs || (task.saveStartedAt && task.status === "saving" ? now - task.saveStartedAt : undefined);
@@ -107,9 +121,7 @@ export function TaskCenter({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="truncate text-[13px] font-semibold text-white/84">{task.nodeName}</div>
-            <div className="apple-caption mt-1 truncate">
-              {[task.materialType ? `${task.materialType} · ${task.targetSize || "未指定尺寸"}` : task.type, task.model].filter(Boolean).join(" · ")}
-            </div>
+            <div className="apple-caption mt-1 truncate">{[task.materialType || task.type, task.targetSize].filter(Boolean).join(" · ")}</div>
           </div>
           <span
             className={`rounded-full px-2.5 py-1 text-[10px] ${taskStatusClass(task, stuck)}`}
@@ -123,13 +135,13 @@ export function TaskCenter({
             <div className="grid size-16 shrink-0 grid-cols-2 gap-1 overflow-hidden rounded-[18px] border border-white/10 bg-white/[0.035] p-1">
               {previewImages.map((image) => (
                 <button aria-label={`预览${taskImageLabel(image)}`} className="min-w-0 overflow-hidden rounded-[13px]" key={image.url || image.id} onClick={() => onPreview(image)} type="button">
-	                  <ImageFrame alt={taskImageLabel(image)} className="rounded-[13px] border-0" fit="contain" image={image} preserveRatio={false} variant="thumbnail" style={{ width: "100%", height: "100%" }} />
+                  <ImageFrame alt={taskImageLabel(image)} className="rounded-[13px] border-0" fit="contain" image={image} preserveRatio={false} variant="thumbnail" style={{ width: "100%", height: "100%" }} />
                 </button>
               ))}
             </div>
           ) : previewImage ? (
             <button aria-label={`预览${taskImageLabel(previewImage)}`} className="shrink-0" onClick={() => onPreview(previewImage)} type="button">
-	              <ImageFrame alt={taskImageLabel(previewImage)} className="rounded-[18px]" fit="contain" image={previewImage} preserveRatio={false} variant="thumbnail" style={{ width: 64, height: 64 }} />
+              <ImageFrame alt={taskImageLabel(previewImage)} className="rounded-[18px]" fit="contain" image={previewImage} preserveRatio={false} variant="thumbnail" style={{ width: 64, height: 64 }} />
             </button>
           ) : (
             <div className="flex size-16 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.035]">
@@ -188,17 +200,17 @@ export function TaskCenter({
     <div className="space-y-3">
       <div className="apple-surface-section flex items-center justify-between gap-2 rounded-[18px] px-3 py-2">
         <div className="min-w-0">
-          <div className="apple-section-title">任务记录</div>
+          <div className="apple-section-title">任务状态</div>
           <div className="apple-caption mt-0.5 truncate">
             {runningCount ? `${runningCount} 个进行中` : "暂无进行中"}
             {deferredTasks.length ? ` · ${deferredTasks.length} 个待执行` : ""}
-            {failedCount ? ` · ${failedCount} 个失败` : ""}
+            {attentionCount ? ` · ${attentionCount} 个需处理` : ""}
           </div>
         </div>
         {finishedCount ? (
           <button className="apple-button flex shrink-0 items-center gap-1 px-3 py-1.5 text-[11px]" onClick={onDeleteFinished} type="button">
             <Trash2 className="size-3" />
-            一键清空已结束
+            清理已结束
           </button>
         ) : null}
       </div>
@@ -211,23 +223,41 @@ export function TaskCenter({
           {deferredTasks.map(renderTask)}
         </section>
       ) : null}
-      {timelineTasks.length ? (
+      {runningTasks.length ? (
         <section className="space-y-2">
           <div className="flex items-center justify-between px-1">
-            <div className="apple-section-title">任务进度</div>
-            <div className="apple-caption">{timelineTasks.length} 个</div>
+            <div className="apple-section-title">进行中</div>
+            <div className="apple-caption">{runningTasks.length} 个</div>
           </div>
-          {visibleTimelineTasks.map(renderTask)}
-          {timelineTasks.length > visibleTimelineTasks.length ? (
-            <button
-              className="apple-button w-full px-3 py-2 text-[11px]"
-              onClick={() => setVisibleCount((current) => current + 12)}
-              type="button"
-            >
-              显示更多任务（{timelineTasks.length - visibleTimelineTasks.length}）
-            </button>
-          ) : null}
+          {runningTasks.map(renderTask)}
         </section>
+      ) : null}
+      {attentionTasks.length ? (
+        <section className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <div className="apple-section-title">需要处理</div>
+            <div className="apple-caption">{attentionCount} 个</div>
+          </div>
+          {attentionTasks.map(renderTask)}
+        </section>
+      ) : null}
+      {completedTasks.length ? (
+        <section className="space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <div className="apple-section-title">刚完成</div>
+            <div className="apple-caption">结果已在画布</div>
+          </div>
+          {completedTasks.map(renderTask)}
+        </section>
+      ) : null}
+      {timelineTasks.length > visibleTimelineTasks.length ? (
+        <button
+          className="apple-button w-full px-3 py-2 text-[11px]"
+          onClick={() => setVisibleCount((current) => current + 12)}
+          type="button"
+        >
+          显示更多任务（{timelineTasks.length - visibleTimelineTasks.length}）
+        </button>
       ) : null}
     </div>
   );
@@ -292,7 +322,8 @@ function taskStatusText(task: TaskCenterTask, stuck: boolean, stageLabel: string
 
 function taskProgressText(task: TaskCenterTask, stuck: boolean, outputsCount: number, stageLabel: string) {
   if (task.status === "completed") {
-    return outputsCount > 0 ? "成功，结果已显示在画布，记录会保留到你手动删除" : "成功，记录会保留到你手动删除";
+    if (task.resultOnCanvas) return "结果已显示在画布，稍后自动收起";
+    return outputsCount > 0 ? "已生成结果，但画布未找到结果节点，请检查" : "任务成功，但没有可查看结果，请检查";
   }
   if (task.status === "failed") return task.progressLabel || "任务失败，可重试或删除记录";
   if (task.status === "cancelled") return "已停止，可重试或删除记录";

@@ -10,7 +10,7 @@ export type PixelSize = {
   height: number;
 };
 
-export type ExactFitMode = "smart_outpaint" | "crop" | "pad";
+export type ExactFitMode = "smart_outpaint" | "crop" | "center_crop" | "safe_full_bleed" | "safe_no_crop" | "pad";
 export type ImageVariantKind = "thumbnail" | "preview";
 
 const generatedDir = path.join(process.cwd(), "public", "generated");
@@ -277,7 +277,7 @@ export async function processToTarget(
   ratio: PixelSize,
   quality: QualityValue,
   format: "png" | "jpg" = "png",
-  fitMode: ExactFitMode = "crop",
+  fitMode: ExactFitMode = "safe_no_crop",
 ) {
   return processToExactCanvas(inputBuffer, getTargetPixels(ratio, quality), format, fitMode);
 }
@@ -286,7 +286,7 @@ export async function processToExactSize(
   inputBuffer: Buffer,
   target: PixelSize,
   format: "png" | "jpg" = "png",
-  fitMode: ExactFitMode = "smart_outpaint",
+  fitMode: ExactFitMode = "safe_no_crop",
 ) {
   return processToExactCanvas(inputBuffer, target, format, fitMode);
 }
@@ -295,7 +295,7 @@ async function processToExactCanvas(
   inputBuffer: Buffer,
   target: PixelSize,
   format: "png" | "jpg" = "png",
-  fitMode: ExactFitMode = "smart_outpaint",
+  fitMode: ExactFitMode = "safe_no_crop",
 ) {
   const normalizedTarget = {
     width: Math.max(1, Math.round(target.width)),
@@ -311,7 +311,15 @@ async function processToExactCanvas(
     return buildOutpaintedCanvas(preparedInput, normalizedTarget, format);
   }
 
-  return highQualityResize(preparedInput, normalizedTarget, format, "cover");
+  if (fitMode === "center_crop" || fitMode === "safe_full_bleed") {
+    return highQualitySafeCoverCrop(preparedInput, normalizedTarget, format);
+  }
+
+  if (fitMode === "safe_no_crop") {
+    return buildSafeNoCropCanvas(preparedInput, normalizedTarget, format);
+  }
+
+  return highQualityResize(preparedInput, normalizedTarget, format, "cover", "attention");
 }
 
 async function buildOutpaintedCanvas(inputBuffer: Buffer, target: PixelSize, format: "png" | "jpg" = "png") {
@@ -338,21 +346,224 @@ async function buildOutpaintedCanvas(inputBuffer: Buffer, target: PixelSize, for
   return finalizeHighQuality(pipeline, format);
 }
 
+async function buildSafeNoCropCanvas(inputBuffer: Buffer, target: PixelSize, format: "png" | "jpg" = "png") {
+  const background = await sharp(inputBuffer)
+    .resize(target.width, target.height, {
+      fit: "cover",
+      position: "attention",
+      withoutEnlargement: false,
+      kernel: sharp.kernel.lanczos3,
+    })
+    .toBuffer();
+
+  const foreground = await sharp(inputBuffer)
+    .resize(target.width, target.height, {
+      fit: "inside",
+      withoutEnlargement: false,
+      kernel: sharp.kernel.lanczos3,
+    })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const foregroundWidth = foreground.info.width;
+  const foregroundHeight = foreground.info.height;
+  const left = Math.round((target.width - foregroundWidth) / 2);
+  const top = Math.round((target.height - foregroundHeight) / 2);
+  const feathered = featherInternalForegroundEdges(foreground.data, foregroundWidth, foregroundHeight, foreground.info.channels, {
+    left: left > 0,
+    right: left + foregroundWidth < target.width,
+    top: top > 0,
+    bottom: top + foregroundHeight < target.height,
+  });
+  const foregroundPng = await sharp(feathered, {
+    raw: {
+      width: foregroundWidth,
+      height: foregroundHeight,
+      channels: foreground.info.channels,
+    },
+  })
+    .png()
+    .toBuffer();
+
+  const pipeline = sharp(background)
+    .composite([{ input: foregroundPng, left: Math.max(0, left), top: Math.max(0, top) }]);
+
+  return finalizeHighQuality(pipeline, format);
+}
+
+function featherInternalForegroundEdges(
+  data: Buffer,
+  width: number,
+  height: number,
+  channels: number,
+  edges: { left: boolean; right: boolean; top: boolean; bottom: boolean },
+) {
+  if (channels < 4 || (!edges.left && !edges.right && !edges.top && !edges.bottom)) return data;
+  const output = Buffer.from(data);
+  const feather = Math.max(12, Math.min(36, Math.round(Math.min(width, height) * 0.025)));
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let edgeAlpha = 255;
+      if (edges.left) edgeAlpha = Math.min(edgeAlpha, Math.round((x / feather) * 255));
+      if (edges.right) edgeAlpha = Math.min(edgeAlpha, Math.round(((width - 1 - x) / feather) * 255));
+      if (edges.top) edgeAlpha = Math.min(edgeAlpha, Math.round((y / feather) * 255));
+      if (edges.bottom) edgeAlpha = Math.min(edgeAlpha, Math.round(((height - 1 - y) / feather) * 255));
+      if (edgeAlpha >= 255) continue;
+      const alphaIndex = (y * width + x) * channels + 3;
+      output[alphaIndex] = Math.max(0, Math.min(output[alphaIndex] || 0, edgeAlpha));
+    }
+  }
+  return output;
+}
+
 async function highQualityResize(
   inputBuffer: Buffer,
   target: PixelSize,
   format: "png" | "jpg" = "png",
   fit: "cover" | "inside" = "cover",
+  position: "attention" | "center" = "attention",
 ) {
   const pipeline = sharp(inputBuffer)
     .resize(target.width, target.height, {
       fit,
-      position: "attention",
+      position,
       withoutEnlargement: false,
       kernel: sharp.kernel.lanczos3,
     });
 
   return finalizeHighQuality(pipeline, format);
+}
+
+async function highQualitySafeCoverCrop(
+  inputBuffer: Buffer,
+  target: PixelSize,
+  format: "png" | "jpg" = "png",
+) {
+  const metadata = await sharp(inputBuffer).metadata();
+  const sourceWidth = metadata.width || target.width;
+  const sourceHeight = metadata.height || target.height;
+  const scale = Math.max(target.width / Math.max(1, sourceWidth), target.height / Math.max(1, sourceHeight));
+  const resizedWidth = Math.max(target.width, Math.ceil(sourceWidth * scale));
+  const resizedHeight = Math.max(target.height, Math.ceil(sourceHeight * scale));
+  const resized = await sharp(inputBuffer)
+    .resize(resizedWidth, resizedHeight, {
+      fit: "fill",
+      withoutEnlargement: false,
+      kernel: sharp.kernel.lanczos3,
+    })
+    .png()
+    .toBuffer();
+  const resizedMeta = await sharp(resized).metadata();
+  const width = resizedMeta.width || resizedWidth;
+  const height = resizedMeta.height || resizedHeight;
+  const left = width > target.width ? await selectSafeCropOffset(resized, "x", target.width, width, height) : 0;
+  const top = height > target.height ? await selectSafeCropOffset(resized, "y", target.height, width, height) : 0;
+  const pipeline = sharp(resized).extract({
+    left,
+    top,
+    width: Math.min(target.width, width),
+    height: Math.min(target.height, height),
+  });
+
+  return finalizeHighQuality(pipeline, format);
+}
+
+async function selectSafeCropOffset(
+  inputBuffer: Buffer,
+  axis: "x" | "y",
+  cropLength: number,
+  width: number,
+  height: number,
+) {
+  const fullLength = axis === "y" ? height : width;
+  const maxOffset = Math.max(0, fullLength - cropLength);
+  if (maxOffset <= 0) return 0;
+
+  const sample = await sharp(inputBuffer)
+    .resize(width, height, { fit: "fill" })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const centerOffset = Math.round(maxOffset / 2);
+  const step = Math.max(1, Math.round(maxOffset / 72));
+  let bestOffset = centerOffset;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let offset = 0; offset <= maxOffset; offset += step) {
+    const score = cropEdgeScore(sample.data, sample.info.channels, width, height, axis, offset, cropLength);
+    const centerPenalty = Math.abs(offset - centerOffset) / Math.max(1, maxOffset) * 0.08;
+    const total = score + centerPenalty;
+    if (total < bestScore) {
+      bestScore = total;
+      bestOffset = offset;
+    }
+  }
+
+  return Math.max(0, Math.min(maxOffset, Math.round(bestOffset)));
+}
+
+function cropEdgeScore(
+  data: Buffer,
+  channels: number,
+  width: number,
+  height: number,
+  axis: "x" | "y",
+  offset: number,
+  cropLength: number,
+) {
+  const band = Math.max(4, Math.round(cropLength * 0.065));
+  const startA = offset;
+  const startB = offset + cropLength - band;
+  const edgeA = axis === "y"
+    ? highContrastBandRatio(data, channels, width, height, 0, startA, width, band)
+    : highContrastBandRatio(data, channels, width, height, startA, 0, band, height);
+  const edgeB = axis === "y"
+    ? highContrastBandRatio(data, channels, width, height, 0, startB, width, band)
+    : highContrastBandRatio(data, channels, width, height, startB, 0, band, height);
+  const innerStart = offset + band;
+  const innerLength = Math.max(1, cropLength - band * 2);
+  const inner = axis === "y"
+    ? highContrastBandRatio(data, channels, width, height, 0, innerStart, width, innerLength)
+    : highContrastBandRatio(data, channels, width, height, innerStart, 0, innerLength, height);
+  return edgeA * 1.8 + edgeB * 1.8 - inner * 0.18;
+}
+
+function highContrastBandRatio(
+  data: Buffer,
+  channels: number,
+  width: number,
+  height: number,
+  left: number,
+  top: number,
+  bandWidth: number,
+  bandHeight: number,
+) {
+  const x0 = Math.max(1, Math.round(left));
+  const y0 = Math.max(1, Math.round(top));
+  const x1 = Math.min(width - 1, Math.round(left + bandWidth));
+  const y1 = Math.min(height - 1, Math.round(top + bandHeight));
+  let hot = 0;
+  let total = 0;
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      total += 1;
+      if (isHighContrastAt(data, channels, width, x, y)) hot += 1;
+    }
+  }
+  return hot / Math.max(1, total);
+}
+
+function isHighContrastAt(data: Buffer, channels: number, width: number, x: number, y: number) {
+  const luma = (xx: number, yy: number) => {
+    const index = (yy * width + xx) * channels;
+    const r = data[index] || 0;
+    const g = data[index + 1] || r;
+    const b = data[index + 2] || r;
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const gx = Math.abs(luma(x - 1, y) - luma(x + 1, y));
+  const gy = Math.abs(luma(x, y - 1) - luma(x, y + 1));
+  return gx + gy > 68;
 }
 
 function finalizeHighQuality(pipeline: sharp.Sharp, format: "png" | "jpg") {

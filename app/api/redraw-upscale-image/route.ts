@@ -95,11 +95,7 @@ export async function POST(request: Request) {
     }
 
     const raw = await imageResultToBuffer(item.b64_json, item.url);
-    const rawMeta = await readImageMetadata(raw);
-    const rawRatio = rawMeta.width / Math.max(1, rawMeta.height);
-    const targetRatio = outputSize.width / Math.max(1, outputSize.height);
-    const fitMode = Math.abs(rawRatio - targetRatio) / targetRatio <= 0.04 ? "crop" : "smart_outpaint";
-    const output = await processToExactSize(raw, outputSize, input.format, fitMode);
+    const output = await processToExactSize(raw, outputSize, input.format, "safe_no_crop");
     const actual = await readImageMetadata(output);
     assertExactPixelSize({ width: actual.width, height: actual.height }, outputSize);
     const saved = await saveImageBuffer(output, input.format, {

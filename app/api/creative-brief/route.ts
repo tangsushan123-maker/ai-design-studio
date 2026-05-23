@@ -85,15 +85,13 @@ async function tryAiCreativeBrief(input: CreativeBriefInput, fallback: CreativeB
 
 function buildInstruction(input: CreativeBriefInput, fallback: CreativeBrief) {
   return [
-    "你是商业设计创作入口的 GPT 预检助手。只返回合法 JSON，不要 Markdown。",
-    "必须根据入口类型先分析或补全，再输出两个创意方向。不要直接跳过预检。",
-    "素材优先级固定为：当前项目素材库 > 本次上传的图片 > 用户输入的一句话 > GPT 根据行业常识补全的内容 > 公共风格库。",
-    "严格禁止编造机构名称、电话、地址、Logo、二维码、医生照片、真实活动信息。没有来源就写入 missingMaterials 和 caveats。",
-    "如果缺少 logo、电话、地址、品牌色或真实照片，missingMaterialsWarning 必须是：当前缺少品牌素材，建议后续补充 logo、电话、地址、品牌色、真实照片，以便生成正式版本。",
-    "single_image 模式必须填写 imageUnderstanding：designType, industry, theme, targetAudience, mainColors, layoutStructure, coreTextsAndSellingPoints, keepElements, optimizations, creativeDirections。",
-    "idea 模式必须填写 ideaCompletion：industry, targetAudience, communicationGoal, coreSellingPoints, possibleTitles, visualStyle, creativeDirections, materialsToCollect。",
+    "你是商业设计创作入口的预检助手。只返回合法 JSON，不要 Markdown。",
+    "先分析入口信息，再输出两个方向：A=成熟商业版，B=创意主视觉版。",
+    "素材优先级：当前项目素材库 > 本次上传图片 > 用户输入 > 行业常识 > 公共风格库。",
+    "禁止编造机构名称、电话、地址、Logo、二维码、医生照片和真实活动信息；缺少来源写入 missingMaterials/caveats。",
+    "single_image 填 imageUnderstanding；idea 填 ideaCompletion。",
     "directions 必须有两个：A=信息清晰/专业信任/稳定表达；B=视觉更强/创意更明显/更适合传播。",
-    "direction.prompt 要能直接给生图/改图模型使用，并重复禁止编造真实机构信息。",
+    "direction.prompt 要短、可直接给生图/改图模型使用。",
     "JSON 字段：mode, title, projectName, temporaryProject, temporaryProjectName, missingMaterials, missingMaterialsWarning, projectContextUsed, imageUnderstanding, ideaCompletion, directions。",
     `入口输入：${JSON.stringify(input)}`,
     `规则兜底：${JSON.stringify(fallback)}`,

@@ -112,7 +112,7 @@ export async function POST(request: Request) {
     }
 
     const raw = await imageResultToBuffer(item.b64_json, item.url);
-    const processed = await processToExactSize(raw, outputSize, "png", "smart_outpaint");
+    const processed = await processToExactSize(raw, outputSize, "png", "safe_no_crop");
     const composited = preserveOutsideMask
       ? await composeMaskedEdit(imageBuffer, processed, maskBuffer, outputSize, { feather: maskFeather })
       : processed;

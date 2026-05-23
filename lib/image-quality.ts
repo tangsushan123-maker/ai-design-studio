@@ -11,6 +11,7 @@ export type ImageQualityStatus =
   | "suspected_stretch"
   | "white_border"
   | "composition_risk"
+  | "blurred_padding"
   | "failed"
   | "empty";
 
@@ -35,7 +36,12 @@ export type ImageQualityCheck = {
   compositionRiskLabel?: string;
   edgeContentRatio?: number;
   edgeHotSide?: string;
+  edgeContentRatios?: Record<string, number>;
   safeMarginPercent?: number;
+  suspectedBlurredPadding?: boolean;
+  blurredPaddingLabel?: string;
+  edgeDetailScore?: number;
+  centerDetailScore?: number;
   importantContentRisk?: boolean;
   importantContentLabel?: string;
   protectedTextCount?: number;
@@ -96,6 +102,7 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
   const is4kTarget = options.quality === "4k" || Boolean(target && Math.max(target.width, target.height) >= 3840);
   const border = await detectWhiteBorder(input);
   const composition = await detectCompositionRisk(input, options.safeMarginPercent || 10);
+  const blurredPadding = await detectBlurredPaddingComposition(input);
   const protection = summarizeProtection(options.protectionContext);
   const detailScore = await estimateDetailScore(input);
   const clarityComparison = options.sourceImage ? await compareImageClarity(options.sourceImage, input) : undefined;
@@ -124,6 +131,10 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
     issues.push(composition.label);
     actions.push("重新生成：zoom out、缩小主体、增加安全边距");
   }
+  if (blurredPadding.risk) {
+    issues.push(blurredPadding.label);
+    actions.push("重新生成：按目标比例原生构图，禁止模糊补边");
+  }
   if (suspectedStretch) {
     issues.push("细节密度偏低，疑似只是放大或拉伸。");
     actions.push("高清重绘后再输出4K");
@@ -146,11 +157,13 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
             ? "white_border"
             : composition.risk
               ? "composition_risk"
-              : suspectedStretch
-                ? "suspected_stretch"
-                : options.operation === "hd_redraw" && clarityComparison && !clarityComparison.improved
-                  ? "pending"
-                  : "pending";
+              : blurredPadding.risk
+                ? "blurred_padding"
+                : suspectedStretch
+                  ? "suspected_stretch"
+                  : options.operation === "hd_redraw" && clarityComparison && !clarityComparison.improved
+                    ? "pending"
+                    : "pending";
 
   return {
     status,
@@ -175,7 +188,12 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
     compositionRiskLabel: composition.label,
     edgeContentRatio: composition.edgeContentRatio,
     edgeHotSide: composition.hotSide,
+    edgeContentRatios: composition.sideRatios,
     safeMarginPercent: composition.safeMarginPercent,
+    suspectedBlurredPadding: blurredPadding.risk,
+    blurredPaddingLabel: blurredPadding.label,
+    edgeDetailScore: blurredPadding.edgeDetailScore,
+    centerDetailScore: blurredPadding.centerDetailScore,
     importantContentRisk: protection.hasProtectedContent,
     importantContentLabel: protection.label,
     protectedTextCount: protection.textCount,
@@ -228,6 +246,7 @@ export function statusLabel(status: ImageQualityStatus, width?: number, height?:
   if (status === "suspected_stretch") return `${width}×${height}｜疑似拉伸`;
   if (status === "white_border") return `${width}×${height}｜有白边`;
   if (status === "composition_risk") return `${width}×${height}｜构图贴边`;
+  if (status === "blurred_padding") return `${width}×${height}｜疑似补边`;
   if (status === "failed") return "生成失败";
   if (status === "empty") return "空图";
   return `${width || 0}×${height || 0}｜待检查`;
@@ -272,6 +291,7 @@ async function detectCompositionRisk(input: Buffer | string, safeMarginPercent: 
     key,
     ratio: sideStats[key].hot / Math.max(1, sideStats[key].total),
   }));
+  const sideRatios = Object.fromEntries(sideEntries.map((item) => [item.key, Number(item.ratio.toFixed(3))]));
   const hottest = sideEntries.sort((a, b) => b.ratio - a.ratio)[0];
   const edgeContentRatio = Number(hottest.ratio.toFixed(3));
   const risk = hottest.ratio > 0.34 && hottest.ratio - centerRatio > 0.055;
@@ -283,6 +303,7 @@ async function detectCompositionRisk(input: Buffer | string, safeMarginPercent: 
     label,
     edgeContentRatio,
     hotSide: hottest.key,
+    sideRatios,
     safeMarginPercent,
   };
 }
@@ -306,6 +327,56 @@ function sideLabel(value: string) {
   if (value === "top") return "顶部";
   if (value === "bottom") return "底部";
   return value;
+}
+
+async function detectBlurredPaddingComposition(input: Buffer | string) {
+  const sample = await sharp(input)
+    .resize(160, 160, { fit: "fill" })
+    .greyscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const edgeBand = Math.round(Math.min(sample.info.width, sample.info.height) * 0.16);
+  const centerInsetX = Math.round(sample.info.width * 0.24);
+  const centerInsetY = Math.round(sample.info.height * 0.24);
+  const edgeDetailScore = detailRegionScore(sample.data, sample.info.width, sample.info.height, (x, y) =>
+    x < edgeBand || y < edgeBand || x >= sample.info.width - edgeBand || y >= sample.info.height - edgeBand,
+  );
+  const centerDetailScore = detailRegionScore(sample.data, sample.info.width, sample.info.height, (x, y) =>
+    x >= centerInsetX && x < sample.info.width - centerInsetX && y >= centerInsetY && y < sample.info.height - centerInsetY,
+  );
+  const edgeToCenter = edgeDetailScore / Math.max(0.1, centerDetailScore);
+  const risk = centerDetailScore >= 9 && edgeDetailScore <= 5.2 && edgeToCenter <= 0.44;
+  return {
+    risk,
+    edgeDetailScore: Number(edgeDetailScore.toFixed(2)),
+    centerDetailScore: Number(centerDetailScore.toFixed(2)),
+    label: risk
+      ? "疑似模糊补边/居中缩小图，不像原生比例设计稿。"
+      : "未检测到明显模糊补边。",
+  };
+}
+
+function detailRegionScore(
+  data: Buffer,
+  width: number,
+  height: number,
+  inRegion: (x: number, y: number) => boolean,
+) {
+  let total = 0;
+  let count = 0;
+  for (let y = 1; y < height; y += 1) {
+    for (let x = 1; x < width; x += 1) {
+      if (!inRegion(x, y)) continue;
+      const index = y * width + x;
+      const current = data[index] || 0;
+      const left = data[index - 1] || 0;
+      const up = data[index - width] || 0;
+      total += Math.abs(current - left) + Math.abs(current - up);
+      count += 2;
+    }
+  }
+  return count ? total / count : 0;
 }
 
 function resolveExpectedSize(options: QualityInput) {
