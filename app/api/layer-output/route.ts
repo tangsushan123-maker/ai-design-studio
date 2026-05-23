@@ -25,14 +25,25 @@ export const runtime = "nodejs";
 
 const BACKGROUND_PROMPT = [
   "remove all visible text, remove text glow, remove text shadow, remove text outline",
+  "erase every readable title stroke completely, no ghost text, no faint letter remnants",
   "restore the original clean background",
   "keep original lighting, keep original texture, keep original color, keep original composition",
   "do not change the keyboard, do not change the product, do not change non-masked areas",
   "Only repair the transparent area of the mask. Do not redraw the whole image.",
 ].join(", ");
 
+const REFERENCE_BACKGROUND_PROMPT = [
+  "Create a clean text-free background version of the input poster.",
+  "Remove every visible title, subtitle, caption, button text, logo text, and readable character.",
+  "Preserve the original non-text visual design: mascot, product, scenery, leaves, lake, mountains, bubbles, light rays, colors, mood, and composition.",
+  "Do not leave ghost text, blurred letters, faint strokes, text shadows, text outlines, or empty text panels.",
+  "Rebuild the covered areas naturally so the result looks like a finished poster background designed without any text.",
+  "No typography, no letters, no words, no symbols that look like text.",
+].join(" ");
+
 type TextMaskStrength = "soft" | "normal" | "strong";
 type TextExtractionMode = "simple_cutout" | "hybrid_extract" | "high_rebuild";
+type BackgroundGenerationMode = "masked_inpaint" | "reference_remake";
 
 type TextRegion = {
   x: number;
@@ -129,11 +140,14 @@ type PreparedTextLayerAlpha = {
 };
 
 type BackgroundQualityReport = {
+  generationMode: BackgroundGenerationMode;
   passed: boolean;
   attempts: number;
   outsideDiffMean: number;
   textAreaChangeMean: number;
   residualEdgeRatio: number;
+  unchangedTextStrokeRatio: number;
+  darkArtifactRatio: number;
   residualRisk: boolean;
   issues: string[];
   actions: string[];
@@ -198,10 +212,6 @@ export async function POST(request: Request) {
     });
     await writeFile(paths.textAlphaMask, textLayerAlpha.debugPng);
     const textAlphaMaskStat = await stat(paths.textAlphaMask);
-    const repairSourceAlpha = shouldRebuildTextLayer(extractionPlan)
-      ? await buildRebuildRepairAlpha(extractionPlan, canvas, textAlpha.alpha)
-      : textAlpha.alpha;
-
     let textOutput: TransparentTextOutput | null = null;
     let sourceTextCutout: TransparentTextOutput | null = null;
     let textFullStat: Awaited<ReturnType<typeof stat>> | null = null;
@@ -239,7 +249,9 @@ export async function POST(request: Request) {
       }
     }
 
-    let repairMask = await buildRepairMask(repairSourceAlpha, canvas, { strength: maskStrength, keepGlow, growBoost: shouldRebuildTextLayer(extractionPlan) ? 8 : 0 });
+    const shouldUseRebuildRepair = shouldRebuildTextLayer(extractionPlan);
+    const repairSourceAlpha = await resolveRepairSourceAlpha(original, extractionPlan, canvas, textAlpha.alpha, textOutput);
+    let repairMask = await buildRepairMask(repairSourceAlpha, canvas, { strength: maskStrength, keepGlow, growBoost: shouldUseRebuildRepair ? -8 : 0 });
     await writeFile(paths.repairMask, repairMask.debugPng);
     let repairMaskStat = await stat(paths.repairMask);
 
@@ -248,17 +260,25 @@ export async function POST(request: Request) {
     let backgroundFirstPassStat: Awaited<ReturnType<typeof stat>> | null = null;
     let backgroundFinalStat: Awaited<ReturnType<typeof stat>> | null = null;
     let backgroundQuality: BackgroundQualityReport | null = null;
+    let backgroundGenerationMode: BackgroundGenerationMode = "masked_inpaint";
     if (includeBackground) {
       try {
-        const backgroundResult = await autoRetryBackground(original, normalizedSource, repairMask, repairSourceAlpha, canvas, {
-          model,
-          maskStrength,
-          keepGlow,
-        });
-        repairMask = backgroundResult.repairMask;
-        backgroundFirstPass = backgroundResult.firstPass;
-        backgroundFinal = backgroundResult.final;
-        backgroundQuality = backgroundResult.quality;
+        if (shouldUseRebuildRepair) {
+          backgroundGenerationMode = "reference_remake";
+          backgroundFinal = await regenerateBackgroundNoText(normalizedSource, canvas, extractionPlan, model);
+          backgroundFirstPass = backgroundFinal;
+          backgroundQuality = await qualityCheckReferenceBackground(original, backgroundFinal, repairSourceAlpha, canvas, 1);
+        } else {
+          const backgroundResult = await autoRetryBackground(original, normalizedSource, repairMask, repairSourceAlpha, canvas, {
+            model,
+            maskStrength,
+            keepGlow,
+          });
+          repairMask = backgroundResult.repairMask;
+          backgroundFirstPass = backgroundResult.firstPass;
+          backgroundFinal = backgroundResult.final;
+          backgroundQuality = backgroundResult.quality;
+        }
         if (!backgroundQuality.passed) {
           errors.background = backgroundQuality.issues.join("；") || "无文字背景仍可能有文字残影，可单独重新生成背景。";
         }
@@ -304,11 +324,11 @@ export async function POST(request: Request) {
     const backgroundImage = backgroundFinal && backgroundFinalStat ? buildLayerImage(base, {
       groupId,
       fileName: "background_no_text.png",
-      prompt: BACKGROUND_PROMPT,
+      prompt: backgroundGenerationMode === "reference_remake" ? REFERENCE_BACKGROUND_PROMPT : BACKGROUND_PROMPT,
       variant: 1,
-      mode: "分层拆图 · 无文字背景",
-      materialType: "无文字背景",
-      branchLabel: "无文字背景",
+      mode: backgroundGenerationMode === "reference_remake" ? "分层拆图 · 无文字背景重生版" : "分层拆图 · 无文字背景",
+      materialType: backgroundGenerationMode === "reference_remake" ? "无文字背景重生版" : "无文字背景",
+      branchLabel: backgroundGenerationMode === "reference_remake" ? "无文字背景重生版" : "无文字背景",
       fileSizeBytes: backgroundFinalStat.size,
       savedPath: paths.backgroundFinal,
     }) : null;
@@ -424,6 +444,7 @@ export async function POST(request: Request) {
       },
       text: textOutput?.alphaCheck || null,
       background: backgroundQuality,
+      backgroundGenerationMode,
       files: {
         original: "original.png",
         textAlphaMask: "text_alpha_mask.png",
@@ -553,11 +574,20 @@ async function buildTextExtractionPlan(
   textAlpha: TextAlphaMask,
 ): Promise<TextExtractionPlan> {
   const local = inspectTextExtractionMode(canvas, textRegions, textAlpha);
-  if (local.mode !== "high_rebuild") return local;
+  const needsVision = shouldAnalyzeTextLayoutWithVision(local, canvas, textAlpha);
+  if (!needsVision) return local;
 
   try {
     const vision = await analyzeTextLayoutWithVision(image, canvas, local);
-    if (vision.lines.length) return vision;
+    if (vision.lines.length) {
+      return {
+        ...vision,
+        mode: shouldForceRebuildFromVision(local, textAlpha) ? "high_rebuild" : vision.mode,
+        reason: shouldForceRebuildFromVision(local, textAlpha)
+          ? `${vision.reason}；本地 alpha 只抓到少量碎片，已强制使用 OCR 高清文字重建。`
+          : vision.reason,
+      };
+    }
   } catch {
     // OCR/vision is best-effort. If it is unavailable, keep the local plan and let
     // source-pixel extraction continue instead of inventing text content.
@@ -568,6 +598,23 @@ async function buildTextExtractionPlan(
     mode: local.lines.length ? local.mode : "hybrid_extract",
     reason: `${local.reason}；OCR 未返回可重建文字，已回退为混合提取，避免伪造文字。`,
   };
+}
+
+function shouldAnalyzeTextLayoutWithVision(local: TextExtractionPlan, canvas: PixelSize, textAlpha: TextAlphaMask) {
+  if (local.mode === "high_rebuild") return true;
+  const bbox = textAlpha.quality.bbox || alphaBoundingBox(textAlpha.alpha, canvas);
+  const bboxAreaRatio = bbox ? (bbox.width * bbox.height) / Math.max(1, canvas.width * canvas.height) : 0;
+  const bboxWidthRatio = bbox ? bbox.width / Math.max(1, canvas.width) : 0;
+  const suspiciousSparseAlpha = textAlpha.coverage > 0.0005 && textAlpha.coverage < 0.008 && bboxAreaRatio > 0.018;
+  const likelyPosterTitleArea = bboxWidthRatio > 0.24 && bboxAreaRatio > 0.035;
+  return suspiciousSparseAlpha || likelyPosterTitleArea || local.qualityRisks.length > 0;
+}
+
+function shouldForceRebuildFromVision(local: TextExtractionPlan, textAlpha: TextAlphaMask) {
+  return local.mode === "high_rebuild" ||
+    textAlpha.coverage < 0.012 ||
+    textAlpha.quality.actions.includes("shrink_text_alpha_mask") ||
+    textAlpha.quality.issues.some((issue) => /漏字|断笔|背景|过大|偏大/.test(issue));
 }
 
 function inspectTextExtractionMode(
@@ -1033,6 +1080,94 @@ async function exportRebuiltTextLayer(
   };
 }
 
+async function resolveRepairSourceAlpha(
+  image: Buffer,
+  plan: TextExtractionPlan,
+  canvas: PixelSize,
+  fallbackAlpha: Buffer,
+  textOutput: TransparentTextOutput | null,
+) {
+  if (!shouldRebuildTextLayer(plan)) return fallbackAlpha;
+  const masks = [fallbackAlpha];
+  let rebuiltAlpha: Buffer | null = null;
+  try {
+    const textLayer = textOutput?.full || await renderRebuiltTextPng(image, plan, canvas);
+    const alpha = await extractAlphaChannel(textLayer, canvas);
+    const coverage = alphaCoverage(alpha);
+    if (coverage > 0.00008 && coverage < 0.34) {
+      rebuiltAlpha = alpha;
+      masks.push(alpha);
+    }
+  } catch {
+    // Fall through to local alpha so background repair still has a bounded mask.
+  }
+
+  const strokeAlpha = await buildTextStrokeRepairAlpha(image, plan, canvas, rebuiltAlpha || fallbackAlpha).catch(() => null);
+  if (strokeAlpha) masks.push(strokeAlpha);
+
+  const combined = combineAlphaMasks(masks);
+  const coverage = alphaCoverage(combined);
+  if (coverage > 0.00008 && coverage < 0.44) return combined;
+  return masks.length > 1 ? combineAlphaMasks(masks.slice(0, 2)) : fallbackAlpha;
+}
+
+async function buildTextStrokeRepairAlpha(image: Buffer, plan: TextExtractionPlan, canvas: PixelSize, guideAlpha: Buffer) {
+  if (!plan.lines.length) throw new Error("没有可用于背景修复的 OCR 文字行。");
+  const [source, blurred, nearbyText] = await Promise.all([
+    toRawImage(image, canvas),
+    sharp(image)
+      .resize(canvas.width, canvas.height, { fit: "fill", kernel: sharp.kernel.lanczos3 })
+      .blur(7)
+      .ensureAlpha()
+      .raw()
+      .toBuffer(),
+    expandAlphaMask(guideAlpha, canvas, 22, 2, 1.1),
+  ]);
+  const scores = computeTextFeatureScores(source, blurred);
+  const regions = plan.lines.map((line) => expandRegion({
+    x: line.x,
+    y: line.y,
+    width: line.width,
+    height: line.height,
+    confidence: 1,
+  }, canvas, Math.max(4, Math.min(20, Math.round(line.height * 0.18)))));
+  const regionMask = buildRegionMask(regions, canvas);
+  const strokes = Buffer.alloc(canvas.width * canvas.height);
+  for (let pixel = 0; pixel < strokes.length; pixel += 1) {
+    if (!regionMask[pixel] || (nearbyText[pixel] || 0) <= 6) continue;
+    const index = pixel * source.channels;
+    const r = source.data[index] || 0;
+    const g = source.data[index + 1] || 0;
+    const b = source.data[index + 2] || 0;
+    const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+    const saturation = Math.max(r, g, b) - Math.min(r, g, b);
+    const score = scores[pixel] || 0;
+    const blueStroke = b > r + 18 && b > g + 5 && saturation > 24;
+    const brightStroke = luma > 145 && saturation > 10;
+    const darkStroke = luma < 92 && saturation > 10;
+    if (score < 32 && !(score > 17 && (blueStroke || brightStroke || darkStroke))) continue;
+    strokes[pixel] = Math.min(255, Math.max(118, Math.round(score * 2.3)));
+  }
+  const refined = await expandAlphaMask(strokes, canvas, 3.2, 7, 1);
+  return sharp(combineAlphaMasks([guideAlpha, refined]), { raw: { width: canvas.width, height: canvas.height, channels: 1 } })
+    .blur(0.7)
+    .greyscale()
+    .raw()
+    .toBuffer();
+}
+
+function combineAlphaMasks(masks: Buffer[]) {
+  const length = masks[0]?.length || 0;
+  const output = Buffer.alloc(length);
+  for (const mask of masks) {
+    if (mask.length !== length) continue;
+    for (let index = 0; index < length; index += 1) {
+      output[index] = Math.max(output[index] || 0, mask[index] || 0);
+    }
+  }
+  return output;
+}
+
 async function renderRebuiltTextPng(image: Buffer, plan: TextExtractionPlan, canvas: PixelSize) {
   if (!plan.lines.length) throw new Error("OCR 未识别到可重建文字，无法输出高清文字重建版。");
   const sampled = await Promise.all(plan.lines.map((line) => sampleLineColors(image, line, canvas)));
@@ -1055,6 +1190,16 @@ async function renderRebuiltTextPng(image: Buffer, plan: TextExtractionPlan, can
 
   return sharp(Buffer.from(svg))
     .png({ compressionLevel: 9, palette: false })
+    .toBuffer();
+}
+
+async function extractAlphaChannel(input: Buffer, canvas: PixelSize) {
+  return sharp(input)
+    .resize(canvas.width, canvas.height, { fit: "fill", kernel: sharp.kernel.lanczos3 })
+    .ensureAlpha()
+    .extractChannel("alpha")
+    .greyscale()
+    .raw()
     .toBuffer();
 }
 
@@ -1214,7 +1359,13 @@ async function autoRetryBackground(
           growBoost: 12 + attempt * 12,
         });
       }
-      const inpaint = await inpaintBackground(source, repairMask, options.model);
+      const editSource = {
+        ...source,
+        buffer: await prepareBackgroundEditSource(original, repairMask, canvas),
+        fileName: "background-edit-source.png",
+        mimeType: "image/png",
+      };
+      const inpaint = await inpaintBackground(editSource, repairMask, options.model);
       const normalized = await processToExactSize(inpaint, canvas, "png", "crop");
       if (!firstPass) firstPass = normalized;
       final = await compositeOriginalOutsideMask(original, normalized, repairMask, canvas);
@@ -1254,6 +1405,79 @@ async function inpaintBackground(
   const item = result.data?.[0];
   if (!item) throw new Error("图片模型没有返回背景修复结果。");
   return imageResultToBuffer(item.b64_json, item.url);
+}
+
+async function regenerateBackgroundNoText(
+  source: { buffer: Buffer; fileName: string; mimeType: string },
+  canvas: PixelSize,
+  plan: TextExtractionPlan,
+  model: string,
+) {
+  const openai = getOpenAI();
+  const imageFile = await toFile(source.buffer, source.fileName, { type: source.mimeType });
+  const textList = plan.lines.map((line) => line.text).filter(Boolean).join(" / ");
+  const prompt = [
+    REFERENCE_BACKGROUND_PROMPT,
+    textList ? `Visible text to remove: ${textList}.` : "",
+    `Keep the output aspect ratio and composition aligned to the original ${canvas.width}x${canvas.height} poster.`,
+  ].filter(Boolean).join("\n");
+  const result = await withTimeout(
+    openai.images.edit({
+      model,
+      image: imageFile,
+      prompt,
+      size: "auto",
+      quality: "high",
+      input_fidelity: "high",
+      output_format: "png",
+      background: "opaque",
+      n: 1,
+    }),
+    180000,
+    "无字背景重生超时，请稍后重试或换一个更快的图片模型。",
+  );
+  const item = result.data?.[0];
+  if (!item) throw new Error("图片模型没有返回无字背景重生结果。");
+  const output = await imageResultToBuffer(item.b64_json, item.url);
+  return processToExactSize(output, canvas, "png", "crop");
+}
+
+async function prepareBackgroundEditSource(original: Buffer, repairMask: RepairMask, canvas: PixelSize) {
+  const [originalRaw, blurredRaw, maskAlpha] = await Promise.all([
+    sharp(original)
+      .resize(canvas.width, canvas.height, { fit: "fill", kernel: sharp.kernel.lanczos3 })
+      .ensureAlpha()
+      .raw()
+      .toBuffer(),
+    sharp(original)
+      .resize(canvas.width, canvas.height, { fit: "fill", kernel: sharp.kernel.lanczos3 })
+      .blur(34)
+      .modulate({ brightness: 1.03, saturation: 0.72 })
+      .ensureAlpha()
+      .raw()
+      .toBuffer(),
+    sharp(repairMask.alpha, { raw: { width: canvas.width, height: canvas.height, channels: 1 } })
+      .blur(Math.max(2, repairMask.feather / 4))
+      .greyscale()
+      .raw()
+      .toBuffer(),
+  ]);
+  const output = Buffer.allocUnsafe(originalRaw.length);
+  for (let index = 0, pixel = 0; index < originalRaw.length; index += 4, pixel += 1) {
+    const maskValue = Math.max(0, Math.min(1, (maskAlpha[pixel] || 0) / 255));
+    const alpha = maskValue > 0.08 ? Math.max(maskValue, 0.86) : maskValue;
+    if (alpha <= 0.01) {
+      originalRaw.copy(output, index, index, index + 4);
+      continue;
+    }
+    output[index] = Math.round(originalRaw[index] * (1 - alpha) + blurredRaw[index] * alpha);
+    output[index + 1] = Math.round(originalRaw[index + 1] * (1 - alpha) + blurredRaw[index + 1] * alpha);
+    output[index + 2] = Math.round(originalRaw[index + 2] * (1 - alpha) + blurredRaw[index + 2] * alpha);
+    output[index + 3] = originalRaw[index + 3];
+  }
+  return sharp(output, { raw: { width: canvas.width, height: canvas.height, channels: 4 } })
+    .png({ compressionLevel: 9, palette: false })
+    .toBuffer();
 }
 
 async function compositeOriginalOutsideMask(original: Buffer, inpaintResult: Buffer, repairMask: RepairMask, canvas: PixelSize) {
@@ -1349,8 +1573,13 @@ async function qualityCheckBackground(
   let textCount = 0;
   let residualEdges = 0;
   let repairCount = 0;
+  let darkArtifacts = 0;
+  let unchangedTextStrokes = 0;
+  let textStrokeCount = 0;
   for (let pixel = 0; pixel < repairAlpha.length; pixel += 1) {
     const index = pixel * 4;
+    const originalLuma = 0.299 * (original.data[index] || 0) + 0.587 * (original.data[index + 1] || 0) + 0.114 * (original.data[index + 2] || 0);
+    const backgroundLuma = 0.299 * (background.data[index] || 0) + 0.587 * (background.data[index + 1] || 0) + 0.114 * (background.data[index + 2] || 0);
     const diff = colorDistance(
       original.data[index] || 0,
       original.data[index + 1] || 0,
@@ -1367,31 +1596,122 @@ async function qualityCheckBackground(
       if (isHighContrastPixel(background.data, background.channels, background.width, background.height, pixel % canvas.width, Math.floor(pixel / canvas.width))) {
         residualEdges += 1;
       }
+      if (backgroundLuma < 14 && originalLuma > 46) darkArtifacts += 1;
     }
     if ((textAlpha[pixel] || 0) > 16) {
       textChange += diff;
       textCount += 1;
     }
+    if ((textAlpha[pixel] || 0) > 96) {
+      textStrokeCount += 1;
+      if (diff < 48) unchangedTextStrokes += 1;
+    }
   }
   const outsideDiffMean = outsideDiff / Math.max(1, outsideCount);
   const textAreaChangeMean = textChange / Math.max(1, textCount);
   const residualEdgeRatio = residualEdges / Math.max(1, repairCount);
-  const residualRisk = textAreaChangeMean < 6 || (textAreaChangeMean < 14 && residualEdgeRatio > 0.26);
+  const unchangedTextStrokeRatio = unchangedTextStrokes / Math.max(1, textStrokeCount);
+  const darkArtifactRatio = darkArtifacts / Math.max(1, repairCount);
+  const artifactRisk = darkArtifactRatio > 0.08;
+  const edgeResidueRisk = residualEdgeRatio > 0.07 || (residualEdgeRatio > 0.032 && textAreaChangeMean < 150);
+  const unchangedStrokeRisk = unchangedTextStrokeRatio > 0.26 || (unchangedTextStrokeRatio > 0.18 && residualEdgeRatio > 0.018);
+  const residualRisk = artifactRisk || edgeResidueRisk || unchangedStrokeRisk || textAreaChangeMean < 6 || (textAreaChangeMean < 14 && residualEdgeRatio > 0.26);
   const issues: string[] = [];
   const actions: string[] = [];
   if (outsideDiffMean > 1.8) {
     issues.push("非文字区域发生变化，已通过最终合成强制恢复原图像素。");
   }
   if (residualRisk) {
-    issues.push("文字区域变化不足或仍有高对比残影，建议扩大 repair_mask 后重试。");
-    actions.push("expand_repair_mask_and_retry");
+    if (artifactRisk) {
+      issues.push("背景修复区域出现大块黑色/脏色填充，建议改用更贴合文字形状的 repair_mask 后重试。");
+      actions.push("tighten_repair_mask_and_retry");
+    } else {
+      issues.push("文字区域变化不足或仍有高对比文字残影，建议扩大 repair_mask 后重试。");
+      actions.push("expand_repair_mask_and_retry");
+    }
   }
   return {
+    generationMode: "masked_inpaint",
     passed: !residualRisk,
     attempts,
     outsideDiffMean: Number(outsideDiffMean.toFixed(3)),
     textAreaChangeMean: Number(textAreaChangeMean.toFixed(3)),
     residualEdgeRatio: Number(residualEdgeRatio.toFixed(4)),
+    unchangedTextStrokeRatio: Number(unchangedTextStrokeRatio.toFixed(4)),
+    darkArtifactRatio: Number(darkArtifactRatio.toFixed(4)),
+    residualRisk,
+    issues,
+    actions,
+  };
+}
+
+async function qualityCheckReferenceBackground(
+  originalBuffer: Buffer,
+  backgroundBuffer: Buffer,
+  textAlpha: Buffer,
+  canvas: PixelSize,
+  attempts: number,
+): Promise<BackgroundQualityReport> {
+  const [original, background] = await Promise.all([
+    toRawImage(originalBuffer, canvas),
+    toRawImage(backgroundBuffer, canvas),
+  ]);
+  let outsideDiff = 0;
+  let outsideCount = 0;
+  let textChange = 0;
+  let textCount = 0;
+  let residualEdges = 0;
+  let unchangedTextStrokes = 0;
+  let textStrokeCount = 0;
+  let darkArtifacts = 0;
+  for (let pixel = 0; pixel < textAlpha.length; pixel += 1) {
+    const index = pixel * 4;
+    const diff = colorDistance(
+      original.data[index] || 0,
+      original.data[index + 1] || 0,
+      original.data[index + 2] || 0,
+      background.data[index] || 0,
+      background.data[index + 1] || 0,
+      background.data[index + 2] || 0,
+    );
+    if ((textAlpha[pixel] || 0) > 16) {
+      textChange += diff;
+      textCount += 1;
+      if (isHighContrastPixel(background.data, background.channels, background.width, background.height, pixel % canvas.width, Math.floor(pixel / canvas.width))) {
+        residualEdges += 1;
+      }
+      const luma = 0.299 * (background.data[index] || 0) + 0.587 * (background.data[index + 1] || 0) + 0.114 * (background.data[index + 2] || 0);
+      if (luma < 14) darkArtifacts += 1;
+    } else {
+      outsideDiff += diff;
+      outsideCount += 1;
+    }
+    if ((textAlpha[pixel] || 0) > 96) {
+      textStrokeCount += 1;
+      if (diff < 48) unchangedTextStrokes += 1;
+    }
+  }
+  const outsideDiffMean = outsideDiff / Math.max(1, outsideCount);
+  const textAreaChangeMean = textChange / Math.max(1, textCount);
+  const residualEdgeRatio = residualEdges / Math.max(1, textCount);
+  const unchangedTextStrokeRatio = unchangedTextStrokes / Math.max(1, textStrokeCount);
+  const darkArtifactRatio = darkArtifacts / Math.max(1, textCount);
+  const residualRisk = unchangedTextStrokeRatio > 0.22 || (unchangedTextStrokeRatio > 0.14 && residualEdgeRatio > 0.02);
+  const issues: string[] = [];
+  const actions: string[] = [];
+  if (residualRisk) {
+    issues.push("无字背景重生后仍疑似保留原文字笔触，需要重新生成无字背景。");
+    actions.push("regenerate_reference_background");
+  }
+  return {
+    generationMode: "reference_remake",
+    passed: !residualRisk,
+    attempts,
+    outsideDiffMean: Number(outsideDiffMean.toFixed(3)),
+    textAreaChangeMean: Number(textAreaChangeMean.toFixed(3)),
+    residualEdgeRatio: Number(residualEdgeRatio.toFixed(4)),
+    unchangedTextStrokeRatio: Number(unchangedTextStrokeRatio.toFixed(4)),
+    darkArtifactRatio: Number(darkArtifactRatio.toFixed(4)),
     residualRisk,
     issues,
     actions,
@@ -2111,4 +2431,19 @@ function parseMaskStrength(value: FormDataEntryValue | null): TextMaskStrength {
   if (text === "soft" || text === "weak" || text === "弱") return "soft";
   if (text === "strong" || text === "强") return "strong";
   return "normal";
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
 }

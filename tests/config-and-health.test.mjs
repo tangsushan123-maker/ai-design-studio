@@ -230,6 +230,17 @@ describe("Layer output", () => {
     assert.equal(routeSource.includes("buildFallbackTextAlphaFromRegions"), true);
     assert.equal(routeSource.includes("prepareTextLayerAlpha"), true);
     assert.equal(routeSource.includes("suppressBackgroundResidueFromTextAlpha"), true);
+    assert.equal(routeSource.includes("shouldAnalyzeTextLayoutWithVision"), true);
+    assert.equal(routeSource.includes("suspiciousSparseAlpha"), true);
+    assert.equal(routeSource.includes("已强制使用 OCR 高清文字重建"), true);
+    assert.equal(routeSource.includes("resolveRepairSourceAlpha"), true);
+    assert.equal(routeSource.includes("extractAlphaChannel"), true);
+    assert.equal(routeSource.includes("prepareBackgroundEditSource"), true);
+    assert.equal(routeSource.includes("background-edit-source.png"), true);
+    assert.equal(routeSource.includes("tighten_repair_mask_and_retry"), true);
+    assert.equal(routeSource.includes("regenerateBackgroundNoText"), true);
+    assert.equal(routeSource.includes("reference_remake"), true);
+    assert.equal(routeSource.includes("无文字背景重生版"), true);
     assert.equal(routeSource.includes("residueCleanupApplied"), true);
     assert.equal(routeSource.includes("likelyTitleText"), true);
     assert.equal(routeSource.includes("已回退为原图像素文字层"), true);
