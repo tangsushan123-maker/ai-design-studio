@@ -14,6 +14,10 @@ type TaskCenterImage = {
   previewUrl?: string;
   materialType?: string;
   mode?: string;
+  qualityCheck?: {
+    deliverability?: string;
+    status?: string;
+  };
 };
 
 export type TaskCenterTask = {
@@ -100,12 +104,13 @@ export function TaskCenter({
   const finishedTasks = matchedTasks.filter(isFinishedTask);
   const finishedCount = finishedTasks.length;
   const runningCount = matchedTasks.filter((task) => !isDeferredQueuedTask(task) && (task.status === "queued" || task.status === "running" || task.status === "saving")).length;
-  const successCount = matchedTasks.filter((task) => !taskIsPartialSuccess(task) && ((task.status === "completed" && task.resultOnCanvas) || taskHasVisibleResult(task))).length;
+  const successCount = matchedTasks.filter((task) => !taskIsPartialSuccess(task) && !taskHasQualityConcern(task) && ((task.status === "completed" && task.resultOnCanvas) || taskHasVisibleResult(task))).length;
   const failedCount = matchedTasks.filter((task) => task.status === "failed" && !taskHasAnyResult(task)).length;
   const cancelledCount = matchedTasks.filter((task) => task.status === "cancelled").length;
   const attentionTasks = visibleTimelineTasks.filter((task) =>
     (task.status === "failed" && !taskHasAnyResult(task)) ||
     taskIsPartialSuccess(task) ||
+    taskHasQualityConcern(task) ||
     task.status === "cancelled" ||
     isTaskPossiblyStuck(task) ||
     (task.status === "completed" && !task.resultOnCanvas));
@@ -116,6 +121,7 @@ export function TaskCenter({
   const attentionCount = timelineTasks.filter((task) =>
     (task.status === "failed" && !taskHasAnyResult(task)) ||
     taskIsPartialSuccess(task) ||
+    taskHasQualityConcern(task) ||
     task.status === "cancelled" ||
     isTaskPossiblyStuck(task) ||
     (task.status === "completed" && !task.resultOnCanvas)).length;
@@ -154,7 +160,8 @@ export function TaskCenter({
     const previewImage = previewImages[0] || null;
     const canStop = task.status === "running" || task.status === "saving" || (task.status === "queued" && !task.deferred);
     const visibleResult = taskHasVisibleResult(task);
-    const canRetry = !visibleResult && (task.status !== "completed" || !task.resultOnCanvas) && !canStop;
+    const qualityConcern = taskHasQualityConcern(task);
+    const canRetry = (qualityConcern || !visibleResult) && (task.status !== "completed" || !task.resultOnCanvas || qualityConcern) && !canStop;
     const cancelActionKey = `停止:${task.id}`;
     const deleteActionKey = `删除记录:${task.id}`;
     const retryActionKey = `${task.status === "queued" ? "运行" : "重试"}:${task.id}`;
@@ -433,6 +440,7 @@ function taskRunStateLabel(state: NonNullable<TaskCenterTask["backendRunState"]>
 }
 
 function taskCardClass(task: TaskCenterTask, stuck: boolean) {
+  if (taskHasQualityConcern(task)) return "border-[#ffd166]/22 bg-[#ffd166]/[0.045]";
   if (taskHasVisibleResult(task)) return "border-[#74e3c5]/18 bg-[#74e3c5]/[0.035]";
   if (taskIsPartialSuccess(task)) return "border-[#ffd166]/22 bg-[#ffd166]/[0.045]";
   if (task.status === "failed") return "border-[#ff6b5f]/20 bg-[#ff6b5f]/[0.045]";
@@ -443,6 +451,7 @@ function taskCardClass(task: TaskCenterTask, stuck: boolean) {
 }
 
 function taskStatusClass(task: TaskCenterTask, stuck: boolean) {
+  if (taskHasQualityConcern(task)) return "bg-[#ffd166]/14 text-[#ffe1a0]";
   if (taskHasVisibleResult(task)) return "bg-[#74e3c5]/12 text-[#adf8e5]";
   if (taskIsPartialSuccess(task)) return "bg-[#ffd166]/14 text-[#ffe1a0]";
   if (task.status === "failed") return "bg-[#ff6b5f]/14 text-[#ffb4a8]";
@@ -453,6 +462,7 @@ function taskStatusClass(task: TaskCenterTask, stuck: boolean) {
 }
 
 function taskProgressClass(task: TaskCenterTask, stuck: boolean) {
+  if (taskHasQualityConcern(task)) return "bg-[#ffd166]";
   if (taskHasVisibleResult(task)) return "bg-[#74e3c5]";
   if (taskIsPartialSuccess(task)) return "bg-[#ffd166]";
   if (task.status === "failed") return "bg-[#ff6b5f]";
@@ -465,6 +475,7 @@ function taskProgressClass(task: TaskCenterTask, stuck: boolean) {
 function taskStatusText(task: TaskCenterTask, stuck: boolean, stageLabel: string, visibleResult = false, phase = taskMachinePhase(task, stuck, visibleResult)) {
   const phaseLabel = taskPhaseLabel(phase);
   if (phaseLabel) return phaseLabel;
+  if (taskHasQualityConcern(task)) return "需复查";
   if (visibleResult) return "成功";
   if (taskIsPartialSuccess(task)) return "部分成功";
   if (task.status === "completed" && taskHasAnyResult(task) && !task.resultOnCanvas) return "待展示";
@@ -477,6 +488,7 @@ function taskStatusText(task: TaskCenterTask, stuck: boolean, stageLabel: string
 }
 
 function taskProgressText(task: TaskCenterTask, stuck: boolean, outputsCount: number, stageLabel: string, visibleResult = false, phase = taskMachinePhase(task, stuck, visibleResult)) {
+  if (taskHasQualityConcern(task)) return "结果已生成，但质检提示需要复查；可先预览，再决定是否重试";
   if (visibleResult) return "结果已显示在画布，任务记录已自动修正";
   if (taskIsPartialSuccess(task)) {
     return "已有可用输出，但结果未完整通过；请预览后决定是否重试";
@@ -493,6 +505,9 @@ function taskProgressText(task: TaskCenterTask, stuck: boolean, outputsCount: nu
 }
 
 function taskRecoveryHint(task: TaskCenterTask, stuck: boolean, visibleResult = taskHasVisibleResult(task)): { text: string; tone: "warning" | "danger" } | null {
+  if (taskHasQualityConcern(task)) {
+    return { text: "结果已在画布，但质检提示未完全通过。先预览细节；如文字、Logo、白边或尺寸不稳，直接重试或降低复杂度。", tone: "warning" };
+  }
   if (visibleResult) return null;
   if (taskIsPartialSuccess(task)) {
     return { text: "已有部分图片结果。先预览可用图；如果缺图或质量不稳，再点“重试”补生成。", tone: "warning" };
@@ -521,6 +536,7 @@ function taskRecoveryHint(task: TaskCenterTask, stuck: boolean, visibleResult = 
 
 function taskMachinePhase(task: TaskCenterTask, stuck: boolean, visibleResult = taskHasVisibleResult(task)): TaskMachinePhase {
   if (task.status === "cancelled") return "cancelled";
+  if (taskHasQualityConcern(task)) return "needs_review";
   if (visibleResult) return "completed";
   if (taskIsPartialSuccess(task)) return "needs_review";
   if (task.status === "failed") return taskHasAnyResult(task) ? "needs_review" : "failed";
@@ -595,6 +611,21 @@ function taskHasVisibleResult(task: TaskCenterTask) {
 
 function taskHasAnyResult(task: TaskCenterTask) {
   return Boolean(task.outputs?.length || task.result?.url || task.resultCount);
+}
+
+function taskHasQualityConcern(task: TaskCenterTask) {
+  return taskImages(task).some((image) => {
+    const quality = image.qualityCheck;
+    if (!quality) return false;
+    return quality.deliverability === "needs_review" || quality.deliverability === "not_ready" || Boolean(quality.status && quality.status !== "passed");
+  });
+}
+
+function taskImages(task: TaskCenterTask) {
+  return [
+    ...(task.outputs || []),
+    ...(task.result ? [task.result] : []),
+  ];
 }
 
 function taskIsPartialSuccess(task: TaskCenterTask) {
