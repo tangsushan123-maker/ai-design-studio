@@ -28,13 +28,15 @@ export function ProjectLibraryPanel({
   onClose: () => void;
   onCreateNew: () => void;
   onDelete: (id: string) => void | Promise<unknown>;
-  onOpen: (id: string) => void;
-  onRefresh: () => void;
+  onOpen: (id: string) => void | Promise<unknown>;
+  onRefresh: () => void | Promise<unknown>;
   projects: ProjectLibraryItem[];
   formatUpdatedAt: (value: string) => string;
 }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState("");
   const [deletingId, setDeletingId] = useState("");
+  const [openingId, setOpeningId] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   async function deleteProject(project: ProjectLibraryItem) {
@@ -54,6 +56,36 @@ export function ProjectLibraryPanel({
       setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "删除项目失败。" });
     } finally {
       setDeletingId("");
+    }
+  }
+
+  async function openProject(project: ProjectLibraryItem) {
+    if (openingId || deletingId) return;
+    setOpeningId(project.id);
+    setConfirmDeleteId("");
+    setActionMessage(null);
+    try {
+      const opened = await onOpen(project.id);
+      if (opened === false) throw new Error("打开项目失败。");
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "打开项目失败。" });
+    } finally {
+      setOpeningId("");
+    }
+  }
+
+  async function refreshProjects() {
+    if (refreshing) return;
+    setRefreshing(true);
+    setConfirmDeleteId("");
+    setActionMessage(null);
+    try {
+      await onRefresh();
+      setActionMessage({ tone: "success", text: "项目列表已刷新。" });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "刷新项目失败。" });
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -80,9 +112,9 @@ export function ProjectLibraryPanel({
             <Plus className="size-3.5" />
             新建
           </button>
-          <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-semibold" onClick={onRefresh} type="button">
-            <RefreshCcw className="size-3.5" />
-            刷新
+          <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-semibold disabled:opacity-45" disabled={refreshing} onClick={() => void refreshProjects()} type="button">
+            <RefreshCcw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "刷新中" : "刷新"}
           </button>
         </div>
         {actionMessage ? (
@@ -101,7 +133,7 @@ export function ProjectLibraryPanel({
                 className={`apple-interactive-card p-3 ${project.id === activeProjectId ? "is-selected" : ""}`}
                 key={project.id}
               >
-                <button className="flex w-full items-center gap-2 text-left" onClick={() => onOpen(project.id)} type="button">
+                <button className="flex w-full items-center gap-2 text-left disabled:opacity-55" disabled={Boolean(openingId || deletingId)} onClick={() => void openProject(project)} type="button">
                   {project.coverUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element -- Project covers are local generated files; raw img avoids optimizer round-trips.
                     <img alt="" className="size-12 rounded-xl border border-white/10 object-cover" decoding="async" loading="lazy" src={project.coverUrl} />
@@ -111,7 +143,7 @@ export function ProjectLibraryPanel({
                     </span>
                   )}
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12px] font-semibold text-white/82">{project.name}</span>
+                    <span className="block truncate text-[12px] font-semibold text-white/82">{openingId === project.id ? "打开中..." : project.name}</span>
                     <span className="apple-caption mt-0.5 block truncate">{project.organizationName || "机构未填"}</span>
                     <span className="apple-caption mt-1 block">
                       {project.assetCount || 0} 素材 · {project.updatedAt ? formatUpdatedAt(project.updatedAt) : "刚刚"}

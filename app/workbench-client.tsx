@@ -5199,9 +5199,9 @@ function NodeWorkflowWorkbench({
             setProjectPanelOpen(false);
             setProjectCreateOpen(true);
           }}
-          onDelete={(id) => void deleteProject(id)}
-          onOpen={(id) => void loadProject(id)}
-          onRefresh={() => void refreshProjectList()}
+          onDelete={deleteProject}
+          onOpen={loadProject}
+          onRefresh={refreshProjectList}
         />
       ) : null}
 

@@ -1187,8 +1187,12 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("throw new Error(\"删除项目失败。\")"), true);
     assert.equal(projectLibraryPanelSource.includes("confirmDeleteId"), true);
     assert.equal(projectLibraryPanelSource.includes("deletingId"), true);
+    assert.equal(projectLibraryPanelSource.includes("openingId"), true);
+    assert.equal(projectLibraryPanelSource.includes("refreshing"), true);
     assert.equal(projectLibraryPanelSource.includes("确认删除"), true);
     assert.equal(projectLibraryPanelSource.includes("删除中"), true);
+    assert.equal(projectLibraryPanelSource.includes("刷新中"), true);
+    assert.equal(projectLibraryPanelSource.includes("打开中..."), true);
     assert.equal(projectLibraryPanelSource.includes("window.confirm"), false);
     assert.equal(workbenchSource.includes("这张图已受保护"), true);
     assert.equal(workbenchUiSource.includes("可清理"), true);
