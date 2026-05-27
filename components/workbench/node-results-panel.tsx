@@ -43,7 +43,13 @@ function NodeResultsPanelComponent<TImage extends NodeResultImage>({
   onPreview: (image: TImage) => void;
 }) {
   if (!images.length) {
-    return <EmptyPanel icon={<Images className="size-8" />} title="暂无结果" description="" />;
+    return (
+      <EmptyPanel
+        icon={<Images className="size-8" />}
+        title="暂无结果"
+        description="当前节点还没有可预览图片；运行节点后会显示方案缩略图和交付状态。"
+      />
+    );
   }
 
   return (

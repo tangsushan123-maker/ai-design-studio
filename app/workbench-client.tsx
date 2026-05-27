@@ -7046,7 +7046,13 @@ function RightPanel({
       {tab === "tasks" ? (
         <div className="min-h-0 flex-1 overflow-auto p-3">
           <TaskCenter
-            emptyState={<EmptyPanel icon={<Sparkles className="size-8" />} title="暂无任务" description="" />}
+            emptyState={
+              <EmptyPanel
+                icon={<Sparkles className="size-8" />}
+                title="暂无任务"
+                description="运行节点后会在这里显示进度、失败原因、重试入口和生成耗时。"
+              />
+            }
             formatDuration={formatDuration}
             formatGeneratedAt={formatGeneratedAt}
             isDeferredQueuedTask={(task) => isDeferredQueuedTask(task as TaskRecord)}
@@ -7076,7 +7082,13 @@ function RightPanel({
               />
             ) : null}
             <HistoryPanel
-              emptyState={<EmptyPanel icon={<FileImage className="size-8" />} title="暂无结果" description="" />}
+              emptyState={
+                <EmptyPanel
+                  icon={<FileImage className="size-8" />}
+                  title="暂无结果"
+                  description="生成或导入图片后会显示交付状态、质检提示和可继续优化的结果。"
+                />
+              }
               formatFileSize={formatFileSize}
               historyMatchesFilter={(image, filter, currentProjectId) => historyMatchesFilter(image as ImageAsset, filter, currentProjectId)}
               historyMatchesQuery={(image, query) => historyMatchesQuery(image as ImageAsset, query)}
@@ -7154,7 +7166,13 @@ function NodeInspectorPanel({
   onRunNode: (nodeId: string) => void;
 }) {
   if (!node) {
-    return <EmptyPanel icon={<Layers className="size-8" />} title="未选择节点" description="" />;
+    return (
+      <EmptyPanel
+        icon={<Layers className="size-8" />}
+        title="未选择节点"
+        description="点选画布节点可编辑参数；也可以从左侧添加节点或在底部输入需求开始。"
+      />
+    );
   }
 
   const params = node.data.params || {};
