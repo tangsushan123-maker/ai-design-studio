@@ -1005,6 +1005,9 @@ describe("Text-to-image references", () => {
     assert.equal(promptSource.includes("AI 设计总监"), true);
     assert.equal(promptSource.includes("Design Brief"), true);
     assert.equal(promptSource.includes("directions 固定 3 个"), true);
+    assert.equal(creativeBriefRouteSource.includes("parseCreativeBriefPayload"), true);
+    assert.equal(creativeBriefRouteSource.includes("InvalidCreativeBriefPayloadError"), true);
+    assert.equal(creativeBriefRouteSource.includes("创作预检 JSON 无法解析"), true);
     assert.equal(promptSource.includes("buildDesignDirectorImagePrompt"), true);
     assert.equal(promptSource.includes("Selected design direction"), true);
     assert.equal(promptSource.includes("AI 只生成极少文字或无字背景"), true);

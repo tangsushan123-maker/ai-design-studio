@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "请用 JSON 请求体提交创作入口信息。" }, { status: 400 });
     }
 
-    const input = (await request.json()) as CreativeBriefInput;
+    const input = await parseCreativeBriefPayload(request);
     const fallback = buildCreativeBriefFallback(input);
     const aiBrief = await withTimeout(tryAiCreativeBrief(input, fallback), 5500).catch(() => null);
     const brief = aiBrief
@@ -30,6 +30,15 @@ export async function POST(request: Request) {
       source: aiBrief ? "ai" : "rules",
     });
   } catch (error) {
+    if (error instanceof InvalidCreativeBriefPayloadError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: error.message,
+        },
+        { status: 400 },
+      );
+    }
     return NextResponse.json(
       {
         ok: false,
@@ -37,6 +46,21 @@ export async function POST(request: Request) {
       },
       { status: 500 },
     );
+  }
+}
+
+class InvalidCreativeBriefPayloadError extends Error {}
+
+async function parseCreativeBriefPayload(request: Request): Promise<CreativeBriefInput> {
+  try {
+    const input = await request.json() as CreativeBriefInput;
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new InvalidCreativeBriefPayloadError("创作预检请求格式不正确。");
+    }
+    return input;
+  } catch (error) {
+    if (error instanceof InvalidCreativeBriefPayloadError) throw error;
+    throw new InvalidCreativeBriefPayloadError("创作预检 JSON 无法解析，请检查请求内容后重试。");
   }
 }
 
