@@ -5,14 +5,16 @@ import { inferModelCapabilities, type ModelCapability, type ModelCatalogItem } f
 export const runtime = "nodejs";
 
 const allowedKinds = new Set<ModelCapability>(["text", "image", "video"]);
+const modelManagePayloadMessages = {
+  saveInvalid: "模型保存请求格式不正确。",
+  saveJson: "模型保存 JSON 无法解析，请检查请求内容后重试。",
+  deleteInvalid: "模型删除请求格式不正确。",
+  deleteJson: "模型删除 JSON 无法解析，请检查请求内容后重试。",
+};
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json().catch(() => ({}))) as {
-      id?: string;
-      label?: string;
-      capabilities?: string[];
-    };
+    const body = await parseModelManagePayload(request, "save");
     const id = body.id?.trim();
     if (!id) {
       return NextResponse.json({ ok: false, error: "模型名不能为空。" }, { status: 400 });
@@ -67,13 +69,16 @@ export async function POST(request: Request) {
       videoModel: nextSaved.videoModel,
     });
   } catch (error) {
+    if (error instanceof InvalidModelManagePayloadError) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ ok: false, error: modelManageErrorMessage("模型保存失败", error) }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    const body = (await request.json().catch(() => ({}))) as { id?: string };
+    const body = await parseModelManagePayload(request, "delete");
     const id = body.id?.trim();
     if (!id) {
       return NextResponse.json({ ok: false, error: "模型名不能为空。" }, { status: 400 });
@@ -90,7 +95,29 @@ export async function DELETE(request: Request) {
       videoModel: config.videoModel,
     });
   } catch (error) {
+    if (error instanceof InvalidModelManagePayloadError) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ ok: false, error: modelManageErrorMessage("模型删除失败", error) }, { status: 500 });
+  }
+}
+
+class InvalidModelManagePayloadError extends Error {}
+
+async function parseModelManagePayload(request: Request, mode: "save" | "delete"): Promise<{
+  id?: string;
+  label?: string;
+  capabilities?: string[];
+}> {
+  try {
+    const body = await request.json() as unknown;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new InvalidModelManagePayloadError(mode === "save" ? modelManagePayloadMessages.saveInvalid : modelManagePayloadMessages.deleteInvalid);
+    }
+    return body as { id?: string; label?: string; capabilities?: string[] };
+  } catch (error) {
+    if (error instanceof InvalidModelManagePayloadError) throw error;
+    throw new InvalidModelManagePayloadError(mode === "save" ? modelManagePayloadMessages.saveJson : modelManagePayloadMessages.deleteJson);
   }
 }
 

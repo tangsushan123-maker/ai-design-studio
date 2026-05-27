@@ -476,12 +476,13 @@ describe("API error hygiene", () => {
 
 describe("Settings model management", () => {
   it("guards model row actions with busy and delete confirmation states", async () => {
-    const [settingsSource, settingsRouteSource, modelsManageSource, modelsRefreshSource, modelsTestSource] = await Promise.all([
+    const [settingsSource, settingsRouteSource, modelsManageSource, modelsRefreshSource, modelsTestSource, providersDetectSource] = await Promise.all([
       readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/api/settings/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/models/manage/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/models/refresh/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/models/test/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/providers/detect/route.ts", import.meta.url), "utf8"),
     ]);
 
     assert.equal(settingsSource.includes("settingsRequestFailure"), true);
@@ -516,12 +517,22 @@ describe("Settings model management", () => {
     assert.equal(settingsSource.includes("modelsCache: overrides?.modelsCache ?? modelsCache"), true);
     assert.equal(settingsSource.includes("supportsImageGeneration"), true);
     assert.equal(modelsManageSource.includes("modelManageErrorMessage"), true);
+    assert.equal(modelsManageSource.includes("parseModelManagePayload"), true);
+    assert.equal(modelsManageSource.includes("InvalidModelManagePayloadError"), true);
+    assert.equal(modelsManageSource.includes("模型保存 JSON 无法解析"), true);
+    assert.equal(modelsManageSource.includes("模型删除 JSON 无法解析"), true);
     assert.equal(modelsManageSource.includes('modelManageErrorMessage("模型保存失败", error)'), true);
     assert.equal(modelsManageSource.includes('modelManageErrorMessage("模型删除失败", error)'), true);
     assert.equal(modelsRefreshSource.includes("modelRouteErrorMessage"), true);
     assert.equal(modelsRefreshSource.includes('modelRouteErrorMessage("刷新模型列表失败", error)'), true);
     assert.equal(modelsTestSource.includes("modelTestRouteErrorMessage"), true);
+    assert.equal(modelsTestSource.includes("parseModelTestPayload"), true);
+    assert.equal(modelsTestSource.includes("InvalidModelTestPayloadError"), true);
+    assert.equal(modelsTestSource.includes("模型测试 JSON 无法解析"), true);
     assert.equal(modelsTestSource.includes('modelTestRouteErrorMessage("模型测试失败", error)'), true);
+    assert.equal(providersDetectSource.includes("parseProviderDetectPayload"), true);
+    assert.equal(providersDetectSource.includes("InvalidProviderDetectPayloadError"), true);
+    assert.equal(providersDetectSource.includes("自动检测 JSON 无法解析"), true);
   });
 });
 
