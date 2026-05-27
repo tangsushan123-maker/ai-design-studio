@@ -7877,6 +7877,11 @@ function ImageLightbox({
     expectedSizeLabel,
     qualityLabel: image.qualityCheck?.deliverabilityLabel || qualityBadgeLabel(image),
   });
+  const qualityReviewSummary = buildQualityReviewSummary(image, {
+    actualSizeLabel,
+    expectedSizeLabel,
+    qualityLabel: image.qualityCheck?.deliverabilityLabel || qualityBadgeLabel(image),
+  });
   const showQualityComparison = Boolean(
     compareBefore
     && (image.nodeOperation === "hd_redraw" || image.nodeOperation === "upscale_4k" || image.nodeOperation === "mask_edit" || image.nodeOperation === "design_optimize" || image.mode?.includes("画质增强") || image.mode?.includes("局部") || image.mode?.includes("设计优化")),
@@ -7962,20 +7967,49 @@ function ImageLightbox({
                   ))}
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button className="apple-button-primary px-3 py-2 text-[11px] font-semibold" onClick={() => void runAction("保留此版", onKeep)} type="button">保留此版</button>
-                  <button className="apple-button px-3 py-2 text-[11px]" onClick={() => void runAction("下载 PNG", () => downloadImageFile(image, "png"))} type="button">下载 PNG</button>
-                  <button className="apple-button px-3 py-2 text-[11px]" onClick={() => void runAction("复制图片", () => onCopyImage(image))} type="button">复制图片</button>
-                  <button className="apple-button px-3 py-2 text-[11px]" onClick={() => setShowMoreFooterActions((value) => !value)} type="button">
+                  <button className="apple-button-primary flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-semibold" onClick={() => void runAction("保留此版", onKeep)} type="button">
+                    <Check className="size-3.5" />
+                    保留此版
+                  </button>
+                  <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("下载 PNG", () => downloadImageFile(image, "png"))} type="button">
+                    <ArrowDownToLine className="size-3.5" />
+                    下载 PNG
+                  </button>
+                  <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("复制图片", () => onCopyImage(image))} type="button">
+                    <Images className="size-3.5" />
+                    复制图片
+                  </button>
+                  <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => setShowMoreFooterActions((value) => !value)} type="button">
+                    <ChevronDown className={`size-3.5 transition ${showMoreFooterActions ? "rotate-180" : ""}`} />
                     {showMoreFooterActions ? "收起更多" : "更多"}
                   </button>
                 </div>
                 {showMoreFooterActions ? (
                   <div className="mt-2 grid grid-cols-2 gap-2 rounded-[16px] border border-white/10 bg-white/[0.05] p-2">
-                    <button className="apple-button px-3 py-2 text-[11px]" onClick={() => void runAction("下载 JPG", () => downloadImageFile(image, "jpg"))} type="button">下载 JPG</button>
-                    <button className="apple-button px-3 py-2 text-[11px]" onClick={() => void runAction("下载 WebP", () => downloadImageFile(image, "webp"))} type="button">下载 WebP</button>
-                    <button className="apple-button px-3 py-2 text-[11px]" onClick={() => void runAction("复制交付摘要", () => onCopyPrompt(deliverySummary))} type="button">交付摘要</button>
-                    <button className="apple-button px-3 py-2 text-[11px]" onClick={() => void runAction("复制 Prompt", () => onCopyPrompt(image.prompt || ""))} type="button">复制 Prompt</button>
-                    <button className="apple-button-danger px-3 py-2 text-[11px]" onClick={onDelete} type="button">删除当前图</button>
+                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("下载 JPG", () => downloadImageFile(image, "jpg"))} type="button">
+                      <ArrowDownToLine className="size-3.5" />
+                      下载 JPG
+                    </button>
+                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("下载 WebP", () => downloadImageFile(image, "webp"))} type="button">
+                      <ArrowDownToLine className="size-3.5" />
+                      下载 WebP
+                    </button>
+                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("复制交付摘要", () => onCopyPrompt(deliverySummary))} type="button">
+                      <FileImage className="size-3.5" />
+                      交付摘要
+                    </button>
+                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("复制质检摘要", () => onCopyPrompt(qualityReviewSummary))} type="button">
+                      <ShieldCheck className="size-3.5" />
+                      质检摘要
+                    </button>
+                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("复制 Prompt", () => onCopyPrompt(image.prompt || ""))} type="button">
+                      <Wand2 className="size-3.5" />
+                      复制 Prompt
+                    </button>
+                    <button className="apple-button-danger flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={onDelete} type="button">
+                      <Trash2 className="size-3.5" />
+                      删除当前图
+                    </button>
                   </div>
                 ) : null}
               </section>
@@ -11111,6 +11145,26 @@ function buildDeliverySummary(image: ImageAsset, options: { actualSizeLabel: str
     image.mode || image.materialType ? `类型：${image.mode || image.materialType}` : "",
     image.qualityCheck?.issues?.length ? `复查项：${image.qualityCheck.issues.slice(0, 3).join("；")}` : "",
     image.prompt ? `Prompt：${image.prompt}` : "",
+  ];
+  return lines.filter(Boolean).join("\n");
+}
+
+function buildQualityReviewSummary(image: ImageAsset, options: { actualSizeLabel: string; expectedSizeLabel: string; qualityLabel: string }) {
+  const checkItems = image.qualityCheck?.fourKCheckItems
+    ?.slice(0, 8)
+    .map((item) => `${item.passed ? "通过" : "复查"}：${item.label}${item.detail ? `（${item.detail}）` : ""}`) || [];
+  const issues = image.qualityCheck?.issues?.slice(0, 6).map((issue) => `复查：${issue}`) || [];
+  const actions = image.qualityCheck?.actions?.slice(0, 4).map((action) => `建议：${action}`) || [];
+  const lines = [
+    `质检对象：${image.fileName || image.id || "未命名图片"}`,
+    `当前尺寸：${options.actualSizeLabel || "未知"}`,
+    options.expectedSizeLabel && options.expectedSizeLabel !== options.actualSizeLabel ? `目标尺寸：${options.expectedSizeLabel}` : "",
+    `交付状态：${options.qualityLabel || "待检查"}`,
+    image.qualityCheck?.clarityCheckLabel ? `清晰度：${image.qualityCheck.clarityCheckLabel}` : "",
+    image.qualityCheck?.textDetailLabel ? `文字检查：${image.qualityCheck.textDetailLabel}` : "",
+    ...checkItems,
+    ...issues,
+    ...actions,
   ];
   return lines.filter(Boolean).join("\n");
 }
