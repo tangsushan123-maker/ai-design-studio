@@ -1253,6 +1253,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("projectListLoadingRef"), true);
     assert.equal(workbenchSource.includes("projectListLoading"), true);
     assert.equal(workbenchSource.includes("projectListError"), true);
+    assert.equal(workbenchSource.includes("materialLibrariesLoadingRef"), true);
+    assert.equal(workbenchSource.includes("素材库刷新失败。"), true);
+    assert.equal(workbenchSource.includes("refreshMaterialLibraries({ quiet: true })"), true);
     assert.equal(workbenchSource.includes("onRefreshProjects"), true);
     assert.equal(workbenchSource.includes("项目列表刷新失败。"), true);
     assert.equal(workbenchSource.includes("ProjectHomeScreen"), true);

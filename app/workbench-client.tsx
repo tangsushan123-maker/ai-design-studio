@@ -974,6 +974,7 @@ function NodeWorkflowWorkbench({
   const saveInFlightRef = useRef(false);
   const saveQueuedRef = useRef<{ manual: boolean } | null>(null);
   const projectListLoadingRef = useRef(false);
+  const materialLibrariesLoadingRef = useRef(false);
   const pageLifecycleSaveRef = useRef<{ fingerprint: string; at: number }>({ fingerprint: "", at: 0 });
   const edgeDeleteTimerRef = useRef<number | null>(null);
   const taskProgressTimersRef = useRef<Record<string, number>>({});
@@ -1476,7 +1477,7 @@ function NodeWorkflowWorkbench({
 
   useEffect(() => {
     void refreshProjectList();
-    void refreshMaterialLibraries();
+    void refreshMaterialLibraries({ quiet: true });
   }, []);
 
   useEffect(() => {
@@ -4544,7 +4545,7 @@ function NodeWorkflowWorkbench({
     const durationMs = Math.round(performance.now() - startedAt);
     setLastSaveDurationMs(durationMs);
     void refreshProjectList();
-    void refreshMaterialLibraries();
+    void refreshMaterialLibraries({ quiet: true });
     return {
       durationMs,
       localCacheWarning: [localCacheWarning, taskCacheWarning].filter(Boolean).join(" "),
@@ -4756,15 +4757,27 @@ function NodeWorkflowWorkbench({
     }
   }
 
-  async function refreshMaterialLibraries() {
-    const response = await fetch("/api/material-libraries?mode=detail").catch(() => null);
-    if (!response?.ok) return;
-    const data = (await response.json()) as {
-      projectLibraries?: MaterialLibrarySummary[];
-      publicStyleLibraries?: MaterialLibrarySummary[];
-    };
-    setProjectLibraries(data.projectLibraries || []);
-    setPublicStyleLibraries(data.publicStyleLibraries || []);
+  async function refreshMaterialLibraries(options: { quiet?: boolean } = {}) {
+    if (materialLibrariesLoadingRef.current) return false;
+    materialLibrariesLoadingRef.current = true;
+    try {
+      const response = await fetch("/api/material-libraries?mode=detail");
+      if (!response.ok) throw new Error("素材库刷新失败。");
+      const data = (await response.json()) as {
+        projectLibraries?: MaterialLibrarySummary[];
+        publicStyleLibraries?: MaterialLibrarySummary[];
+      };
+      setProjectLibraries(data.projectLibraries || []);
+      setPublicStyleLibraries(data.publicStyleLibraries || []);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "素材库刷新失败。";
+      if (!options.quiet) setStatus(message);
+      if (options.quiet) return false;
+      throw new Error(message);
+    } finally {
+      materialLibrariesLoadingRef.current = false;
+    }
   }
 
   async function loadProject(id: string) {
@@ -4820,7 +4833,7 @@ function NodeWorkflowWorkbench({
       ? `已打开项目：${project.name || "AI 设计项目"}；但同步默认项目失败，下次启动如未进入该项目，请从项目列表重新打开。`
       : `已打开项目：${project.name || "AI 设计项目"}`);
     void refreshProjectList();
-    void refreshMaterialLibraries();
+    void refreshMaterialLibraries({ quiet: true });
     return true;
   }
 
@@ -5103,7 +5116,7 @@ function NodeWorkflowWorkbench({
         replaceFacts: true,
       });
     }
-    void refreshMaterialLibraries();
+    void refreshMaterialLibraries({ quiet: true });
     return true;
   }
 
