@@ -88,5 +88,8 @@ function qualitySearchAliases(image: HistorySearchImage) {
     status === "white_border" ? "白边 有白边" : "",
     status === "ratio_mismatch" ? "比例异常 比例不对" : "",
     status === "size_insufficient" ? "尺寸不足 未达尺寸" : "",
+    status === "composition_risk" ? "构图风险 构图贴边 主体贴边 安全边距不足" : "",
+    status === "blurred_padding" ? "模糊补边 补边风险 边缘模糊 拉伸背景" : "",
+    status === "suspected_stretch" ? "疑似拉伸 细节密度低 只是放大" : "",
   ];
 }

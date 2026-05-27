@@ -211,6 +211,9 @@ describe("Workbench history search", () => {
     assert.equal(historyMatchesQuery(image, "重要信息"), true);
     assert.equal(historyMatchesQuery(image, "1536 × 864px"), true);
     assert.equal(historySearchText(image).includes("abcdef123456"), true);
+    assert.equal(historyMatchesQuery({ ...image, qualityCheck: { status: "composition_risk" } }, "主体贴边"), true);
+    assert.equal(historyMatchesQuery({ ...image, qualityCheck: { status: "blurred_padding" } }, "模糊补边"), true);
+    assert.equal(historyMatchesQuery({ ...image, qualityCheck: { status: "suspected_stretch" } }, "只是放大"), true);
   });
 });
 
@@ -272,6 +275,9 @@ describe("Workbench image manager search", () => {
     assert.equal(imageManagerMatchesSearch(image, protection, "二维码需放大复查", operationLabel), true);
     assert.equal(imageManagerMatchesSearch(image, protection, "4K 尺寸", operationLabel), true);
     assert.equal(imageManagerSearchText(image, protection, operationLabel).includes("req_search_123456"), true);
+    assert.equal(imageManagerMatchesSearch({ ...image, qualityCheck: { status: "composition_risk" } }, protection, "安全边距不足", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch({ ...image, qualityCheck: { status: "blurred_padding" } }, protection, "边缘模糊", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch({ ...image, qualityCheck: { status: "suspected_stretch" } }, protection, "细节密度低", operationLabel), true);
   });
 
   it("searches cleanup and trash aliases", () => {
