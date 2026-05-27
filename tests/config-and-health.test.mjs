@@ -1199,6 +1199,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(historyPanelSource.includes("deletingKey"), true);
     assert.equal(historyPanelSource.includes("favoritingKey"), true);
     assert.equal(historyPanelSource.includes("toggleFavorite"), true);
+    assert.equal(historyPanelSource.includes("filterCounts"), true);
     assert.equal(historyPanelSource.includes("runInlineAction"), true);
     assert.equal(historyPanelSource.includes("historyImageKey"), true);
     assert.equal(workbenchUiSource.includes("favoritingKey"), true);

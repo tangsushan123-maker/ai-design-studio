@@ -95,6 +95,16 @@ export function HistoryPanel({
     () => orderedImages.filter((image) => historyMatchesFilter(image, filter, projectId) && historyMatchesQuery(image, normalizedQuery)),
     [filter, historyMatchesFilter, historyMatchesQuery, normalizedQuery, orderedImages, projectId],
   );
+  const filterCounts = useMemo(() => {
+    const counts = Object.fromEntries(resultFilterTabs.map((item) => [item, 0])) as Record<(typeof resultFilterTabs)[number], number>;
+    orderedImages.forEach((image) => {
+      if (!historyMatchesQuery(image, normalizedQuery)) return;
+      resultFilterTabs.forEach((item) => {
+        if (historyMatchesFilter(image, item, projectId)) counts[item] += 1;
+      });
+    });
+    return counts;
+  }, [historyMatchesFilter, historyMatchesQuery, normalizedQuery, orderedImages, projectId]);
   const visibleImages = useMemo(() => filteredImages.slice(0, visibleCount), [filteredImages, visibleCount]);
   const hasMoreLocal = filteredImages.length > visibleImages.length;
   const hasMore = hasMoreLocal || hasMoreFromServer;
@@ -144,7 +154,7 @@ export function HistoryPanel({
         <div className="grid grid-cols-4 gap-1">
           {resultFilterTabs.map((item) => (
             <button
-              className={`apple-segment px-2 py-1.5 text-[11px] transition ${filter === item ? "apple-segment-active" : ""}`}
+              className={`apple-segment flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] transition ${filter === item ? "apple-segment-active" : ""}`}
               key={item}
               onClick={() => {
                 setFilter(item);
@@ -152,7 +162,10 @@ export function HistoryPanel({
               }}
               type="button"
             >
-              {item}
+              <span>{item}</span>
+              <span className={`rounded-full px-1.5 py-0.5 text-[9px] leading-none ${filter === item ? "bg-black/10 text-[#07121f]/62" : "bg-white/10 text-white/42"}`}>
+                {filterCounts[item]}
+              </span>
             </button>
           ))}
         </div>
