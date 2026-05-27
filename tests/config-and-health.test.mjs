@@ -1351,6 +1351,12 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("projectListError"), true);
     assert.equal(workbenchSource.includes("materialLibrariesLoadingRef"), true);
     assert.equal(workbenchSource.includes("data.error || `素材库刷新失败（HTTP ${response.status}）。`"), true);
+    assert.equal(workbenchSource.includes("data.error || `结果加载失败（HTTP ${response.status}）。`"), true);
+    assert.equal(workbenchSource.includes("data.error || `图片管理加载失败（HTTP ${response.status}）。`"), true);
+    assert.equal(workbenchSource.includes("data.error || `回收站加载失败（HTTP ${response.status}）。`"), true);
+    assert.equal(workbenchSource.includes("data.error || `公开资料查询失败（HTTP ${response.status}）。`"), true);
+    assert.equal(workbenchSource.includes("readResponseErrorMessage(response, \"删除结果图片失败\")"), true);
+    assert.equal(workbenchSource.includes("readResponseErrorMessage(response, \"恢复图片失败\")"), true);
     assert.equal(materialLibrariesRouteSource.includes("materialLibraryErrorMessage"), true);
     assert.equal(materialLibrariesRouteSource.includes('materialLibraryErrorMessage("保存素材库失败", error)'), true);
     assert.equal(workbenchSource.includes("refreshMaterialLibraries({ quiet: true })"), true);

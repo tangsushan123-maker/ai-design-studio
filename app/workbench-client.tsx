@@ -4406,12 +4406,13 @@ function NodeWorkflowWorkbench({
       const params = new URLSearchParams({ projectId, limit: "20", offset: String(historyNextOffset) });
       const response = await fetch(`/api/generated-images?${params.toString()}`);
       const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
         images?: GeneratedImage[];
         hasMore?: boolean;
         nextOffset?: number;
         total?: number;
       };
-      if (!response.ok) throw new Error("结果加载失败。");
+      if (!response.ok) throw new Error(data.error || `结果加载失败（HTTP ${response.status}）。`);
       const nextImages = (data.images || []).map((image) => ({ ...image, source: "history" as const, favorite: favoriteIds.has(imageKey(image)) }));
       setHistoryImages((current) => mergeImages(current, nextImages));
       setHistoryHasMore(Boolean(data.hasMore));
@@ -4433,12 +4434,13 @@ function NodeWorkflowWorkbench({
       const params = new URLSearchParams({ limit: "60", offset: String(offset) });
       const response = await fetch(`/api/generated-images?${params.toString()}`);
       const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
         images?: GeneratedImage[];
         hasMore?: boolean;
         nextOffset?: number;
         total?: number;
       };
-      if (!response.ok) throw new Error("图片管理加载失败。");
+      if (!response.ok) throw new Error(data.error || `图片管理加载失败（HTTP ${response.status}）。`);
       const nextImages = (data.images || []).map((image) => ({ ...image, source: "history" as const, favorite: favoriteIds.has(imageKey(image)) }));
       setImageManagerImages((current) => (reset ? sortImagesByRecency(nextImages) : mergeImages(current, nextImages)));
       setImageManagerHasMore(Boolean(data.hasMore));
@@ -4459,12 +4461,13 @@ function NodeWorkflowWorkbench({
       const params = new URLSearchParams({ mode: "trash", limit: "60", offset: String(offset) });
       const response = await fetch(`/api/generated-images?${params.toString()}`);
       const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
         images?: GeneratedImage[];
         hasMore?: boolean;
         nextOffset?: number;
         total?: number;
       };
-      if (!response.ok) throw new Error("回收站加载失败。");
+      if (!response.ok) throw new Error(data.error || `回收站加载失败（HTTP ${response.status}）。`);
       const nextImages = (data.images || []).map((image) => ({ ...image, source: "history" as const, trashed: true, favorite: favoriteIds.has(imageKey(image)) }));
       setImageManagerTrashImages((current) => (reset ? sortImagesByRecency(nextImages) : mergeImages(current, nextImages)));
       setImageManagerTrashHasMore(Boolean(data.hasMore));
@@ -4488,12 +4491,13 @@ function NodeWorkflowWorkbench({
       const params = new URLSearchParams({ projectId: targetProjectId, limit: "20", offset: "0" });
       const response = await fetch(`/api/generated-images?${params.toString()}`);
       const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
         images?: GeneratedImage[];
         hasMore?: boolean;
         nextOffset?: number;
         total?: number;
       };
-      if (!response.ok) throw new Error("结果加载失败。");
+      if (!response.ok) throw new Error(data.error || `结果加载失败（HTTP ${response.status}）。`);
       if (activeProjectIdRef.current !== targetProjectId) return;
       const nextImages = (data.images || []).map((image) => ({ ...image, source: "history" as const, favorite: favoriteIds.has(imageKey(image)) }));
       setHistoryImages(nextImages);
@@ -4649,8 +4653,8 @@ function NodeWorkflowWorkbench({
     setProjectMemorySearchState("loading");
     try {
       const response = await fetch(`/api/project-public-info?organization=${encodeURIComponent(keyword)}`);
-      if (!response.ok) throw new Error("公开资料查询失败。");
-      const data = (await response.json()) as { candidates?: ProjectFactCandidate[] };
+      const data = (await response.json().catch(() => ({}))) as { candidates?: ProjectFactCandidate[]; error?: string };
+      if (!response.ok) throw new Error(data.error || `公开资料查询失败（HTTP ${response.status}）。`);
       const candidates = Array.isArray(data.candidates) ? data.candidates : [];
       const targetProjectId = options?.projectId || projectId;
       const targetProjectName = options?.projectName || projectName;
@@ -4678,9 +4682,9 @@ function NodeWorkflowWorkbench({
       setProjectMemorySearchState("done");
       setStatus(candidates.length ? `已抓取 ${candidates.length} 条公开资料，先确认再写入。` : "没有抓到明确的公开资料，先手动补充。");
       return candidates;
-    } catch {
+    } catch (error) {
       setProjectMemorySearchState("error");
-      setStatus("机构公开资料抓取失败，请稍后重试。");
+      setStatus(error instanceof Error ? error.message : "机构公开资料抓取失败，请稍后重试。");
       return [] as ProjectFactCandidate[];
     }
   }
@@ -4891,7 +4895,8 @@ function NodeWorkflowWorkbench({
       body: JSON.stringify({ fileName, permanent }),
     });
     if (!response.ok) {
-      if (!options.quiet) setStatus("删除结果图片失败。");
+      const message = await readResponseErrorMessage(response, "删除结果图片失败");
+      if (!options.quiet) setStatus(message);
       return false;
     }
     dismissResultImages([image]);
@@ -4964,7 +4969,8 @@ function NodeWorkflowWorkbench({
       body: JSON.stringify({ action: "restore", fileName }),
     });
     if (!response.ok) {
-      if (!options.quiet) setStatus("恢复图片失败。");
+      const message = await readResponseErrorMessage(response, "恢复图片失败");
+      if (!options.quiet) setStatus(message);
       return false;
     }
     setImageManagerTrashImages((current) => current.filter((item) => !imageMatchesGeneratedFile(item, fileName)));
@@ -9832,6 +9838,16 @@ async function readProjectSaveError(response: Response) {
     return data.error ? `${data.error}${payload}` : `项目保存失败（HTTP ${response.status}${payload}）。`;
   } catch {
     return `项目保存失败（HTTP ${response.status}）：${text.slice(0, 180) || "接口没有返回错误详情"}`;
+  }
+}
+
+async function readResponseErrorMessage(response: Response, fallback: string) {
+  const text = await response.text().catch(() => "");
+  try {
+    const data = text ? JSON.parse(text) as { error?: string; message?: string } : {};
+    return data.error || data.message || `${fallback}（HTTP ${response.status}）。`;
+  } catch {
+    return `${fallback}（HTTP ${response.status}）：${text.slice(0, 180) || "接口没有返回错误详情"}`;
   }
 }
 
