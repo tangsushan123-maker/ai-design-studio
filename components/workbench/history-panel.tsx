@@ -88,6 +88,7 @@ export function HistoryPanel({
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [deletingKey, setDeletingKey] = useState("");
   const [favoritingKey, setFavoritingKey] = useState("");
+  const [loadingMoreLocal, setLoadingMoreLocal] = useState(false);
   const normalizedQuery = query.trim();
 
   const orderedImages = useMemo(() => [...images].sort(compareHistoryImages), [images]);
@@ -145,6 +146,20 @@ export function HistoryPanel({
       setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "收藏状态保存失败。" });
     } finally {
       setFavoritingKey("");
+    }
+  }
+
+  async function loadMoreResults() {
+    if (loadingMore || loadingMoreLocal) return;
+    if (hasMoreLocal) {
+      setVisibleCount((count) => count + resultPageSize);
+      return;
+    }
+    setLoadingMoreLocal(true);
+    try {
+      await onLoadMore?.();
+    } finally {
+      window.setTimeout(() => setLoadingMoreLocal(false), 250);
     }
   }
 
@@ -336,17 +351,11 @@ export function HistoryPanel({
       {hasMore ? (
         <button
           className="apple-button w-full rounded-[18px] px-3 py-3 text-[12px] text-white/70"
-          disabled={loadingMore}
-          onClick={() => {
-            if (hasMoreLocal) {
-              setVisibleCount((count) => count + resultPageSize);
-              return;
-            }
-            onLoadMore?.();
-          }}
+          disabled={loadingMore || loadingMoreLocal}
+          onClick={() => void loadMoreResults()}
           type="button"
         >
-          {loadingMore ? "加载中..." : "查看更多"}
+          {loadingMore || loadingMoreLocal ? "加载中..." : "查看更多"}
         </button>
       ) : null}
     </div>

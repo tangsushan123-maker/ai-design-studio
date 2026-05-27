@@ -136,6 +136,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   const [favoritingKey, setFavoritingKey] = useState("");
   const [rowActionKey, setRowActionKey] = useState("");
   const [confirmActionKey, setConfirmActionKey] = useState("");
+  const [loadingMoreKey, setLoadingMoreKey] = useState("");
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const normalizedQuery = query.trim();
@@ -278,6 +279,16 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
       setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "收藏状态保存失败。" });
     } finally {
       setFavoritingKey("");
+    }
+  }
+
+  async function loadMoreImages(kind: "history" | "trash", action: () => void | Promise<unknown>) {
+    if (loadingMoreKey) return;
+    setLoadingMoreKey(kind);
+    try {
+      await action();
+    } finally {
+      window.setTimeout(() => setLoadingMoreKey(""), 250);
     }
   }
 
@@ -540,21 +551,21 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
       {filter !== "回收站" && historyHasMore ? (
         <button
           className="apple-button w-full rounded-[18px] px-3 py-3 text-[12px] text-white/70"
-          disabled={historyLoadingMore}
-          onClick={onLoadMore}
+          disabled={historyLoadingMore || Boolean(loadingMoreKey)}
+          onClick={() => void loadMoreImages("history", onLoadMore)}
           type="button"
         >
-          {historyLoadingMore ? "加载中..." : "加载更多历史图片"}
+          {historyLoadingMore || loadingMoreKey === "history" ? "加载中..." : "加载更多历史图片"}
         </button>
       ) : null}
       {filter === "回收站" && trashHasMore ? (
         <button
           className="apple-button w-full rounded-[18px] px-3 py-3 text-[12px] text-white/70"
-          disabled={trashLoadingMore}
-          onClick={onLoadMoreTrash}
+          disabled={trashLoadingMore || Boolean(loadingMoreKey)}
+          onClick={() => void loadMoreImages("trash", onLoadMoreTrash)}
           type="button"
         >
-          {trashLoadingMore ? "加载中..." : "加载更多回收站图片"}
+          {trashLoadingMore || loadingMoreKey === "trash" ? "加载中..." : "加载更多回收站图片"}
         </button>
       ) : null}
     </div>

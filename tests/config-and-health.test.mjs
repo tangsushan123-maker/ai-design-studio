@@ -1200,6 +1200,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("confirmActionKey"), true);
     assert.equal(workbenchUiSource.includes("runConfirmedBatchAction"), true);
     assert.equal(workbenchUiSource.includes("runConfirmedRowAction"), true);
+    assert.equal(workbenchUiSource.includes("loadingMoreKey"), true);
     assert.equal(workbenchUiSource.includes("确认彻删"), true);
     assert.equal(workbenchUiSource.includes("确认移入回收站"), true);
     assert.equal(workbenchUiSource.includes("\"恢复中\""), true);
@@ -1260,6 +1261,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(historyPanelSource.includes("favoritingKey"), true);
     assert.equal(historyPanelSource.includes("toggleFavorite"), true);
     assert.equal(historyPanelSource.includes("filterCounts"), true);
+    assert.equal(historyPanelSource.includes("loadingMoreLocal"), true);
+    assert.equal(historyPanelSource.includes("loadMoreResults"), true);
     assert.equal(historyPanelSource.includes("runInlineAction"), true);
     assert.equal(historyPanelSource.includes("historyImageKey"), true);
     assert.equal(workbenchUiSource.includes("favoritingKey"), true);
