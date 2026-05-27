@@ -284,6 +284,16 @@ describe("Workbench result cards", () => {
   });
 });
 
+describe("Workbench node result panel", () => {
+  it("surfaces quality review actions directly on result thumbnails", async () => {
+    const nodeResultsSource = await readFile(new URL("../components/workbench/node-results-panel.tsx", import.meta.url), "utf8");
+
+    assert.equal(nodeResultsSource.includes("actions?: string[]"), true);
+    assert.equal(nodeResultsSource.includes("const firstAction = image.qualityCheck?.actions?.[0]"), true);
+    assert.equal(nodeResultsSource.includes("建议：{firstAction}"), true);
+  });
+});
+
 describe("Workbench task search", () => {
   it("searches task metadata, request ids, errors, and result images", () => {
     const task = {

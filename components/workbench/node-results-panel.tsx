@@ -19,6 +19,7 @@ export type NodeResultImage = {
     hasTransparentPixels?: boolean;
   };
   qualityCheck?: {
+    actions?: string[];
     status?: string;
     label?: string;
     deliverability?: "ready" | "needs_review" | "not_ready";
@@ -54,7 +55,10 @@ function NodeResultsPanelComponent<TImage extends NodeResultImage>({
 
   return (
     <div className="grid grid-cols-2 gap-2">
-      {images.map((image, index) => (
+      {images.map((image, index) => {
+        const firstIssue = image.qualityCheck?.issues?.[0];
+        const firstAction = image.qualityCheck?.actions?.[0];
+        return (
         <button
           className="apple-surface-section group min-w-0 overflow-hidden p-1.5 text-left transition hover:bg-white/[0.07]"
           key={`${image.id}-${index}`}
@@ -81,13 +85,19 @@ function NodeResultsPanelComponent<TImage extends NodeResultImage>({
             </span>
             <DeliveryStatusBadge image={image} />
           </div>
-          {image.qualityCheck?.issues?.length ? (
+          {firstIssue ? (
             <div className="mt-1 line-clamp-1 px-1 text-[9px] text-[#ffe1a0]/72">
-              {image.qualityCheck.issues[0]}
+              {firstIssue}
+            </div>
+          ) : null}
+          {firstAction ? (
+            <div className="mt-1 line-clamp-1 rounded-[10px] border border-white/10 bg-white/[0.04] px-2 py-1 text-[9px] text-white/46">
+              建议：{firstAction}
             </div>
           ) : null}
         </button>
-      ))}
+        );
+      })}
     </div>
   );
 }
