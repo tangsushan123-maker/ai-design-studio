@@ -1225,6 +1225,12 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("metadata: { favorite: nextFavorite }"), true);
     assert.equal(workbenchSource.includes("throw new Error(\"收藏状态保存失败。\")"), true);
     assert.equal(workbenchSource.includes("throw new Error(\"删除项目失败。\")"), true);
+    assert.equal(workbenchSource.includes("projectListLoadingRef"), true);
+    assert.equal(workbenchSource.includes("projectListLoading"), true);
+    assert.equal(workbenchSource.includes("projectListError"), true);
+    assert.equal(workbenchSource.includes("onRefreshProjects"), true);
+    assert.equal(workbenchSource.includes("项目列表刷新失败。"), true);
+    assert.equal(workbenchSource.includes("正在刷新项目列表"), true);
     assert.equal(projectLibraryPanelSource.includes("confirmDeleteId"), true);
     assert.equal(projectLibraryPanelSource.includes("deletingId"), true);
     assert.equal(projectLibraryPanelSource.includes("openingId"), true);

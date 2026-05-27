@@ -977,6 +977,7 @@ function NodeWorkflowWorkbench({
   const saveFeedbackTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef(false);
   const saveQueuedRef = useRef<{ manual: boolean } | null>(null);
+  const projectListLoadingRef = useRef(false);
   const pageLifecycleSaveRef = useRef<{ fingerprint: string; at: number }>({ fingerprint: "", at: 0 });
   const edgeDeleteTimerRef = useRef<number | null>(null);
   const taskProgressTimersRef = useRef<Record<string, number>>({});
@@ -1039,6 +1040,8 @@ function NodeWorkflowWorkbench({
   const [homeOpen, setHomeOpen] = useState(true);
   const [homeProjectPickerOpen, setHomeProjectPickerOpen] = useState(false);
   const [homeBusy, setHomeBusy] = useState(false);
+  const [projectListLoading, setProjectListLoading] = useState(false);
+  const [projectListError, setProjectListError] = useState("");
   const [projectBootReady, setProjectBootReady] = useState(false);
   const [modelInfo, setModelInfo] = useState(initialModelInfo);
   const [status, setStatus] = useState("空画布。点击“添加节点”，或直接拖拽 / 粘贴图片。");
@@ -4729,11 +4732,24 @@ function NodeWorkflowWorkbench({
   }
 
   async function refreshProjectList() {
-    const response = await fetch("/api/project?mode=list").catch(() => null);
-    if (!response?.ok) return;
-    const data = (await response.json()) as { activeProjectId?: string; projects?: ProjectSummary[] };
-    setProjectList(data.projects || []);
-    if (data.activeProjectId) setProjectId((current) => current || data.activeProjectId || "local-project");
+    if (projectListLoadingRef.current) return false;
+    projectListLoadingRef.current = true;
+    setProjectListLoading(true);
+    setProjectListError("");
+    try {
+      const response = await fetch("/api/project?mode=list");
+      if (!response.ok) throw new Error("项目列表刷新失败。");
+      const data = (await response.json()) as { activeProjectId?: string; projects?: ProjectSummary[] };
+      setProjectList(data.projects || []);
+      if (data.activeProjectId) setProjectId((current) => current || data.activeProjectId || "local-project");
+      return true;
+    } catch (error) {
+      setProjectListError(error instanceof Error ? error.message : "项目列表刷新失败。");
+      return false;
+    } finally {
+      projectListLoadingRef.current = false;
+      setProjectListLoading(false);
+    }
   }
 
   async function refreshMaterialLibraries() {
@@ -5115,8 +5131,11 @@ function NodeWorkflowWorkbench({
         formatUpdatedAt={formatGeneratedAt}
         onCreate={() => void enterNewProjectFromHome()}
         onOpen={(id) => void openProjectFromHome(id)}
+        onRefreshProjects={() => void refreshProjectList()}
         onShowProjects={showHomeProjectPicker}
         pickerOpen={homeProjectPickerOpen}
+        projectListError={projectListError}
+        projectListLoading={projectListLoading}
         projects={projectList}
       />
     );
@@ -5661,8 +5680,11 @@ function ProjectHomeScreen({
   formatUpdatedAt,
   onCreate,
   onOpen,
+  onRefreshProjects,
   onShowProjects,
   pickerOpen,
+  projectListError,
+  projectListLoading,
   projects,
 }: {
   activeProjectId: string;
@@ -5670,10 +5692,15 @@ function ProjectHomeScreen({
   formatUpdatedAt: (value: string) => string;
   onCreate: () => void;
   onOpen: (id: string) => void;
+  onRefreshProjects: () => void;
   onShowProjects: () => void;
   pickerOpen: boolean;
+  projectListError: string;
+  projectListLoading: boolean;
   projects: ProjectSummary[];
 }) {
+  const projectActionsDisabled = busy || projectListLoading;
+
   return (
     <main className="apple-shell flex h-screen items-center justify-center overflow-hidden p-5 text-[#f5f7fb]">
       <section className="apple-panel-strong w-full max-w-[560px] rounded-[30px] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.34)] sm:p-5">
@@ -5697,23 +5724,42 @@ function ProjectHomeScreen({
           </button>
           <button
             className="apple-button flex min-h-[96px] flex-col items-start justify-between rounded-[22px] px-4 py-3 text-left text-white/82 disabled:opacity-55"
-            disabled={busy}
+            disabled={projectActionsDisabled}
             onClick={onShowProjects}
             type="button"
           >
             <FolderOpen className="size-5" />
-            <span className="text-[17px] font-semibold">打开项目</span>
+            <span className="text-[17px] font-semibold">{projectListLoading ? "刷新中" : "打开项目"}</span>
           </button>
         </div>
 
         {pickerOpen ? (
           <div className="mt-4 max-h-[46vh] overflow-auto rounded-[22px] border border-white/10 bg-white/[0.035] p-2">
+            <div className="mb-2 flex items-center justify-between gap-3 px-1">
+              <div className="min-w-0 text-[11px] font-semibold text-white/56">
+                {projectListLoading ? "正在刷新项目列表" : `项目列表 · ${projects.length}`}
+              </div>
+              <button
+                className="apple-button flex h-8 items-center gap-1.5 px-2.5 text-[10px] text-white/62 disabled:opacity-45"
+                disabled={projectActionsDisabled}
+                onClick={onRefreshProjects}
+                type="button"
+              >
+                <RefreshCcw className={`size-3.5 ${projectListLoading ? "animate-spin" : ""}`} />
+                {projectListLoading ? "刷新中" : "刷新"}
+              </button>
+            </div>
+            {projectListError ? (
+              <div className="mb-2 rounded-[14px] border border-[#ff6b5f]/18 bg-[#ff6b5f]/10 px-3 py-2 text-[10px] leading-4 text-[#ffc1b8]">
+                {projectListError}
+              </div>
+            ) : null}
             {projects.length ? (
               <div className="space-y-2">
                 {projects.map((project) => (
                   <button
                     className={`apple-interactive-card flex w-full items-center gap-3 p-3 text-left ${project.id === activeProjectId ? "is-selected" : ""}`}
-                    disabled={busy}
+                    disabled={projectActionsDisabled}
                     key={project.id}
                     onClick={() => onOpen(project.id)}
                     type="button"
@@ -5738,6 +5784,8 @@ function ProjectHomeScreen({
                   </button>
                 ))}
               </div>
+            ) : projectListLoading ? (
+              <div className="apple-empty-state px-4 py-8 text-center text-[12px] text-white/46">正在加载项目...</div>
             ) : (
               <div className="apple-empty-state px-4 py-8 text-center text-[12px] text-white/46">暂无项目</div>
             )}
