@@ -347,6 +347,7 @@ describe("Workbench result cards", () => {
     assert.equal(resultCardSource.includes("{badgeLabel}"), true);
     assert.equal(resultCardSource.includes("{meta}"), true);
     assert.equal(resultCardSource.includes("{description}"), true);
+    assert.equal(resultCardSource.includes("px-2 py-0.5 text-[10px] font-semibold"), true);
     assert.equal(resultCardSource.includes("confirmDelete"), true);
     assert.equal(resultCardSource.includes("确认删除"), true);
   });
@@ -1200,6 +1201,8 @@ describe("Workflow canvas performance", () => {
     assert.equal(workbenchSource.includes('absolute left-[-34px] flex items-center gap-1.5 text-[10px]'), true);
     assert.equal(workbenchSource.includes('operationNodeSubtitle(data, catalog?.description, textReferences.length)}</p>'), true);
     assert.equal(workbenchSource.includes('line-clamp-1 text-[9px] leading-4">{operationNodeSubtitle'), false);
+    assert.equal(workbenchSource.includes("mr-1 text-[10px] text-white/38"), true);
+    assert.equal(workbenchSource.includes('truncate text-[10px] text-white/38">{textReferenceRoleDescription'), true);
 
     assert.equal(globalsSource.includes(".node-workflow-flow.is-performance-mode .apple-node-card"), true);
     assert.equal(globalsSource.includes("backdrop-filter: none"), true);

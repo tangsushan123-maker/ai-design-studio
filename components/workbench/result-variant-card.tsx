@@ -81,7 +81,7 @@ export function ResultVariantCard({
           <div className="flex min-w-0 items-center gap-2">
             <div className="truncate text-[13px] font-semibold text-white/84">{title}</div>
             {badgeLabel ? (
-              <span className="shrink-0 rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[9px] font-semibold text-[#adf8e5]">
+              <span className="shrink-0 rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[10px] font-semibold text-[#adf8e5]">
                 {badgeLabel}
               </span>
             ) : null}

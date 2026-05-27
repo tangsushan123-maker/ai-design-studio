@@ -6201,10 +6201,10 @@ function InlineChipRow({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="mr-1 text-[9px] text-white/34">{label}</span>
+      <span className="mr-1 text-[10px] text-white/38">{label}</span>
       {options.map((option) => (
         <button
-          className={`rounded-full px-2 py-1 text-[9px] transition ${
+          className={`rounded-full px-2 py-1 text-[10px] transition ${
             value === option ? "bg-white text-black" : "border border-white/10 bg-white/[0.045] text-white/52 hover:bg-white/[0.08]"
           }`}
           key={option}
@@ -6959,7 +6959,7 @@ function RightPanel({
             >
               <span>{label}</span>
               {value === "tasks" && taskBadgeCount ? (
-                <span className={`rounded-full px-1.5 py-0.5 text-[9px] leading-none ${tab === value ? "bg-black/10 text-[#07121f]/70" : failedTaskCount ? "bg-[#ff6b5f]/18 text-[#ffb4a8]" : runningTaskCount ? "bg-[#ffd166]/18 text-[#ffe1a0]" : "bg-white/12 text-white/58"}`}>
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] leading-none ${tab === value ? "bg-black/10 text-[#07121f]/70" : failedTaskCount ? "bg-[#ff6b5f]/18 text-[#ffb4a8]" : runningTaskCount ? "bg-[#ffd166]/18 text-[#ffe1a0]" : "bg-white/12 text-white/58"}`}>
                   {taskBadgeCount}
                 </span>
               ) : null}
@@ -7480,7 +7480,7 @@ function TextReferenceInspector({
             <div className="min-w-0">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="truncate text-[10px] font-semibold text-white/70">参考 {index + 1}</span>
-                <span className="truncate text-[9px] text-white/34">{textReferenceRoleDescription(item.role)}</span>
+                <span className="truncate text-[10px] text-white/38">{textReferenceRoleDescription(item.role)}</span>
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_64px] gap-1.5">
                 <select
@@ -7750,8 +7750,8 @@ function PngLayerResultSection({
               />
               <div className="min-w-0 py-1">
                 <div className="truncate text-[11px] font-semibold text-white/82">{pngLayerDisplayName(layer)}</div>
-                <div className="mt-1 truncate text-[9px] text-white/38">{layer.filename}</div>
-                <div className="mt-1 text-[9px] text-white/42">
+                <div className="mt-1 truncate text-[10px] text-white/42">{layer.filename}</div>
+                <div className="mt-1 text-[10px] text-white/46">
                   透明 {Math.round(layer.transparentPixelRatio * 100)}% · {formatFileSize(layer.fileSizeBytes)}
                 </div>
               </div>
@@ -7769,7 +7769,7 @@ function PngLayerResultSection({
         ))}
       </div>
       {result.warnings?.length ? (
-        <div className="mt-2 rounded-[12px] border border-[#f5c66a]/24 bg-[#f5c66a]/10 p-2 text-[9px] leading-4 text-[#ffe2a3]">
+        <div className="mt-2 rounded-[12px] border border-[#f5c66a]/24 bg-[#f5c66a]/10 p-2 text-[10px] leading-4 text-[#ffe2a3]">
           {result.warnings.slice(0, 2).map((warning) => (
             <div key={warning}>{warning}</div>
           ))}
