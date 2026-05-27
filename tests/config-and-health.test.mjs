@@ -1168,7 +1168,7 @@ describe("Workflow canvas performance", () => {
 
 describe("Project stability and task tracing", () => {
   it("keeps local snapshots and explicit task run traces", async () => {
-    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, projectCreationSource, assetLibraryPanelSource, imageUtilsSource, imageQualitySource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource, materialLibrariesRouteSource] = await Promise.all([
+    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, projectCreationSource, assetLibraryPanelSource, imageUtilsSource, imageQualitySource, imageResourceRouteSource, projectRouteSource, editRouteSource, redrawRouteSource, imageSourceSource, materialLibrariesRouteSource] = await Promise.all([
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/task-run-ledger.ts", import.meta.url), "utf8"),
@@ -1185,6 +1185,7 @@ describe("Project stability and task tracing", () => {
       readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/image-quality.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/image-resource/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/project/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/edit-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/redraw-upscale-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/workbench-image-source.ts", import.meta.url), "utf8"),
@@ -1200,6 +1201,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("const projectCapacityJsonWarningBytes = 8 * 1024 * 1024"), true);
     assert.equal(workbenchSource.includes("projectCapacitySummary"), true);
     assert.equal(workbenchSource.includes("项目体积"), true);
+    assert.equal(projectRouteSource.includes("parseProjectPayload"), true);
+    assert.equal(projectRouteSource.includes("InvalidProjectPayloadError"), true);
+    assert.equal(projectRouteSource.includes("项目 JSON 无法解析，保存已拒绝"), true);
+    assert.equal(projectRouteSource.includes("{ status: 400 }"), true);
     assert.equal(workbenchSource.includes("图片管理批量清理"), true);
     assert.equal(workbenchSource.includes("saveProjectSnapshot(\"auto\")"), true);
     assert.equal(workbenchSource.includes("flushProjectPayloadForPageLifecycle(\"leave\")"), true);

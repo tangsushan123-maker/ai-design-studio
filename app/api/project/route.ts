@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const input = JSON.parse(raw || "{}") as Partial<StoredProject> & { setActive?: boolean };
+    const input = parseProjectPayload(raw);
     const dataUrlPath = findDataImagePath(input);
     if (dataUrlPath) {
       return NextResponse.json(
@@ -92,9 +92,11 @@ export async function POST(request: Request) {
       );
     }
     const store = await readStore();
+    const projectId = input.id || `project_${Date.now()}`;
+    const projectName = input.name || "AI 设计项目";
     const project: StoredProject = {
-      id: input.id || `project_${Date.now()}`,
-      name: input.name || "AI 设计项目",
+      id: projectId,
+      name: projectName,
       projectKind: normalizeProjectKind(input.projectKind),
       updatedAt: input.updatedAt || new Date().toISOString(),
       viewport: input.viewport,
@@ -106,8 +108,8 @@ export async function POST(request: Request) {
       edges: input.edges || [],
       runs: Array.isArray(input.runs) ? input.runs : [],
       knowledge: normalizeProjectKnowledge(input.knowledge, {
-        projectId: input.id || `project_${Date.now()}`,
-        projectName: input.name || "AI 设计项目",
+        projectId,
+        projectName,
       }),
     };
 
@@ -120,6 +122,15 @@ export async function POST(request: Request) {
     await writeStore(nextStore);
     return NextResponse.json({ ok: true, project, projects: summarizeProjects(nextStore.projects), activeProjectId: nextStore.activeProjectId });
   } catch (error) {
+    if (error instanceof InvalidProjectPayloadError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          payloadBytes,
+        },
+        { status: 400 },
+      );
+    }
     return NextResponse.json(
       {
         error: `保存项目失败：${error instanceof Error ? error.message : "未知错误"}`,
@@ -127,6 +138,16 @@ export async function POST(request: Request) {
       },
       { status: 500 },
     );
+  }
+}
+
+class InvalidProjectPayloadError extends Error {}
+
+function parseProjectPayload(raw: string): Partial<StoredProject> & { setActive?: boolean } {
+  try {
+    return JSON.parse(raw || "{}") as Partial<StoredProject> & { setActive?: boolean };
+  } catch {
+    throw new InvalidProjectPayloadError("项目 JSON 无法解析，保存已拒绝。请刷新页面后重试，或从项目列表重新打开。");
   }
 }
 
