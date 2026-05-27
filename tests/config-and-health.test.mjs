@@ -1279,6 +1279,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("回收站"), true);
     assert.equal(workbenchSource.includes('action: "restore"'), true);
     assert.equal(generatedImagesRouteSource.includes('const generatedTrashDirName = "_trash"'), true);
+    assert.equal(generatedImagesRouteSource.includes("generatedImageErrorMessage"), true);
+    assert.equal(generatedImagesRouteSource.includes('generatedImageErrorMessage("更新图片信息失败", error)'), true);
+    assert.equal(generatedImagesRouteSource.includes('generatedImageErrorMessage("删除失败", error)'), true);
     assert.equal(generatedImagesRouteSource.includes("moveGeneratedImageToTrash"), true);
     assert.equal(generatedImagesRouteSource.includes("restoreGeneratedImage"), true);
     assert.equal(generatedHistorySource.includes("trashOnly?: boolean"), true);

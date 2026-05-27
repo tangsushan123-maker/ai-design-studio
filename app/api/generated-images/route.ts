@@ -57,8 +57,8 @@ export async function PATCH(request: Request) {
     await writeJsonAtomic(metadataPath, next);
 
     return NextResponse.json({ ok: true, fileName, metadata: next });
-  } catch {
-    return NextResponse.json({ error: "更新图片信息失败，请稍后重试。" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: generatedImageErrorMessage("更新图片信息失败", error) }, { status: 500 });
   }
 }
 
@@ -88,8 +88,8 @@ export async function DELETE(request: Request) {
     const trashFileName = await moveGeneratedImageToTrash(fileName);
 
     return NextResponse.json({ ok: true, fileName, trashFileName, trashed: true });
-  } catch {
-    return NextResponse.json({ error: "删除失败，请稍后重试。" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: generatedImageErrorMessage("删除失败", error) }, { status: 500 });
   }
 }
 
@@ -172,4 +172,10 @@ function isSafeGeneratedRelativePath(fileName: string) {
   const normalized = path.normalize(fileName);
   if (normalized.startsWith("..") || normalized.includes(`..${path.sep}`)) return false;
   return /\.(png|jpg|jpeg|webp)$/i.test(normalized);
+}
+
+function generatedImageErrorMessage(prefix: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const clean = message.replace(getGeneratedDir(), "[generated]").slice(0, 180);
+  return clean ? `${prefix}：${clean}` : `${prefix}，请稍后重试。`;
 }
