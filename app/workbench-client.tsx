@@ -6048,7 +6048,7 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
             还有 {outputs.length - 2} 张
           </div>
         ) : null}
-        {data.error ? <div className="rounded-xl bg-[#ff6b5f]/12 px-2 py-1.5 text-[10px] leading-4 text-[#ffb4a8]">{friendlyDisplayError(String(data.error))}</div> : null}
+        {data.error ? <NodeErrorNotice compact error={String(data.error)} /> : null}
       </div>
 
     </section>
@@ -7157,7 +7157,7 @@ function NodeInspectorPanel({
             <span className="apple-caption">{taskStatusLabel(node.data.status || "idle")}</span>
           </div>
         </div>
-        {node.data.error ? <div className="mt-3 rounded-2xl bg-[#ff6b5f]/12 px-3 py-2.5 text-[10px] leading-5 text-[#ffb4a8]">{friendlyDisplayError(String(node.data.error))}</div> : null}
+        {node.data.error ? <NodeErrorNotice className="mt-3" error={String(node.data.error)} /> : null}
       </section>
 
       {hasPrompt && !promptLivesInComposer ? (
@@ -10069,6 +10069,39 @@ function taskFailureHint(message: string) {
 
 function isInvalidMaskFailure(message: string) {
   return /涂抹区域太小|请先涂抹要修改的区域|蒙版尺寸|蒙版为空|涂抹蒙版为空|涂抹蒙版未通过像素校验|重新涂抹/.test(message);
+}
+
+function NodeErrorNotice({ className = "", compact = false, error }: { className?: string; compact?: boolean; error: string }) {
+  const message = friendlyDisplayError(error);
+  const tips = errorRecoveryTips(error);
+  return (
+    <div className={`${className} rounded-2xl border border-[#ff6b5f]/16 bg-[#ff6b5f]/12 ${compact ? "px-2 py-1.5" : "px-3 py-2.5"} text-[#ffb4a8]`}>
+      <div className={`${compact ? "text-[10px] leading-4" : "text-[11px] leading-5"} font-medium`}>{message}</div>
+      {tips.length ? (
+        <div className={`mt-1.5 grid gap-1 ${compact ? "text-[9px] leading-3" : "text-[10px] leading-4"} text-white/58`}>
+          {tips.map((tip) => (
+            <div className="flex gap-1.5" key={tip}>
+              <span className="mt-[0.45em] size-1 shrink-0 rounded-full bg-[#ffb4a8]/70" />
+              <span>{tip}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function errorRecoveryTips(message: string) {
+  const clean = message.toLowerCase();
+  if (isInvalidMaskFailure(message)) return ["重新打开局部 AI 修改，把目标、阴影和边缘完整涂满。", "蒙版必须和原图尺寸一致，换图后需要重新涂抹。"];
+  if (/请输入文字需求|prompt|文生图节点需要填写/.test(message)) return ["补充清楚的目标、用途、主体、文字和风格后再运行。", "有参考图时先连接图片参考，再选择参考角色和权重。"];
+  if (/需要连接|请上传|请提供|没有检测到|请选择/.test(message)) return ["先把输入图片接到节点左侧入口，或上传/导入一张可用图片。", "如果图片来自网页链接，改用本地上传可以减少读取失败。"];
+  if (/json|请求格式|接口返回格式异常/i.test(message)) return ["刷新页面后重试，避免旧页面状态继续发送异常请求。", "如果一直出现，请保存项目并重新打开。"];
+  if (/key|密钥|401|403|quota|余额|balance|permission|权限/i.test(message)) return ["进入 API 设置测试 Key、余额和模型权限。", "确认图片模型、分析模型都已通过检测。"];
+  if (/model|模型/.test(message)) return ["到 API 设置重新检测模型，或切换为已通过测试的图片模型。", "中转站模型名要和服务商后台保持一致。"];
+  if (/timeout|timed out|超时|502|503|504|gateway|fetch failed|network|upstream/i.test(clean)) return ["稍后重试，或切换更快/更稳定的图片模型。", "重任务可降低质量目标或减少参考图数量后再运行。"];
+  if (/比例|裁切|原生比例|画布/.test(message)) return ["改用常见比例重新生成，或打开精确尺寸让系统先做目标画布。", "避免让主体和大标题贴边，给四周留出安全边距。"];
+  return [];
 }
 
 function shouldWaitForBackendAfterClientError(message: string) {

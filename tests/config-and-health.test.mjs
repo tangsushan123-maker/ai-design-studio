@@ -1245,6 +1245,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("projectName"), true);
     assert.equal(workbenchSource.includes("taskProjectContextRef"), true);
     assert.equal(workbenchSource.includes("模型配置检测失败"), true);
+    assert.equal(workbenchSource.includes("NodeErrorNotice"), true);
+    assert.equal(workbenchSource.includes("errorRecoveryTips"), true);
+    assert.equal(workbenchSource.includes("进入 API 设置测试 Key、余额和模型权限"), true);
+    assert.equal(workbenchSource.includes("先把输入图片接到节点左侧入口"), true);
     assert.equal(workbenchSource.includes("notifyBackendTaskCancelled"), true);
     assert.equal(workbenchSource.includes("backendRunState"), true);
     assert.equal(workbenchSource.includes("lastHeartbeatAt"), true);
