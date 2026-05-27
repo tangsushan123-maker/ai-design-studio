@@ -188,7 +188,7 @@ export function HistoryPanel({
               type="button"
             >
               <span>{item}</span>
-              <span className={`rounded-full px-1.5 py-0.5 text-[9px] leading-none ${filter === item ? "bg-black/10 text-[#07121f]/62" : "bg-white/10 text-white/42"}`}>
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] leading-none ${filter === item ? "bg-black/10 text-[#07121f]/62" : "bg-white/10 text-white/46"}`}>
                 {filterCounts[item]}
               </span>
             </button>
@@ -298,9 +298,9 @@ export function HistoryPanel({
                     <div className="min-w-0 flex-1 truncate text-[10px] font-semibold text-white/64">{historyCardTitle(image)}</div>
                     <DeliveryStatusBadge image={image} fallbackLabel={qualityBadgeLabel(image)} />
                   </div>
-                  <div className="mt-0.5 truncate text-[9px] text-white/34">{historySourceLine(image, nodeOperationLabel)}</div>
+                  <div className="mt-0.5 truncate text-[10px] text-white/38">{historySourceLine(image, nodeOperationLabel)}</div>
                   {image.qualityCheck?.issues?.length ? (
-                    <div className="mt-0.5 truncate text-[9px] text-[#ffe1a0]/72">{image.qualityCheck.issues[0]}</div>
+                    <div className="mt-0.5 truncate text-[10px] text-[#ffe1a0]/76">{image.qualityCheck.issues[0]}</div>
                   ) : null}
                 </div>
               </button>

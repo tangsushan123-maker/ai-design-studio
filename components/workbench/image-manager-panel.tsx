@@ -479,8 +479,8 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
               <div className="min-w-0">
                 <button className="block w-full min-w-0 text-left" onClick={() => onPreview(image)} type="button">
                   <div className="truncate text-[11px] font-semibold text-white/76">{imageManagerTitle(image)}</div>
-                  <div className="mt-1 truncate text-[9px] text-white/36">{imageSourceSummary(image, nodeOperationLabel)}</div>
-                  <div className="mt-0.5 truncate text-[9px] text-white/32">
+                  <div className="mt-1 truncate text-[10px] text-white/40">{imageSourceSummary(image, nodeOperationLabel)}</div>
+                  <div className="mt-0.5 truncate text-[10px] text-white/36">
                     {[imageSizeLabel(image), image.fileSizeBytes ? formatFileSize(image.fileSizeBytes) : "", formatGeneratedAt(image.generatedAt)].filter(Boolean).join(" · ")}
                   </div>
                 </button>
@@ -594,7 +594,7 @@ function ImageManagerStat({ label, value, tone = "normal" }: { label: string; va
   return (
     <div className="rounded-[14px] border border-white/10 bg-white/[0.035] px-2 py-2 text-center">
       <div className={`truncate text-[11px] font-semibold ${valueTone}`}>{value}</div>
-      <div className="mt-0.5 text-[9px] text-white/34">{label}</div>
+      <div className="mt-0.5 text-[10px] text-white/38">{label}</div>
     </div>
   );
 }
@@ -684,11 +684,11 @@ function imageManagerTags(image: ImageManagerImage, protection: ImageDeletionPro
 }
 
 function imageManagerTagClass(tone: "safe" | "info" | "warning" | "danger" | "muted") {
-  if (tone === "safe") return "rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[9px] text-[#adf8e5]";
-  if (tone === "danger") return "rounded-full border border-[#ff6b5f]/22 bg-[#ff6b5f]/10 px-2 py-0.5 text-[9px] text-[#ffc1b8]";
-  if (tone === "warning") return "rounded-full border border-[#ffd166]/18 bg-[#ffd166]/10 px-2 py-0.5 text-[9px] text-[#ffe1a0]";
-  if (tone === "info") return "rounded-full border border-white/12 bg-white/[0.06] px-2 py-0.5 text-[9px] text-white/54";
-  return "rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[9px] text-white/38";
+  if (tone === "safe") return "rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[10px] text-[#adf8e5]";
+  if (tone === "danger") return "rounded-full border border-[#ff6b5f]/22 bg-[#ff6b5f]/10 px-2 py-0.5 text-[10px] text-[#ffc1b8]";
+  if (tone === "warning") return "rounded-full border border-[#ffd166]/18 bg-[#ffd166]/10 px-2 py-0.5 text-[10px] text-[#ffe1a0]";
+  if (tone === "info") return "rounded-full border border-white/12 bg-white/[0.06] px-2 py-0.5 text-[10px] text-white/58";
+  return "rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[10px] text-white/42";
 }
 
 function imageManagerDownloadName(image: ImageManagerImage) {

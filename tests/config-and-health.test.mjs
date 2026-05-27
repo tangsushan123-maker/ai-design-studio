@@ -359,6 +359,8 @@ describe("Workbench node result panel", () => {
     assert.equal(nodeResultsSource.includes("actions?: string[]"), true);
     assert.equal(nodeResultsSource.includes("const firstAction = image.qualityCheck?.actions?.[0]"), true);
     assert.equal(nodeResultsSource.includes("建议：{firstAction}"), true);
+    assert.equal(nodeResultsSource.includes("line-clamp-1 px-1 text-[10px] text-[#ffe1a0]/76"), true);
+    assert.equal(nodeResultsSource.includes("rounded-[10px] border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px]"), true);
   });
 });
 
@@ -1543,6 +1545,11 @@ describe("Project stability and task tracing", () => {
     assert.equal(historyPanelSource.includes("loadMoreResults"), true);
     assert.equal(historyPanelSource.includes("runInlineAction"), true);
     assert.equal(historyPanelSource.includes("historyImageKey"), true);
+    assert.equal(historyPanelSource.includes("truncate text-[10px] text-white/38"), true);
+    assert.equal(historyPanelSource.includes("truncate text-[10px] text-[#ffe1a0]/76"), true);
+    assert.equal(imageManagerPanelSource.includes("truncate text-[10px] text-white/40"), true);
+    assert.equal(imageManagerPanelSource.includes("truncate text-[10px] text-white/36"), true);
+    assert.equal(imageManagerPanelSource.includes("text-[9px] text-white/34"), false);
     assert.equal(workbenchUiSource.includes("favoritingKey"), true);
     assert.equal(workbenchUiSource.includes("\"收藏中\""), true);
     assert.equal(workbenchUiSource.includes("\"取消中\""), true);
