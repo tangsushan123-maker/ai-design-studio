@@ -9,6 +9,12 @@ export const runtime = "nodejs";
 
 const generatedTrashDirName = "_trash";
 const generatedImageListMaxLimit = 100;
+const generatedImagePayloadMessages = {
+  updateInvalid: "更新图片请求格式不正确。",
+  updateJson: "更新图片 JSON 无法解析，请刷新图片列表后重试。",
+  deleteInvalid: "删除图片请求格式不正确。",
+  deleteJson: "删除图片 JSON 无法解析，请刷新图片列表后重试。",
+};
 
 export async function GET(request: Request) {
   try {
@@ -29,11 +35,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const body = (await request.json().catch(() => ({}))) as {
-      action?: string;
-      fileName?: string;
-      metadata?: Record<string, unknown>;
-    };
+    const body = await parseGeneratedImagePayload(request, "update");
     const fileName = body.fileName || "";
 
     if (!fileName) {
@@ -62,13 +64,16 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ ok: true, fileName, metadata: next });
   } catch (error) {
+    if (error instanceof InvalidGeneratedImagePayloadError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ error: generatedImageErrorMessage("更新图片信息失败", error) }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    const body = (await request.json().catch(() => ({}))) as { fileName?: string; permanent?: boolean };
+    const body = await parseGeneratedImagePayload(request, "delete");
     const fileName = body.fileName || "";
 
     if (!fileName) {
@@ -93,7 +98,35 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ ok: true, fileName, trashFileName, trashed: true });
   } catch (error) {
+    if (error instanceof InvalidGeneratedImagePayloadError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ error: generatedImageErrorMessage("删除失败", error) }, { status: 500 });
+  }
+}
+
+class InvalidGeneratedImagePayloadError extends Error {}
+
+async function parseGeneratedImagePayload(request: Request, mode: "update" | "delete"): Promise<{
+  action?: string;
+  fileName?: string;
+  metadata?: Record<string, unknown>;
+  permanent?: boolean;
+}> {
+  try {
+    const body = await request.json() as unknown;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new InvalidGeneratedImagePayloadError(mode === "update" ? generatedImagePayloadMessages.updateInvalid : generatedImagePayloadMessages.deleteInvalid);
+    }
+    return body as {
+      action?: string;
+      fileName?: string;
+      metadata?: Record<string, unknown>;
+      permanent?: boolean;
+    };
+  } catch (error) {
+    if (error instanceof InvalidGeneratedImagePayloadError) throw error;
+    throw new InvalidGeneratedImagePayloadError(mode === "update" ? generatedImagePayloadMessages.updateJson : generatedImagePayloadMessages.deleteJson);
   }
 }
 

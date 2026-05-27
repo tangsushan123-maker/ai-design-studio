@@ -10,7 +10,7 @@ const maxRedirects = 3;
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json().catch(() => ({}))) as { url?: string };
+    const body = await parseImportImagePayload(request);
     const url = String(body.url || "").trim();
 
     if (!url) {
@@ -46,6 +46,21 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "读取剪贴板图片失败，请改用拖拽或本地上传。" }, { status: 400 });
+  }
+}
+
+class InvalidImportImagePayloadError extends Error {}
+
+async function parseImportImagePayload(request: Request): Promise<{ url?: string }> {
+  try {
+    const body = await request.json() as unknown;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new InvalidImportImagePayloadError("导入图片请求格式不正确。");
+    }
+    return body as { url?: string };
+  } catch (error) {
+    if (error instanceof InvalidImportImagePayloadError) throw error;
+    throw new InvalidImportImagePayloadError("导入图片 JSON 无法解析，请重新复制图片链接后重试。");
   }
 }
 

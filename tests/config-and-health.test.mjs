@@ -561,6 +561,9 @@ describe("Remote image import security", () => {
     assert.equal(routeSource.includes('import { isIP } from "node:net"'), true);
     assert.equal(routeSource.includes("fetchAllowedImageUrl"), true);
     assert.equal(routeSource.includes("assertPublicHttpImageUrl"), true);
+    assert.equal(routeSource.includes("parseImportImagePayload"), true);
+    assert.equal(routeSource.includes("InvalidImportImagePayloadError"), true);
+    assert.equal(routeSource.includes("导入图片 JSON 无法解析"), true);
     assert.equal(routeSource.includes("parseImageUrl"), true);
     assert.equal(routeSource.includes("normalizeHostname"), true);
     assert.equal(routeSource.includes("redirect: \"manual\""), true);
@@ -1528,7 +1531,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(taskCenterSource.includes("结果已在画布，但质检提示未完全通过"), true);
     assert.equal(generatedImagesRouteSource.includes("requestIds"), true);
     assert.equal(generatedImagesRouteSource.includes("readGeneratedMetadata"), true);
-    assert.equal(generatedImagesRouteSource.includes("return {};"), true);
+    assert.equal(generatedImagesRouteSource.includes("parseGeneratedImagePayload"), true);
+    assert.equal(generatedImagesRouteSource.includes("InvalidGeneratedImagePayloadError"), true);
+    assert.equal(generatedImagesRouteSource.includes("更新图片 JSON 无法解析"), true);
+    assert.equal(generatedImagesRouteSource.includes("删除图片 JSON 无法解析"), true);
     assert.equal(generatedHistorySource.includes("requestIds?: string[]"), true);
     assert.equal(generatedHistorySource.includes("sourceRequestId && requestIdSet.has(sourceRequestId)"), true);
     assert.equal(historyPanelSource.includes("historySourceLine"), true);
