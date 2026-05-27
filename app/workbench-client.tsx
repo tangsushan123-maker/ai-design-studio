@@ -5521,7 +5521,7 @@ function NodeWorkflowWorkbench({
             projectId={projectId}
             tabHint={rightPanelTabHint}
             tabHintTick={rightPanelTabTick}
-            onDeleteHistory={(image) => void deleteHistoryImage(image)}
+            onDeleteHistory={deleteHistoryImage}
             onBatchDeleteHistory={deleteHistoryImagesBatch}
             onBatchPermanentDeleteHistory={(images) => deleteHistoryImagesBatch(images, { permanent: true })}
             onBatchRestoreHistory={restoreHistoryImagesBatch}
@@ -5544,8 +5544,8 @@ function NodeWorkflowWorkbench({
             onLoadMoreTrash={() => void loadImageManagerTrash(false)}
             onLoadMoreHistory={() => void loadMoreHistory()}
             onPreview={setLightboxImage}
-            onRestoreHistory={(image) => void restoreHistoryImage(image)}
-            onPermanentDeleteHistory={(image) => void deleteHistoryImage(image, { permanent: true })}
+            onRestoreHistory={restoreHistoryImage}
+            onPermanentDeleteHistory={(image) => deleteHistoryImage(image, { permanent: true })}
             onClose={() => setRightPanelOpen(false)}
             selectedNode={selectedNode}
             tasks={tasks.map((task) => ({ ...task, resultOnCanvas: hasTaskResultNodesOnCanvas(task) }))}
@@ -6934,10 +6934,10 @@ function RightPanel({
   projectId: string;
   tabHint: RightPanelTab;
   tabHintTick: number;
-  onDeleteHistory: (image: ImageAsset) => void;
-  onBatchDeleteHistory: (images: ImageAsset[]) => void | Promise<void>;
-  onBatchPermanentDeleteHistory: (images: ImageAsset[]) => void | Promise<void>;
-  onBatchRestoreHistory: (images: ImageAsset[]) => void | Promise<void>;
+  onDeleteHistory: (image: ImageAsset) => void | Promise<unknown>;
+  onBatchDeleteHistory: (images: ImageAsset[]) => void | Promise<unknown>;
+  onBatchPermanentDeleteHistory: (images: ImageAsset[]) => void | Promise<unknown>;
+  onBatchRestoreHistory: (images: ImageAsset[]) => void | Promise<unknown>;
   onAddHistoryToCanvas: (image: ImageAsset) => void;
   onToggleFavorite: (image: ImageAsset) => void;
   onEnsureImageManager: () => void;
@@ -6948,8 +6948,8 @@ function RightPanel({
   onResizeHistory: (image: ImageAsset) => void;
   onUpscaleHistory: (image: ImageAsset) => void;
   onPreview: (image: ImageAsset) => void;
-  onRestoreHistory: (image: ImageAsset) => void;
-  onPermanentDeleteHistory: (image: ImageAsset) => void;
+  onRestoreHistory: (image: ImageAsset) => void | Promise<unknown>;
+  onPermanentDeleteHistory: (image: ImageAsset) => void | Promise<unknown>;
   onClose: () => void;
   selectedNode: FlowNode | null;
   tasks: TaskRecord[];

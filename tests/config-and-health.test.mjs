@@ -1159,6 +1159,12 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("runBatchAction"), true);
     assert.equal(workbenchUiSource.includes("actionMessage"), true);
     assert.equal(workbenchUiSource.includes("\"移动中...\""), true);
+    assert.equal(workbenchUiSource.includes("rowActionKey"), true);
+    assert.equal(workbenchUiSource.includes("runRowAction"), true);
+    assert.equal(workbenchUiSource.includes("\"恢复中\""), true);
+    assert.equal(workbenchUiSource.includes("\"处理中\""), true);
+    assert.equal(workbenchSource.includes("onDeleteHistory={deleteHistoryImage}"), true);
+    assert.equal(workbenchSource.includes("onRestoreHistory={restoreHistoryImage}"), true);
     assert.equal(workbenchSource.includes("onBatchDeleteHistory={deleteHistoryImagesBatch}"), true);
     assert.equal(workbenchSource.includes("loadImageManagerHistory"), true);
     assert.equal(workbenchSource.includes("loadImageManagerTrash"), true);

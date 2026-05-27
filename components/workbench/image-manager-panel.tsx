@@ -118,21 +118,22 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   nodeOperationLabel: (value?: string) => string;
   shouldShowCheckerboard: (image: TImage | null | undefined) => boolean;
   onAddToCanvas: (image: TImage) => void;
-  onBatchDelete: (images: TImage[]) => void | Promise<void>;
-  onBatchPermanentDelete: (images: TImage[]) => void | Promise<void>;
-  onBatchRestore: (images: TImage[]) => void | Promise<void>;
-  onDelete: (image: TImage) => void;
+  onBatchDelete: (images: TImage[]) => void | Promise<unknown>;
+  onBatchPermanentDelete: (images: TImage[]) => void | Promise<unknown>;
+  onBatchRestore: (images: TImage[]) => void | Promise<unknown>;
+  onDelete: (image: TImage) => void | Promise<unknown>;
   onLoadMore: () => void;
   onLoadMoreTrash: () => void;
-  onPermanentDelete: (image: TImage) => void;
+  onPermanentDelete: (image: TImage) => void | Promise<unknown>;
   onPreview: (image: TImage) => void;
-  onRestore: (image: TImage) => void;
+  onRestore: (image: TImage) => void | Promise<unknown>;
   onToggleFavorite: (image: TImage) => void;
 }) {
   const [filter, setFilter] = useState<ImageManagerFilter>("全部");
   const [query, setQuery] = useState("");
   const [batchActionLabel, setBatchActionLabel] = useState("");
   const [downloadingKey, setDownloadingKey] = useState("");
+  const [rowActionKey, setRowActionKey] = useState("");
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const normalizedQuery = query.trim();
@@ -211,7 +212,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
     }
   }
 
-  async function runBatchAction(label: string, action: () => void | Promise<void>) {
+  async function runBatchAction(label: string, action: () => void | Promise<unknown>) {
     if (batchActionLabel) return;
     setBatchActionLabel(label);
     setActionMessage(null);
@@ -223,6 +224,21 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
       setActionMessage({ tone: "error", text: error instanceof Error ? error.message : `${label}失败。` });
     } finally {
       setBatchActionLabel("");
+    }
+  }
+
+  async function runRowAction(label: string, image: TImage, action: () => void | Promise<unknown>) {
+    const key = `${label}:${imageManagerKey(image)}`;
+    if (rowActionKey) return;
+    setRowActionKey(key);
+    setActionMessage(null);
+    try {
+      await action();
+      setActionMessage({ tone: "success", text: `${label}已提交。` });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : `${label}失败。` });
+    } finally {
+      setRowActionKey("");
     }
   }
 
@@ -426,9 +442,14 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
                 预览
               </button>
               {protection.isTrashed ? (
-                <button className="apple-button flex h-8 items-center justify-center gap-1 text-[10px] text-[#adf8e5]" onClick={() => onRestore(image)} type="button">
-                  <RefreshCcw className="size-3" />
-                  恢复
+                <button
+                  className="apple-button flex h-8 items-center justify-center gap-1 text-[10px] text-[#adf8e5] disabled:opacity-45"
+                  disabled={Boolean(rowActionKey)}
+                  onClick={() => void runRowAction("恢复图片", image, () => onRestore(image))}
+                  type="button"
+                >
+                  {rowActionKey === `恢复图片:${imageManagerKey(image)}` ? <RefreshCcw className="size-3 animate-spin" /> : <RefreshCcw className="size-3" />}
+                  {rowActionKey === `恢复图片:${imageManagerKey(image)}` ? "恢复中" : "恢复"}
                 </button>
               ) : (
                 <button className="apple-button flex h-8 items-center justify-center gap-1 text-[10px]" onClick={() => onAddToCanvas(image)} type="button">
@@ -459,13 +480,13 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
               </button>
               <button
                 className="apple-button flex h-8 items-center justify-center gap-1 text-[10px] text-[#ffb4a8] disabled:cursor-not-allowed disabled:text-white/28"
-                disabled={!protection.canDelete && !protection.isTrashed}
-                onClick={() => protection.isTrashed ? onPermanentDelete(image) : onDelete(image)}
+                disabled={Boolean(rowActionKey) || (!protection.canDelete && !protection.isTrashed)}
+                onClick={() => void runRowAction(protection.isTrashed ? "彻底删除图片" : "删除图片", image, () => protection.isTrashed ? onPermanentDelete(image) : onDelete(image))}
                 title={protection.isTrashed ? "从回收站彻底删除" : protection.canDelete ? "移到回收站" : `受保护：${protection.reasons.join("、")}`}
                 type="button"
               >
-                <Trash2 className="size-3" />
-                {protection.isTrashed ? "彻删" : "删除"}
+                {rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}` ? <RefreshCcw className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
+                {rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}` ? "处理中" : protection.isTrashed ? "彻删" : "删除"}
               </button>
             </div>
           </article>
