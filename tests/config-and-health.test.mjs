@@ -23,10 +23,11 @@ describe("OpenAI defaults", () => {
   });
 
   it("keeps production preflight available for server deploys", async () => {
-    const [packageSource, preflightSource, deploySource] = await Promise.all([
+    const [packageSource, preflightSource, deploySource, readmeSource] = await Promise.all([
       readFile(new URL("../package.json", import.meta.url), "utf8"),
       readFile(new URL("../scripts/preflight.mjs", import.meta.url), "utf8"),
       readFile(new URL("../docs/production-deploy.md", import.meta.url), "utf8"),
+      readFile(new URL("../README.md", import.meta.url), "utf8"),
     ]);
 
     assert.equal(packageSource.includes('"preflight": "node scripts/preflight.mjs"'), true);
@@ -38,6 +39,10 @@ describe("OpenAI defaults", () => {
     assert.equal(preflightSource.includes("allowedTrackedRuntimeFiles"), true);
     assert.equal(preflightSource.includes("*.tsbuildinfo"), true);
     assert.equal(deploySource.includes("npm run preflight"), true);
+    assert.equal(readmeSource.includes("Node.js `>=20.9.0`"), true);
+    assert.equal(readmeSource.includes("pm2 start npm --name ai-design-studio -- start"), true);
+    assert.equal(readmeSource.includes("docs/production-deploy.md"), true);
+    assert.equal(readmeSource.includes("public/generated/*"), true);
   });
 });
 
