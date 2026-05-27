@@ -3362,8 +3362,7 @@ function NodeWorkflowWorkbench({
       appendTaskTrace(formData, taskId, node, "hd_redraw");
       appendProtectionContext(formData, "hd_redraw", [image], node);
       const response = await fetch("/api/redraw-upscale-image", { method: "POST", body: formData, signal });
-      if (!response.ok) throw new Error((await response.json()).error || "画质增强失败。");
-      const enhanced = imageFromSavedResponse(await response.json(), `画质增强 · ${qualityEnhanceModeLabel(enhancementMode)}`, userPrompt || image.prompt);
+      const enhanced = await imageFromSingleResponse(response, `画质增强 · ${qualityEnhanceModeLabel(enhancementMode)}`, userPrompt || image.prompt, "画质增强失败。");
       return [{ ...enhanced, compareBefore: imageForComparison(image) }];
     }
     const ratio = ratioParam(params.targetRatio);
@@ -3466,8 +3465,7 @@ function NodeWorkflowWorkbench({
     appendTaskTrace(formData, taskId, node, "hd_redraw");
     appendProtectionContext(formData, "hd_redraw", [image], node);
     const response = await fetch("/api/redraw-upscale-image", { method: "POST", body: formData, signal });
-    if (!response.ok) throw new Error((await response.json()).error || "画质增强失败。");
-    const enhanced = imageFromSavedResponse(await response.json(), `画质增强 · ${qualityEnhanceModeLabel(enhancementMode)}`, userPrompt || image.prompt);
+    const enhanced = await imageFromSingleResponse(response, `画质增强 · ${qualityEnhanceModeLabel(enhancementMode)}`, userPrompt || image.prompt, "画质增强失败。");
     return [{ ...enhanced, compareBefore: imageForComparison(image) }];
   }
 
@@ -8527,6 +8525,14 @@ async function imagesFromResponse(response: Response) {
     throw new Error(friendlyDisplayError(data.errorReason || data.error || `节点运行失败（HTTP ${response.status}）。${retryHint}`));
   }
   return data.images.map((image) => ({ ...image, source: "generated" as const }));
+}
+
+async function imageFromSingleResponse(response: Response, modeLabel: string, fallbackPrompt: string, fallbackError: string) {
+  const data = normalizeImageTaskResponse(await readJsonResponse(response));
+  if (!response.ok || !data.images.length) {
+    throw new Error(friendlyDisplayError(data.errorReason || data.error || fallbackError));
+  }
+  return imageFromSavedResponse(data.images[0], modeLabel, fallbackPrompt);
 }
 
 async function readJsonResponse(response: Response): Promise<Record<string, unknown>> {

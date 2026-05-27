@@ -1045,6 +1045,8 @@ describe("Text-to-image references", () => {
     assert.equal(workbenchSource.includes("resolveTextReferenceInputs"), true);
     assert.equal(workbenchSource.includes("appendTextReferenceImages"), true);
     assert.equal(workbenchSource.includes("连接到“图片参考”入口的图片作为素材参考参与生成"), true);
+    assert.equal(workbenchSource.includes("imageFromSingleResponse"), true);
+    assert.equal(workbenchSource.includes("normalizeImageTaskResponse(await readJsonResponse(response))"), true);
     assert.equal(deliverySource.includes('status === "composition_risk" || status === "blurred_padding"'), true);
     assert.equal(deliverySource.includes('status === "size_insufficient" || status === "ratio_mismatch" || status === "suspected_stretch" || status === "white_border" || status === "failed" || status === "empty"'), true);
     assert.equal(workbenchSource.includes("const imageTaskTimeoutMs = 35 * 60 * 1000"), true);
