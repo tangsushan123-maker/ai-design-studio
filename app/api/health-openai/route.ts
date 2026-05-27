@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getOpenAIConfig } from "@/lib/local-config";
 import { testConfiguredModel } from "@/lib/model-catalog";
-import { parseHealthMode, skippedImageCheck, type ModelCheck } from "@/lib/openai-health";
+import { buildRuntimeDiagnostics, parseHealthMode, skippedImageCheck, type ModelCheck } from "@/lib/openai-health";
 import { getAnalysisModel, getImageModel, getVideoModel } from "@/lib/model-config";
 
 export const runtime = "nodejs";
@@ -29,6 +29,7 @@ export async function GET() {
     modelsCache: config.modelsCache,
     modelsUpdatedAt: config.modelsUpdatedAt,
     mode: "quick",
+    diagnostics: buildRuntimeDiagnostics(),
     message: config.hasApiKey ? "API Key 已配置。" : "未检测到 OpenAI API Key。",
   });
 }
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
       analysisModel,
       videoModel,
       mode,
+      diagnostics: buildRuntimeDiagnostics(),
       message: "未检测到 OpenAI API Key。请进入 API 配置页面保存 Key，或配置 .env.local。",
       analysis: { ok: false, message: "未测试：缺少 API Key。" },
       image: { ok: false, message: "未测试：缺少 API Key。" },
@@ -87,6 +89,7 @@ export async function POST(request: Request) {
     analysisModel,
     videoModel,
     mode,
+    diagnostics: buildRuntimeDiagnostics(),
     message: ok
       ? mode === "full"
         ? "API Key 已配置，文本、图片和视频测试已完成。"

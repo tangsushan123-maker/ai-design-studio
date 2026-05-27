@@ -76,3 +76,4 @@ pm2 restart ai-design-studio
 - Do not commit `.env.local`, `config.local.json`, `projects.local.json`, `task-runs.local.json`, or `public/generated/*`.
 - Back up local JSON files and `public/generated/` before moving servers.
 - If generation fails after deploy, open `/settings`, verify the provider, test the text model, then run a full image model test.
+- Server diagnostics are available from `GET /api/health-openai`; check `diagnostics.nodeVersion`, `diagnostics.runtime`, and `hasKey` before debugging nginx.

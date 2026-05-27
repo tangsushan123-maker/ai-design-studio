@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import { toApiError } from "../lib/api-errors.ts";
 import { defaultOpenAIConfig, providerPresets } from "../lib/openai-defaults.ts";
-import { parseHealthMode, skippedImageCheck } from "../lib/openai-health.ts";
+import { buildRuntimeDiagnostics, parseHealthMode, skippedImageCheck } from "../lib/openai-health.ts";
 import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualityBadgeLabel, qualityDeliveryTone, qualityTone } from "../lib/workbench-delivery.ts";
 import { deliveryFileNameForFormat } from "../lib/workbench-downloads.ts";
 import { formatDuration, formatFileSize, formatGeneratedAt } from "../lib/workbench-format.ts";
@@ -437,6 +437,20 @@ describe("health mode helpers", () => {
       skipped: true,
       message: "图片模型未测试。点击完整测试会真实调用一次图片生成接口。",
     });
+  });
+
+  it("exposes safe runtime diagnostics for deployment checks", async () => {
+    const [routeSource, deploySource] = await Promise.all([
+      readFile(new URL("../app/api/health-openai/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../docs/production-deploy.md", import.meta.url), "utf8"),
+    ]);
+    const diagnostics = buildRuntimeDiagnostics();
+
+    assert.equal(typeof diagnostics.nodeVersion, "string");
+    assert.equal(diagnostics.runtime, "nodejs");
+    assert.match(diagnostics.serverTime, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(routeSource.includes("diagnostics: buildRuntimeDiagnostics()"), true);
+    assert.equal(deploySource.includes("diagnostics.nodeVersion"), true);
   });
 });
 

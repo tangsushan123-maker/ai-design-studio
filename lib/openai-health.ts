@@ -17,3 +17,12 @@ export function skippedImageCheck(): ModelCheck {
     message: "图片模型未测试。点击完整测试会真实调用一次图片生成接口。",
   };
 }
+
+export function buildRuntimeDiagnostics() {
+  return {
+    nodeVersion: process.versions.node,
+    platform: process.platform,
+    runtime: "nodejs",
+    serverTime: new Date().toISOString(),
+  };
+}
