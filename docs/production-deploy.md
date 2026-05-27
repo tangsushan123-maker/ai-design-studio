@@ -21,6 +21,7 @@ cp .env.example .env.local
 Edit `.env.local` and set `OPENAI_API_KEY`. You can also configure the API provider from the app settings page after the site starts.
 
 ```bash
+npm run preflight
 npm run build
 pm2 start npm --name ai-design-studio -- start
 pm2 save
@@ -65,6 +66,7 @@ systemctl reload nginx
 cd /var/www/ai-design-studio
 git pull
 npm ci
+npm run preflight
 npm run build
 pm2 restart ai-design-studio
 ```

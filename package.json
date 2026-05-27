@@ -30,6 +30,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "preflight": "node scripts/preflight.mjs",
     "start": "next start",
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",

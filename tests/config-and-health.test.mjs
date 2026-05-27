@@ -20,6 +20,20 @@ describe("OpenAI defaults", () => {
     assert.equal(officialProvider?.textModel, defaultOpenAIConfig.textModel);
     assert.equal(officialProvider?.videoModel, defaultOpenAIConfig.videoModel);
   });
+
+  it("keeps production preflight available for server deploys", async () => {
+    const [packageSource, preflightSource, deploySource] = await Promise.all([
+      readFile(new URL("../package.json", import.meta.url), "utf8"),
+      readFile(new URL("../scripts/preflight.mjs", import.meta.url), "utf8"),
+      readFile(new URL("../docs/production-deploy.md", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(packageSource.includes('"preflight": "node scripts/preflight.mjs"'), true);
+    assert.equal(preflightSource.includes("Node.js is >=20.9.0"), true);
+    assert.equal(preflightSource.includes("OPENAI_API_KEY is empty"), true);
+    assert.equal(preflightSource.includes("public/generated is writable"), true);
+    assert.equal(deploySource.includes("npm run preflight"), true);
+  });
 });
 
 describe("Workbench delivery helpers", () => {
