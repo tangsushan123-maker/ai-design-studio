@@ -1231,6 +1231,12 @@ describe("Workflow canvas performance", () => {
     assert.equal(workbenchSource.includes('truncate text-[11px] text-white/38">{textReferenceRoleDescription'), true);
     assert.equal(workbenchSource.includes("apple-pill px-2 py-1 text-[11px]"), true);
     assert.equal(workbenchSource.includes("apple-button max-w-full truncate rounded-full px-2.5 py-1 text-[10px]"), false);
+    assert.equal(workbenchSource.includes("apple-button rounded-full px-2.5 py-1 text-[10px]"), false);
+    assert.equal(workbenchSource.includes("apple-button px-2 py-1.5 text-[10px]"), false);
+    assert.equal(workbenchSource.includes("text-[10px] leading-4"), false);
+    assert.equal(workbenchSource.includes("text-[9px] leading-3"), false);
+    assert.equal(workbenchSource.includes("PNG 三层结果"), true);
+    assert.equal(workbenchSource.includes("mt-2 rounded-[12px] border border-[#f5c66a]/24 bg-[#f5c66a]/10 p-2 text-[11px] leading-5"), true);
 
     assert.equal(globalsSource.includes(".node-workflow-flow.is-performance-mode .apple-node-card"), true);
     assert.equal(globalsSource.includes("backdrop-filter: none"), true);

@@ -5360,7 +5360,7 @@ function NodeWorkflowWorkbench({
             </div>
             {saveFeedback ? (
               <div
-                className={`mt-2 rounded-xl border px-2.5 py-1.5 text-[11px] leading-4 ${
+                className={`mt-2 rounded-xl border px-2.5 py-1.5 text-[11px] leading-5 ${
                   saveFeedback.tone === "error"
                     ? "border-[#ff6b5f]/20 bg-[#ff6b5f]/12 text-[#ffb4a8]"
                     : saveFeedback.tone === "success"
@@ -5373,7 +5373,7 @@ function NodeWorkflowWorkbench({
             ) : status ? <div className="apple-caption mt-2 line-clamp-1">{status}</div> : null}
             {projectCapacity.message ? (
               <div
-                className={`mt-2 rounded-xl border px-2.5 py-1.5 text-[11px] leading-4 ${
+                className={`mt-2 rounded-xl border px-2.5 py-1.5 text-[11px] leading-5 ${
                   projectCapacity.tone === "critical"
                     ? "border-[#ff6b5f]/20 bg-[#ff6b5f]/12 text-[#ffb4a8]"
                     : "border-[#f5c66a]/24 bg-[#f5c66a]/10 text-[#ffe2a3]"
@@ -5999,7 +5999,7 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
               <Brush className="size-3.5" />
               局部 AI 修改
             </button>
-            <div className="apple-caption leading-4">
+            <div className="apple-caption leading-5">
               涂哪里，改哪里；未涂抹区域强制保持原图不变。
             </div>
             {maskBadge ? (
@@ -6959,7 +6959,7 @@ function RightPanel({
             >
               <span>{label}</span>
               {value === "tasks" && taskBadgeCount ? (
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] leading-none ${tab === value ? "bg-black/10 text-[#07121f]/70" : failedTaskCount ? "bg-[#ff6b5f]/18 text-[#ffb4a8]" : runningTaskCount ? "bg-[#ffd166]/18 text-[#ffe1a0]" : "bg-white/12 text-white/58"}`}>
+                <span className={`rounded-full px-1.5 py-0.5 text-[11px] leading-none ${tab === value ? "bg-black/10 text-[#07121f]/70" : failedTaskCount ? "bg-[#ff6b5f]/18 text-[#ffb4a8]" : runningTaskCount ? "bg-[#ffd166]/18 text-[#ffe1a0]" : "bg-white/12 text-white/58"}`}>
                   {taskBadgeCount}
                 </span>
               ) : null}
@@ -7720,7 +7720,7 @@ function PngLayerResultSection({
           <div className="apple-caption mt-1">{result.canvasWidth} × {result.canvasHeight}px · 按需单独下载</div>
         </div>
         <button
-          className={`apple-button rounded-full px-2.5 py-1 text-[10px] ${!activeFilename ? "border-[#74e3c5]/36 text-[#adf8e5]" : ""}`}
+          className={`apple-button rounded-full px-2.5 py-1 text-[11px] ${!activeFilename ? "border-[#74e3c5]/36 text-[#adf8e5]" : ""}`}
           onClick={onShowComposite}
           type="button"
         >
@@ -7750,17 +7750,17 @@ function PngLayerResultSection({
               />
               <div className="min-w-0 py-1">
                 <div className="truncate text-[11px] font-semibold text-white/82">{pngLayerDisplayName(layer)}</div>
-                <div className="mt-1 truncate text-[10px] text-white/42">{layer.filename}</div>
-                <div className="mt-1 text-[10px] text-white/46">
+                <div className="mt-1 truncate text-[11px] text-white/42">{layer.filename}</div>
+                <div className="mt-1 text-[11px] text-white/46">
                   透明 {Math.round(layer.transparentPixelRatio * 100)}% · {formatFileSize(layer.fileSizeBytes)}
                 </div>
               </div>
             </button>
             <div className="mt-2 grid grid-cols-2 gap-1.5">
-              <button className="apple-button px-2 py-1.5 text-[10px]" onClick={() => onPreviewLayer(layer)} type="button">
+              <button className="apple-button px-2 py-1.5 text-[11px]" onClick={() => onPreviewLayer(layer)} type="button">
                 预览
               </button>
-              <button className="apple-button-primary flex items-center justify-center gap-1 px-2 py-1.5 text-[10px] font-semibold" onClick={() => void onDownloadLayer(layer)} type="button">
+              <button className="apple-button-primary flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] font-semibold" onClick={() => void onDownloadLayer(layer)} type="button">
                 <ArrowDownToLine className="size-3" />
                 下载
               </button>
@@ -7769,7 +7769,7 @@ function PngLayerResultSection({
         ))}
       </div>
       {result.warnings?.length ? (
-        <div className="mt-2 rounded-[12px] border border-[#f5c66a]/24 bg-[#f5c66a]/10 p-2 text-[10px] leading-4 text-[#ffe2a3]">
+        <div className="mt-2 rounded-[12px] border border-[#f5c66a]/24 bg-[#f5c66a]/10 p-2 text-[11px] leading-5 text-[#ffe2a3]">
           {result.warnings.slice(0, 2).map((warning) => (
             <div key={warning}>{warning}</div>
           ))}
@@ -7909,7 +7909,7 @@ function ImageLightbox({
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
           <div className="min-w-0">
             <div className="mb-1 flex items-center gap-2">
-              <button className="apple-button rounded-full px-2.5 py-1 text-[10px]" onClick={onClose} type="button">返回结果</button>
+              <button className="apple-button rounded-full px-2.5 py-1 text-[11px]" onClick={onClose} type="button">返回结果</button>
             </div>
             <div className="truncate text-[14px] font-semibold text-white/88">{lightboxTitle}</div>
             {lightboxMeta ? <div className="apple-meta mt-0.5">{lightboxMeta}</div> : null}
@@ -7937,7 +7937,7 @@ function ImageLightbox({
                       variant="original"
                       style={{ height: "100%" }}
                     />
-                    <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/14 bg-black/45 px-2.5 py-1 text-[10px] font-semibold text-white/82 backdrop-blur-xl">
+                    <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/14 bg-black/45 px-2.5 py-1 text-[11px] font-semibold text-white/82 backdrop-blur-xl">
                       {pngLayerDisplayName(activePngLayer)}
                     </div>
                   </div>
@@ -8449,7 +8449,7 @@ function ToolbarButton({
 
 function SummaryLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-1.5 text-[10px] leading-4">
+    <div className="flex min-w-0 items-center gap-1.5 text-[11px] leading-5">
       <span className="apple-caption shrink-0">{label}</span>
       <span className="h-1 w-1 shrink-0 rounded-full bg-white/18" />
       <span className="min-w-0 truncate text-white/62" title={value}>{value}</span>
@@ -10076,9 +10076,9 @@ function NodeErrorNotice({ className = "", compact = false, error }: { className
   const tips = errorRecoveryTips(error);
   return (
     <div className={`${className} rounded-2xl border border-[#ff6b5f]/16 bg-[#ff6b5f]/12 ${compact ? "px-2 py-1.5" : "px-3 py-2.5"} text-[#ffb4a8]`}>
-      <div className={`${compact ? "text-[10px] leading-4" : "text-[11px] leading-5"} font-medium`}>{message}</div>
+      <div className="text-[11px] font-medium leading-5">{message}</div>
       {tips.length ? (
-        <div className={`mt-1.5 grid gap-1 ${compact ? "text-[9px] leading-3" : "text-[10px] leading-4"} text-white/58`}>
+        <div className="mt-1.5 grid gap-1 text-[11px] leading-5 text-white/58">
           {tips.map((tip) => (
             <div className="flex gap-1.5" key={tip}>
               <span className="mt-[0.45em] size-1 shrink-0 rounded-full bg-[#ffb4a8]/70" />
