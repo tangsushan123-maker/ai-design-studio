@@ -65,7 +65,7 @@ export function TaskCenter({
 }: {
   onCancel: (taskId: string) => void;
   onDelete: (taskId: string) => void;
-  onDeleteFinished: () => void;
+  onDeleteFinished: (taskIds: string[]) => void;
   onPreview: (image: TaskCenterImage) => void;
   onRetry: (taskId: string) => void;
   tasks: TaskCenterTask[];
@@ -94,7 +94,8 @@ export function TaskCenter({
   const deferredTasks = matchedTasks.filter(isDeferredQueuedTask);
   const timelineTasks = matchedTasks.filter((task) => !isDeferredQueuedTask(task));
   const visibleTimelineTasks = timelineTasks.slice(0, visibleCount);
-  const finishedCount = matchedTasks.filter(isFinishedTask).length;
+  const finishedTasks = matchedTasks.filter(isFinishedTask);
+  const finishedCount = finishedTasks.length;
   const runningCount = matchedTasks.filter((task) => !isDeferredQueuedTask(task) && (task.status === "queued" || task.status === "running" || task.status === "saving")).length;
   const successCount = matchedTasks.filter((task) => !taskIsPartialSuccess(task) && ((task.status === "completed" && task.resultOnCanvas) || taskHasVisibleResult(task))).length;
   const failedCount = matchedTasks.filter((task) => task.status === "failed" && !taskHasAnyResult(task)).length;
@@ -244,9 +245,9 @@ export function TaskCenter({
           </div>
         </div>
         {finishedCount ? (
-          <button className="apple-button flex shrink-0 items-center gap-1 px-3 py-1.5 text-[11px]" onClick={onDeleteFinished} type="button">
+          <button className="apple-button flex shrink-0 items-center gap-1 px-3 py-1.5 text-[11px]" onClick={() => onDeleteFinished(finishedTasks.map((task) => task.id))} type="button">
             <Trash2 className="size-3" />
-            清理已结束
+            {normalizedQuery ? "清理匹配已结束" : "清理已结束"}
           </button>
         ) : null}
       </div>

@@ -4210,8 +4210,11 @@ function NodeWorkflowWorkbench({
     setStatus("任务记录已删除。");
   }
 
-  function removeFinishedTasks() {
-    const finishedTasks = tasks.filter((task) => task.status === "completed" || task.status === "failed" || task.status === "cancelled");
+  function removeFinishedTasks(targetTaskIds?: string[]) {
+    const targetIdSet = targetTaskIds?.length ? new Set(targetTaskIds) : null;
+    const finishedTasks = tasks.filter((task) =>
+      (!targetIdSet || targetIdSet.has(task.id)) &&
+      (task.status === "completed" || task.status === "failed" || task.status === "cancelled"));
     const finished = new Set(finishedTasks.map((task) => task.id));
     if (!finished.size) {
       setStatus("没有可清空的已结束任务。");
@@ -6952,7 +6955,7 @@ function RightPanel({
   tasks: TaskRecord[];
   onCancelTask: (taskId: string) => void;
   onDeleteTask: (taskId: string) => void;
-  onDeleteFinishedTasks: () => void;
+  onDeleteFinishedTasks: (taskIds?: string[]) => void;
   onMaskEdit: (nodeId: string) => void;
   onParamChange: (nodeId: string, key: string, value: unknown) => void;
   onRetryTask: (taskId: string) => void;
