@@ -1417,6 +1417,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("这张图已受保护"), true);
     assert.equal(workbenchUiSource.includes("可清理"), true);
     assert.equal(workbenchUiSource.includes('"需复查"'), true);
+    assert.equal(workbenchUiSource.includes("reviewCount"), true);
+    assert.equal(workbenchUiSource.includes("imageManagerQualityTag"), true);
+    assert.equal(workbenchUiSource.includes("不可交付"), true);
+    assert.equal(workbenchUiSource.includes("质检未过"), true);
     assert.equal(workbenchUiSource.includes("搜索文件、来源、质检、保护状态"), true);
     assert.equal(taskCenterSource.includes("搜索节点、模型、质检、请求、错误、状态"), true);
     assert.equal(generatedImagesRouteSource.includes("requestIds"), true);

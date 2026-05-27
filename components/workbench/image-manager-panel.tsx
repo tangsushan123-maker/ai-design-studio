@@ -320,10 +320,11 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
           </div>
           <ShieldCheck className="size-4 shrink-0 text-[#74e3c5]" />
         </div>
-        <div className="grid grid-cols-5 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5">
           <ImageManagerStat label="图片" value={String(stats.totalCount)} />
           <ImageManagerStat label="占用" value={stats.totalBytes ? formatFileSize(stats.totalBytes) : "未记录"} />
           <ImageManagerStat label="保护" value={String(stats.protectedCount)} />
+          <ImageManagerStat label="复查" value={String(stats.reviewCount)} tone={stats.reviewCount ? "warning" : "muted"} />
           <ImageManagerStat label="可清理" value={String(stats.cleanableCount)} tone={stats.cleanableCount ? "cleanable" : "muted"} />
           <ImageManagerStat label="回收站" value={String(stats.trashCount)} tone={stats.trashCount ? "cleanable" : "muted"} />
         </div>
@@ -484,7 +485,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
                   </div>
                 </button>
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {imageManagerTags(protection).map((tag) => (
+                  {imageManagerTags(image, protection).map((tag) => (
                     <span className={imageManagerTagClass(tag.tone)} key={tag.label}>{tag.label}</span>
                   ))}
                 </div>
@@ -588,8 +589,8 @@ function EmptyPanel({ description, icon, title }: { description: string; icon: R
   );
 }
 
-function ImageManagerStat({ label, value, tone = "normal" }: { label: string; value: string; tone?: "normal" | "cleanable" | "muted" }) {
-  const valueTone = tone === "cleanable" ? "text-[#ffe1a0]" : tone === "muted" ? "text-white/46" : "text-white/82";
+function ImageManagerStat({ label, value, tone = "normal" }: { label: string; value: string; tone?: "normal" | "cleanable" | "warning" | "muted" }) {
+  const valueTone = tone === "cleanable" ? "text-[#ffe1a0]" : tone === "warning" ? "text-[#ffb4a8]" : tone === "muted" ? "text-white/46" : "text-white/82";
   return (
     <div className="rounded-[14px] border border-white/10 bg-white/[0.035] px-2 py-2 text-center">
       <div className={`truncate text-[11px] font-semibold ${valueTone}`}>{value}</div>
@@ -621,6 +622,7 @@ function imageManagerStats<TImage extends ImageManagerImage>(rows: Array<{ image
       if (row.protection.usedByNodes) stats.nodeReferencedCount += 1;
       if (row.protection.isLayerPack) stats.layerPackCount += 1;
       if (row.protection.isTrashed) stats.trashCount += 1;
+      if (!row.protection.isTrashed && imageManagerNeedsReview(row.image)) stats.reviewCount += 1;
       return stats;
     },
     {
@@ -632,13 +634,14 @@ function imageManagerStats<TImage extends ImageManagerImage>(rows: Array<{ image
       nodeReferencedCount: 0,
       layerPackCount: 0,
       trashCount: 0,
+      reviewCount: 0,
     },
   );
 }
 
 function imageManagerMatchesFilter(image: ImageManagerImage, protection: ImageDeletionProtection, filter: ImageManagerFilter) {
   if (protection.isTrashed) return filter === "回收站";
-  if (filter === "需复查") return image.qualityCheck?.deliverability === "needs_review" || image.qualityCheck?.deliverability === "not_ready" || Boolean(image.qualityCheck?.status && image.qualityCheck.status !== "passed");
+  if (filter === "需复查") return imageManagerNeedsReview(image);
   if (filter === "收藏") return protection.isFavorite;
   if (filter === "项目素材") return protection.isProjectAsset;
   if (filter === "节点引用") return protection.usedByNodes > 0;
@@ -656,8 +659,21 @@ function imageManagerTitle(image: ImageManagerImage) {
   return image.fileName?.split("/").pop() || image.id || "图片";
 }
 
-function imageManagerTags(protection: ImageDeletionProtection) {
-  const tags: Array<{ label: string; tone: "safe" | "info" | "warning" | "muted" }> = [];
+function imageManagerNeedsReview(image: ImageManagerImage) {
+  return image.qualityCheck?.deliverability === "needs_review" || image.qualityCheck?.deliverability === "not_ready" || Boolean(image.qualityCheck?.status && image.qualityCheck.status !== "passed");
+}
+
+function imageManagerQualityTag(image: ImageManagerImage) {
+  if (!imageManagerNeedsReview(image)) return null;
+  if (image.qualityCheck?.deliverability === "not_ready") return "不可交付";
+  if (image.qualityCheck?.status && image.qualityCheck.status !== "passed") return "质检未过";
+  return "需复查";
+}
+
+function imageManagerTags(image: ImageManagerImage, protection: ImageDeletionProtection) {
+  const tags: Array<{ label: string; tone: "safe" | "info" | "warning" | "danger" | "muted" }> = [];
+  const qualityTag = imageManagerQualityTag(image);
+  if (qualityTag && !protection.isTrashed) tags.push({ label: qualityTag, tone: "danger" });
   if (protection.isFavorite) tags.push({ label: "收藏", tone: "warning" });
   if (protection.isTrashed) tags.push({ label: "回收站", tone: "warning" });
   if (protection.isProjectAsset) tags.push({ label: "项目素材", tone: "safe" });
@@ -667,8 +683,9 @@ function imageManagerTags(protection: ImageDeletionProtection) {
   return tags;
 }
 
-function imageManagerTagClass(tone: "safe" | "info" | "warning" | "muted") {
+function imageManagerTagClass(tone: "safe" | "info" | "warning" | "danger" | "muted") {
   if (tone === "safe") return "rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[9px] text-[#adf8e5]";
+  if (tone === "danger") return "rounded-full border border-[#ff6b5f]/22 bg-[#ff6b5f]/10 px-2 py-0.5 text-[9px] text-[#ffc1b8]";
   if (tone === "warning") return "rounded-full border border-[#ffd166]/18 bg-[#ffd166]/10 px-2 py-0.5 text-[9px] text-[#ffe1a0]";
   if (tone === "info") return "rounded-full border border-white/12 bg-white/[0.06] px-2 py-0.5 text-[9px] text-white/54";
   return "rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[9px] text-white/38";
