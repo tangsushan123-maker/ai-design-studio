@@ -150,9 +150,14 @@ describe("Workbench history search", () => {
       prompt: "高端商业海报",
       quality: "4k",
       qualityCheck: {
+        actions: ["重新生成：增加安全边距"],
+        clarityCheckLabel: "细节密度偏低",
         deliverability: "not_ready",
+        fourKCheckItems: [{ label: "4K 尺寸", detail: "长边不足 3840", passed: false }],
+        importantContentLabel: "重要信息待核对",
         issues: ["Logo 边缘偏软"],
         status: "white_border",
+        textDetailLabel: "小字和二维码需放大复查",
       },
       sourceNodeName: "主视觉节点",
       sourceRequestId: "req_abcdef123456",
@@ -164,6 +169,11 @@ describe("Workbench history search", () => {
     assert.equal(historyMatchesQuery(image, "Logo 边缘"), true);
     assert.equal(historyMatchesQuery(image, "不可交付"), true);
     assert.equal(historyMatchesQuery(image, "白边"), true);
+    assert.equal(historyMatchesQuery(image, "安全边距"), true);
+    assert.equal(historyMatchesQuery(image, "细节密度"), true);
+    assert.equal(historyMatchesQuery(image, "4K 尺寸"), true);
+    assert.equal(historyMatchesQuery(image, "二维码需放大复查"), true);
+    assert.equal(historyMatchesQuery(image, "重要信息"), true);
     assert.equal(historyMatchesQuery(image, "1536 × 864px"), true);
     assert.equal(historySearchText(image).includes("abcdef123456"), true);
   });

@@ -21,6 +21,7 @@ export type DeliveryReviewImage = {
       label: string;
       passed: boolean;
     }>;
+    importantContentLabel?: string;
     issues?: string[];
     label?: string;
     status?: string;

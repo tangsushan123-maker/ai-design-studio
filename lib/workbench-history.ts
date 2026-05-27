@@ -59,7 +59,12 @@ export function historySearchText(image: HistorySearchImage) {
     image.qualityCheck?.deliverabilityLabel,
     image.qualityCheck?.status,
     image.qualityCheck?.deliverability,
+    image.qualityCheck?.clarityCheckLabel,
+    image.qualityCheck?.textDetailLabel,
+    image.qualityCheck?.importantContentLabel,
     ...(image.qualityCheck?.issues || []),
+    ...(image.qualityCheck?.actions || []),
+    ...(image.qualityCheck?.fourKCheckItems || []).flatMap((item) => [item.label, item.detail, item.passed ? "通过" : "复查"]),
     ...qualitySearchAliases(image),
   ]
     .filter(Boolean)
