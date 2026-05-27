@@ -1228,7 +1228,9 @@ describe("Workflow canvas performance", () => {
     assert.equal(workbenchSource.includes("mr-1 text-[11px] text-white/38"), true);
     assert.equal(workbenchSource.includes("apple-caption min-w-0 truncate text-[9.5px]"), false);
     assert.equal(workbenchSource.includes("apple-caption shrink-0 text-[11px]"), true);
-    assert.equal(workbenchSource.includes('truncate text-[10px] text-white/38">{textReferenceRoleDescription'), true);
+    assert.equal(workbenchSource.includes('truncate text-[11px] text-white/38">{textReferenceRoleDescription'), true);
+    assert.equal(workbenchSource.includes("apple-pill px-2 py-1 text-[11px]"), true);
+    assert.equal(workbenchSource.includes("apple-button max-w-full truncate rounded-full px-2.5 py-1 text-[10px]"), false);
 
     assert.equal(globalsSource.includes(".node-workflow-flow.is-performance-mode .apple-node-card"), true);
     assert.equal(globalsSource.includes("backdrop-filter: none"), true);

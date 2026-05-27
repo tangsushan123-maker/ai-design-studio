@@ -6492,7 +6492,7 @@ function ChatComposer({
             value={displayPrompt}
           />
           {apiSetupMessage ? (
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] leading-4 text-[#ffe1a0]">
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] leading-5 text-[#ffe1a0]">
               <span>{apiSetupMessage}</span>
               <Link className="rounded-full border border-[#ffe1a0]/24 bg-[#ffe1a0]/10 px-2 py-0.5 font-semibold text-[#ffe1a0] hover:bg-[#ffe1a0]/16" href="/settings">
                 去设置
@@ -6503,7 +6503,7 @@ function ChatComposer({
             <div className="mt-2 flex flex-wrap gap-1.5">
               {starterPrompts.map((item) => (
                 <button
-                  className="apple-button max-w-full truncate rounded-full px-2.5 py-1 text-[10px] text-white/58 hover:text-white/82"
+                  className="apple-button max-w-full truncate rounded-full px-2.5 py-1 text-[11px] text-white/58 hover:text-white/82"
                   key={item}
                   onClick={() => onPromptChange(item)}
                   type="button"
@@ -6728,10 +6728,10 @@ function ChatComposer({
                 <div className="px-2 pb-2 pt-1">
                   <div className="text-[12px] font-semibold text-white/86">项目资产调用</div>
                   <div className="mt-1 flex flex-wrap gap-1.5">
-                    <span className="apple-pill px-2 py-1 text-[10px]">色卡 {brandSummary.colorCount}</span>
-                    <span className="apple-pill px-2 py-1 text-[10px]">Logo {brandSummary.logoCount}</span>
-                    <span className="apple-pill px-2 py-1 text-[10px]">IP {brandSummary.ipCount}</span>
-                    <span className="apple-pill px-2 py-1 text-[10px]">码 {brandSummary.qrCount}</span>
+                    <span className="apple-pill px-2 py-1 text-[11px]">色卡 {brandSummary.colorCount}</span>
+                    <span className="apple-pill px-2 py-1 text-[11px]">Logo {brandSummary.logoCount}</span>
+                    <span className="apple-pill px-2 py-1 text-[11px]">IP {brandSummary.ipCount}</span>
+                    <span className="apple-pill px-2 py-1 text-[11px]">码 {brandSummary.qrCount}</span>
                   </div>
                 </div>
                 <div className="space-y-1">
@@ -6746,7 +6746,7 @@ function ChatComposer({
                         <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/58">{item.icon}</span>
                         <span className="min-w-0">
                           <span className="block text-[12px] font-semibold text-white/86">{item.label}</span>
-                          <span className="apple-menu-meta mt-0.5 block truncate text-[10px]">{item.description}</span>
+                          <span className="apple-menu-meta mt-0.5 block truncate text-[11px]">{item.description}</span>
                         </span>
                       </span>
                       <span className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition ${brandUsage[item.key] ? "bg-[#74e3c5]" : "bg-white/12"}`}>
@@ -6756,7 +6756,7 @@ function ChatComposer({
                   ))}
                 </div>
                 {brandSummary.missing.length ? (
-                  <div className="mt-2 rounded-[14px] border border-[#ffe1a0]/14 bg-[#ffe1a0]/8 px-3 py-2 text-[10px] leading-4 text-[#ffe1a0]/82">
+                  <div className="mt-2 rounded-[14px] border border-[#ffe1a0]/14 bg-[#ffe1a0]/8 px-3 py-2 text-[11px] leading-5 text-[#ffe1a0]/82">
                     缺：{brandSummary.missing.slice(0, 4).join(" / ")}
                   </div>
                 ) : null}
@@ -7392,7 +7392,7 @@ function NodeInspectorPanel({
           {activeInspectorAction === "运行节点" ? "启动中" : "运行"}
         </button>
       ) : node.data.kind !== "image_input" ? (
-        <div className="rounded-[14px] border border-white/10 bg-white/[0.035] px-3 py-2 text-[10px] leading-5 text-white/44">
+        <div className="rounded-[14px] border border-white/10 bg-white/[0.035] px-3 py-2 text-[11px] leading-5 text-white/44">
           在底部输入框写需求，按 Enter 或点“运行”执行当前节点。
         </div>
       ) : null}
@@ -7461,7 +7461,7 @@ function TextReferenceInspector({
   if (!items.length) {
     return (
       <InspectorSection title="图片参考">
-        <div className="rounded-[16px] border border-white/10 bg-white/[0.035] px-3 py-2 text-[10px] leading-5 text-white/44">
+        <div className="rounded-[16px] border border-white/10 bg-white/[0.035] px-3 py-2 text-[11px] leading-5 text-white/44">
           可把画布图片连到“图片参考”，最多 5 张；用于结构、风格、主体、产品或 Logo。
         </div>
       </InspectorSection>
@@ -7470,7 +7470,7 @@ function TextReferenceInspector({
 
   return (
     <InspectorSection title={`图片参考 ${items.length}/${maxTextReferenceImages}`}>
-      <div className="rounded-[16px] border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-3 py-2 text-[10px] leading-5 text-[#adf8e5]">
+      <div className="rounded-[16px] border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-3 py-2 text-[11px] leading-5 text-[#adf8e5]">
         第 1 张可做主参考；想 1:1 复刻就在需求里写“保持版式/配色/轻微修改”。
       </div>
       <div className="space-y-2">
@@ -7479,12 +7479,12 @@ function TextReferenceInspector({
             <ImageFrame alt={item.label} className="rounded-[12px]" fit="cover" image={item.image} preserveRatio={false} variant="thumbnail" style={{ height: 46, width: 46 }} />
             <div className="min-w-0">
               <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="truncate text-[10px] font-semibold text-white/70">参考 {index + 1}</span>
-                <span className="truncate text-[10px] text-white/38">{textReferenceRoleDescription(item.role)}</span>
+                <span className="truncate text-[11px] font-semibold text-white/70">参考 {index + 1}</span>
+                <span className="truncate text-[11px] text-white/38">{textReferenceRoleDescription(item.role)}</span>
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_64px] gap-1.5">
                 <select
-                  className="apple-input h-8 min-w-0 rounded-[12px] px-2 text-[10px] text-white/70"
+                  className="apple-input h-8 min-w-0 rounded-[12px] px-2 text-[11px] text-white/70"
                   onChange={(event) => onChange(index, { role: normalizeTextReferenceRole(event.target.value, item.role) })}
                   title="参考图用途"
                   value={item.role}
@@ -7494,7 +7494,7 @@ function TextReferenceInspector({
                   ))}
                 </select>
                 <select
-                  className="apple-input h-8 rounded-[12px] px-2 text-[10px] text-white/70"
+                  className="apple-input h-8 rounded-[12px] px-2 text-[11px] text-white/70"
                   onChange={(event) => onChange(index, { weight: normalizeTextReferenceWeight(event.target.value, item.weight) })}
                   title="参考强度"
                   value={item.weight}
