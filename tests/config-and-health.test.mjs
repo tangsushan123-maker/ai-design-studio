@@ -4,7 +4,7 @@ import { access, readFile } from "node:fs/promises";
 import { toApiError } from "../lib/api-errors.ts";
 import { defaultOpenAIConfig, providerPresets } from "../lib/openai-defaults.ts";
 import { parseHealthMode, skippedImageCheck } from "../lib/openai-health.ts";
-import { buildDeliverySummary, buildQualityReviewSummary } from "../lib/workbench-delivery.ts";
+import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualityBadgeLabel, qualityDeliveryTone, qualityTone } from "../lib/workbench-delivery.ts";
 
 describe("OpenAI defaults", () => {
   it("keeps the official provider aligned with shared defaults", () => {
@@ -18,6 +18,23 @@ describe("OpenAI defaults", () => {
 });
 
 describe("Workbench delivery helpers", () => {
+  it("labels image size and quality states consistently", () => {
+    assert.equal(imageSizeLabel({ outputSize: { width: 3840, height: 2160 } }), "3840 × 2160px");
+    assert.equal(imageSizeLabel({ ratio: { width: 16, height: 9 } }), "16:9");
+    assert.equal(qualityBadgeLabel({ quality: "4k", outputSize: { width: 1536, height: 864 } }), "未达4K");
+    assert.equal(qualityBadgeLabel({ qualityCheck: { label: "1536×864px｜建议复查" } }), "建议复查");
+    assert.equal(qualityBadgeLabel({ qualityCheck: { status: "white_border" } }), "有白边");
+  });
+
+  it("keeps quality tones aligned with delivery severity", () => {
+    assert.equal(qualityTone({ qualityCheck: { status: "passed" } }).includes("#74e3c5"), true);
+    assert.equal(qualityTone({ qualityCheck: { status: "white_border" } }).includes("#ff6b5f"), true);
+    assert.equal(qualityTone({ qualityCheck: { status: "composition_risk" } }).includes("#ffe1a0"), true);
+    assert.equal(qualityDeliveryTone("ready").includes("#74e3c5"), true);
+    assert.equal(qualityDeliveryTone("not_ready").includes("#ff6b5f"), true);
+    assert.equal(qualityDeliveryTone("needs_review").includes("#ffd166"), true);
+  });
+
   it("builds a delivery summary with file, size, status, issues, and prompt", () => {
     const summary = buildDeliverySummary(
       {
@@ -548,7 +565,7 @@ describe("Image-to-image creative redesign", () => {
 
 describe("Text-to-image references", () => {
   it("supports structured reference images for text-to-image only", async () => {
-    const [promptSource, routeSource, workbenchSource, optionsSource, creativeBriefSource, creativeBriefRouteSource, queueSource] = await Promise.all([
+    const [promptSource, routeSource, workbenchSource, optionsSource, creativeBriefSource, creativeBriefRouteSource, queueSource, deliverySource] = await Promise.all([
       readFile(new URL("../lib/prompt.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/generate-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
@@ -556,6 +573,7 @@ describe("Text-to-image references", () => {
       readFile(new URL("../lib/creative-brief.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/creative-brief/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/image-request-queue.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/workbench-delivery.ts", import.meta.url), "utf8"),
     ]);
 
     assert.equal(optionsSource.includes("export type TextReferenceRole"), true);
@@ -677,8 +695,8 @@ describe("Text-to-image references", () => {
     assert.equal(workbenchSource.includes("resolveTextReferenceInputs"), true);
     assert.equal(workbenchSource.includes("appendTextReferenceImages"), true);
     assert.equal(workbenchSource.includes("连接到“图片参考”入口的图片作为素材参考参与生成"), true);
-    assert.equal(workbenchSource.includes('status === "composition_risk" || status === "blurred_padding"'), true);
-    assert.equal(workbenchSource.includes('status === "white_border" || status === "blurred_padding" || status === "failed" || status === "empty"'), true);
+    assert.equal(deliverySource.includes('status === "composition_risk" || status === "blurred_padding"'), true);
+    assert.equal(deliverySource.includes('status === "size_insufficient" || status === "ratio_mismatch" || status === "suspected_stretch" || status === "white_border" || status === "failed" || status === "empty"'), true);
     assert.equal(workbenchSource.includes("const imageTaskTimeoutMs = 35 * 60 * 1000"), true);
     assert.equal(workbenchSource.includes("const imageTaskStuckMs = 12 * 60 * 1000"), true);
     assert.equal(workbenchSource.includes("通常需要 1-5 分钟，比例重试会更久"), true);
