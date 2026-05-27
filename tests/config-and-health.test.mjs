@@ -520,6 +520,10 @@ describe("Settings model management", () => {
     assert.equal(settingsSource.includes("nodeRuntimeStatus"), true);
     assert.equal(settingsSource.includes("已满足 >=20.9"), true);
     assert.equal(settingsSource.includes("需升级到 >=20.9"), true);
+    assert.equal(settingsSource.includes("apple-status-success rounded-full border px-2 py-0.5 text-[11px]"), true);
+    assert.equal(settingsSource.includes("apple-status-danger rounded-full border px-2 py-0.5 text-[11px]"), true);
+    assert.equal(settingsSource.includes("apple-pill-accent px-2 py-0.5 text-[11px]"), true);
+    assert.equal(settingsSource.includes("apple-pill px-2 py-1 text-[10px]"), false);
     assert.equal(settingsSource.includes("healthKeyLabel"), true);
     assert.equal(settingsSource.includes("formatServerTime"), true);
     assert.equal(settingsRouteSource.includes("settingsErrorMessage"), true);

@@ -970,11 +970,11 @@ function DetectionSummary({ result }: { result: DetectionResult | null }) {
       {result.models?.length ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
           {result.models.slice(0, 12).map((model) => (
-            <span className={model.testStatus === "passed" ? "apple-pill-accent px-2 py-1 text-[10px]" : "apple-pill px-2 py-1 text-[10px]"} key={model.id}>
+            <span className={model.testStatus === "passed" ? "apple-pill-accent px-2 py-1 text-[11px]" : "apple-pill px-2 py-1 text-[11px]"} key={model.id}>
               {model.id}
             </span>
           ))}
-          {result.models.length > 12 ? <span className="apple-pill px-2 py-1 text-[10px]">+{result.models.length - 12}</span> : null}
+          {result.models.length > 12 ? <span className="apple-pill px-2 py-1 text-[11px]">+{result.models.length - 12}</span> : null}
         </div>
       ) : null}
       {result.issues?.length ? (
@@ -1005,7 +1005,7 @@ function DiagnosisItem({ issue }: { issue: DetectionIssue }) {
     <div className="rounded-[12px] border border-[#ff8b80]/20 bg-[#ff453a]/10 p-3 text-xs leading-5 text-white/64">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-[#ffb4a8]">{stepLabel(issue.step)}</span>
-        {issue.status ? <span className="apple-pill px-2 py-0.5 text-[10px]">HTTP {issue.status}</span> : null}
+        {issue.status ? <span className="apple-pill px-2 py-0.5 text-[11px]">HTTP {issue.status}</span> : null}
       </div>
       <div className="mt-1 break-words text-white/52">{issue.requestUrl || "未发起请求"}</div>
       <div className="mt-1 text-white/72">{issue.message}</div>
@@ -1075,12 +1075,12 @@ function ModelGroup({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-semibold text-white/84">{model.label || model.id}</span>
-                  {activeModel === model.id ? <span className="apple-pill-accent px-2 py-0.5 text-[10px]">默认</span> : null}
+                  {activeModel === model.id ? <span className="apple-pill-accent px-2 py-0.5 text-[11px]">默认</span> : null}
                 </div>
                 <div className="apple-caption mt-1 truncate">{model.id}</div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <ModelStatus model={model} />
-                  {model.lastTestedAt ? <span className="apple-pill px-2 py-0.5 text-[10px]">{new Date(model.lastTestedAt).toLocaleString("zh-CN")}</span> : null}
+                  {model.lastTestedAt ? <span className="apple-pill px-2 py-0.5 text-[11px]">{new Date(model.lastTestedAt).toLocaleString("zh-CN")}</span> : null}
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
@@ -1107,9 +1107,9 @@ function ModelGroup({
 }
 
 function ModelStatus({ model }: { model: ModelCatalogItem }) {
-  if (model.testStatus === "passed") return <span className="apple-status-success rounded-full border px-2 py-0.5 text-[10px]">可用</span>;
-  if (model.testStatus === "failed") return <span className="apple-status-danger rounded-full border px-2 py-0.5 text-[10px]">失败</span>;
-  return <span className="apple-status-neutral rounded-full border px-2 py-0.5 text-[10px]">未测</span>;
+  if (model.testStatus === "passed") return <span className="apple-status-success rounded-full border px-2 py-0.5 text-[11px]">可用</span>;
+  if (model.testStatus === "failed") return <span className="apple-status-danger rounded-full border px-2 py-0.5 text-[11px]">失败</span>;
+  return <span className="apple-status-neutral rounded-full border px-2 py-0.5 text-[11px]">未测</span>;
 }
 
 function healthKeyLabel(health: HealthResponse | null, maskedApiKey: string) {
