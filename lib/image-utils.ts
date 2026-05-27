@@ -10,8 +10,9 @@ export type PixelSize = {
   height: number;
 };
 
-export type ExactFitMode = "smart_outpaint" | "crop" | "center_crop" | "safe_full_bleed" | "safe_no_crop" | "pad";
+export type ExactFitMode = "smart_outpaint" | "crop" | "center_crop" | "safe_full_bleed" | "strict_full_bleed" | "safe_no_crop" | "pad";
 export type ImageVariantKind = "thumbnail" | "preview";
+export type GeneratedStorageKind = "results" | "uploads" | "masks" | "layer-packs" | "cache";
 
 const generatedDir = path.join(process.cwd(), "public", "generated");
 const imageVariantSpecs: Record<ImageVariantKind, { longEdge: number; quality: number }> = {
@@ -32,7 +33,17 @@ export function getGeneratedPath(fileName: string) {
 }
 
 export function getGeneratedUrl(fileName: string) {
-  return `/generated/${fileName}`;
+  return `/generated/${toPublicPath(fileName)}`;
+}
+
+export function getGeneratedProjectRelativeDir(projectId?: string, kind: GeneratedStorageKind = "results") {
+  const safeProjectId = sanitizeFilePart(projectId || "");
+  if (!safeProjectId) return kind;
+  return path.join("projects", safeProjectId, kind);
+}
+
+export function getGeneratedProjectRelativePath(projectId: string | undefined, kind: GeneratedStorageKind, fileName: string) {
+  return path.join(getGeneratedProjectRelativeDir(projectId, kind), fileName);
 }
 
 export function getImageVariantFileName(fileName: string, kind: ImageVariantKind) {
@@ -63,6 +74,8 @@ export async function saveImageBuffer(
   options?: {
     ratioLabel?: string;
     quality?: QualityValue;
+    projectId?: string;
+    storageKind?: GeneratedStorageKind;
   },
 ) {
   await ensureGeneratedDir();
@@ -74,8 +87,10 @@ export async function saveImageBuffer(
   ].join("");
   const ratioText = sanitizeFilePart(options?.ratioLabel || "design");
   const qualityText = options?.quality || "standard";
-  const fileName = `design-${dateText}-${ratioText}-${qualityText}-${randomUUID().slice(0, 8)}.${extension}`;
+  const baseFileName = `design-${dateText}-${ratioText}-${qualityText}-${randomUUID().slice(0, 8)}.${extension}`;
+  const fileName = getGeneratedProjectRelativePath(options?.projectId, options?.storageKind || "results", baseFileName);
   const fullPath = getGeneratedPath(fileName);
+  await mkdir(path.dirname(fullPath), { recursive: true });
   await writeBufferAtomic(fullPath, buffer);
   const variants = await ensureImageVariants(fileName, buffer).catch(() => ({
     thumbnailUrl: getImageVariantApiUrl(getGeneratedUrl(fileName), "thumbnail"),
@@ -101,6 +116,7 @@ async function writeBufferAtomic(filePath: string, buffer: Buffer) {
 export async function saveImageMetadata(fileName: string, metadata: Record<string, unknown>) {
   await ensureGeneratedDir();
   const metadataPath = getGeneratedPath(`${fileName}.json`);
+  await mkdir(path.dirname(metadataPath), { recursive: true });
   await writeJsonAtomic(metadataPath, {
     ...metadata,
     fileName,
@@ -217,20 +233,23 @@ export function getOpenAIImageSize(ratio: PixelSize) {
 
 export function getOpenAIRequestedSize(ratio: PixelSize, quality: QualityValue, model: string) {
   if (/gpt-image-2/i.test(model)) {
-    const target = getTargetPixels(ratio, quality);
-    const ratioValue = target.width / Math.max(1, target.height);
-    const isSquare = Math.abs(ratioValue - 1) < 0.08;
-    const isWide169 = Math.abs(ratioValue - 16 / 9) < 0.12;
-    const isTall916 = Math.abs(ratioValue - 9 / 16) < 0.12;
-
-    if (quality === "4k" && isWide169) return "3840x2160";
-    if (quality === "4k" && isTall916) return "2160x3840";
-    if (quality === "2k" && isSquare) return "2048x2048";
-    if (quality === "2k" && isWide169) return "2048x1152";
-    if (quality === "2k" && isTall916) return "1152x2048";
+    const target = getOpenAIConstrainedTargetPixels(ratio, quality);
+    return `${target.width}x${target.height}`;
   }
 
   return getOpenAIImageSize(ratio);
+}
+
+export function getOpenAIConstrainedTargetPixels(ratio: PixelSize, quality: QualityValue): PixelSize {
+  const ratioValue = clampRatioForGptImage2(ratio.width / Math.max(1, ratio.height));
+  const longEdge = quality === "4k" ? 3840 : quality === "2k" ? 2048 : 1536;
+  const maxPixels = quality === "4k" ? 8_294_400 : Number.POSITIVE_INFINITY;
+  const base = targetFromLongEdgeAndRatio(longEdge, ratioValue);
+  const pixelScale = Math.min(1, Math.sqrt(maxPixels / Math.max(1, base.width * base.height)));
+  return normalizeGptImage2Size({
+    width: base.width * pixelScale,
+    height: base.height * pixelScale,
+  });
 }
 
 export function getTargetPixels(ratio: PixelSize, quality: QualityValue): PixelSize {
@@ -272,6 +291,45 @@ export function getTargetPixels(ratio: PixelSize, quality: QualityValue): PixelS
   };
 }
 
+function targetFromLongEdgeAndRatio(longEdge: number, ratioValue: number) {
+  if (ratioValue >= 1) {
+    return {
+      width: longEdge,
+      height: longEdge / ratioValue,
+    };
+  }
+  return {
+    width: longEdge * ratioValue,
+    height: longEdge,
+  };
+}
+
+function normalizeGptImage2Size(size: PixelSize): PixelSize {
+  const width = floorToMultipleOf16(Math.min(3840, Math.max(16, size.width)));
+  const height = floorToMultipleOf16(Math.min(3840, Math.max(16, size.height)));
+  const ratio = Math.max(width, height) / Math.max(1, Math.min(width, height));
+  const pixels = width * height;
+  if (ratio <= 3 && pixels >= 655_360 && pixels <= 8_294_400) return { width, height };
+  if (pixels > 8_294_400) {
+    const scale = Math.sqrt(8_294_400 / pixels);
+    return normalizeGptImage2Size({ width: width * scale, height: height * scale });
+  }
+  if (pixels < 655_360) {
+    const scale = Math.sqrt(655_360 / Math.max(1, pixels));
+    return normalizeGptImage2Size({ width: width * scale, height: height * scale });
+  }
+  return { width, height };
+}
+
+function floorToMultipleOf16(value: number) {
+  return Math.max(16, Math.floor(value / 16) * 16);
+}
+
+function clampRatioForGptImage2(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  return Math.max(1 / 3, Math.min(3, value));
+}
+
 export async function processToTarget(
   inputBuffer: Buffer,
   ratio: PixelSize,
@@ -303,6 +361,11 @@ async function processToExactCanvas(
   };
   const preparedInput = await removeSuspiciousWhiteBorder(inputBuffer);
 
+  if (fitMode === "strict_full_bleed") {
+    await assertNativeAspectRatioForExactCanvas(preparedInput, normalizedTarget);
+    return highQualityFillResize(preparedInput, normalizedTarget, format);
+  }
+
   if (fitMode === "pad") {
     return buildOutpaintedCanvas(preparedInput, normalizedTarget, format);
   }
@@ -320,6 +383,49 @@ async function processToExactCanvas(
   }
 
   return highQualityResize(preparedInput, normalizedTarget, format, "cover", "attention");
+}
+
+export class NativeAspectRatioMismatchError extends Error {
+  readonly code = "NATIVE_ASPECT_RATIO_MISMATCH";
+  readonly sourceRatio: number;
+  readonly targetRatio: number;
+  readonly ratioDelta: number;
+
+  constructor(sourceRatio: number, targetRatio: number, ratioDelta: number) {
+    super(`模型返回图片比例与目标比例不一致，已阻止裁切兜底。source=${sourceRatio.toFixed(5)}, target=${targetRatio.toFixed(5)}, delta=${ratioDelta.toFixed(4)}`);
+    this.name = "NativeAspectRatioMismatchError";
+    this.sourceRatio = sourceRatio;
+    this.targetRatio = targetRatio;
+    this.ratioDelta = ratioDelta;
+  }
+}
+
+export function isNativeAspectRatioMismatchError(error: unknown): error is NativeAspectRatioMismatchError {
+  return Boolean(error && typeof error === "object" && (error as NativeAspectRatioMismatchError).code === "NATIVE_ASPECT_RATIO_MISMATCH");
+}
+
+async function assertNativeAspectRatioForExactCanvas(inputBuffer: Buffer, target: PixelSize) {
+  const metadata = await sharp(inputBuffer).metadata();
+  const sourceWidth = metadata.width || 0;
+  const sourceHeight = metadata.height || 0;
+  if (!sourceWidth || !sourceHeight) return;
+  const sourceRatio = sourceWidth / Math.max(1, sourceHeight);
+  const targetRatio = target.width / Math.max(1, target.height);
+  const ratioDelta = Math.abs(sourceRatio - targetRatio) / Math.max(0.0001, targetRatio);
+  if (ratioDelta > 0.012) {
+    throw new NativeAspectRatioMismatchError(sourceRatio, targetRatio, ratioDelta);
+  }
+}
+
+async function highQualityFillResize(inputBuffer: Buffer, target: PixelSize, format: "png" | "jpg" = "png") {
+  const pipeline = sharp(inputBuffer)
+    .resize(target.width, target.height, {
+      fit: "fill",
+      withoutEnlargement: false,
+      kernel: sharp.kernel.lanczos3,
+    });
+
+  return finalizeHighQuality(pipeline, format);
 }
 
 async function buildOutpaintedCanvas(inputBuffer: Buffer, target: PixelSize, format: "png" | "jpg" = "png") {
@@ -839,7 +945,11 @@ export async function readPublicImageUrl(url: string) {
 }
 
 function sanitizeFilePart(value: string) {
-  return value.replace(/[^a-zA-Z0-9]+/g, "x").replace(/^x|x$/g, "").toLowerCase();
+  return value.replace(/[^a-zA-Z0-9_-]+/g, "x").replace(/^x|x$/g, "").toLowerCase();
+}
+
+function toPublicPath(value: string) {
+  return value.split(path.sep).join("/");
 }
 
 function sampleBackgroundColors(data: Buffer, width: number, height: number) {

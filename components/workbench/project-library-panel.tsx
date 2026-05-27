@@ -69,6 +69,7 @@ export function ProjectLibraryPanel({
               >
                 <button className="flex w-full items-center gap-2 text-left" onClick={() => onOpen(project.id)} type="button">
                   {project.coverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- Project covers are local generated files; raw img avoids optimizer round-trips.
                     <img alt="" className="size-12 rounded-xl border border-white/10 object-cover" decoding="async" loading="lazy" src={project.coverUrl} />
                   ) : (
                     <span className="flex size-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.055] text-white/42">

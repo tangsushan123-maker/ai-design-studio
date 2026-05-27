@@ -11,7 +11,7 @@ export function toApiError(error: unknown, fallback: string) {
   if (/502|bad gateway|gateway timeout|econnreset|etimedout|timeout|fetch failed|upstream/i.test(message)) {
     return {
       status: 502,
-      message: "图片模型服务暂时不可用，可能是 API 代理或上游模型超时。请稍后重试，或在 API 配置里换一个更稳定/更快的图片模型。",
+      message: `图片模型服务暂时不可用，可能是 API 代理或上游模型超时。真实原因：${safeMessage(message)}。请稍后重试，或在 API 配置里换一个更稳定/更快的图片模型。`,
     };
   }
 

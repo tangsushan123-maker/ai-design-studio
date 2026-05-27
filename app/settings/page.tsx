@@ -155,6 +155,16 @@ export default function SettingsPage() {
       .catch(() => setStatus({ type: "error", message: "读取失败" }));
   }, []);
 
+  function markConfigDirty(message = "已修改，需重新检测") {
+    setDetectionResult(null);
+    setLastModelTest(null);
+    setSupportsModelsList(false);
+    setSupportsResponses(false);
+    setSupportsChatCompletions(false);
+    setSupportsImageGeneration(false);
+    setStatus({ type: "idle", message });
+  }
+
   function applySettings(data: SettingsResponse) {
     const nextProvider = findProviderPreset(inferProviderId(data.providerId || customProvider.id, data.providerSiteUrl, data.apiBaseUrl));
     const nextSiteUrl = data.websiteUrl || data.providerSiteUrl || nextProvider.siteUrl || siteFromUrl(data.apiBaseUrl);
@@ -502,6 +512,7 @@ export default function SettingsPage() {
                       const nextProvider = findProviderPreset(inferProviderId(providerId, nextSiteUrl, apiBaseUrl));
                       setProviderSiteUrl(nextSiteUrl);
                       if (!advancedUrl) setApiBaseUrl(inferApiUrl(nextSiteUrl, nextProvider));
+                      markConfigDirty();
                     }}
                     placeholder="https://yostoken.top"
                   />
@@ -517,7 +528,10 @@ export default function SettingsPage() {
                     placeholder={maskedApiKey ? "留空保留当前 Key" : "sk-..."}
                     type="password"
                     value={apiKey}
-                    onChange={(event) => setApiKey(event.target.value)}
+                    onChange={(event) => {
+                      setApiKey(event.target.value);
+                      markConfigDirty("Key 已修改，需重新检测");
+                    }}
                   />
                   <span className="mt-2 block text-xs text-white/42">{maskedApiKey || "未配置"}</span>
                 </label>
@@ -545,11 +559,17 @@ export default function SettingsPage() {
                     className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
                     disabled={!advancedUrl}
                     value={displayedApiBaseUrl}
-                    onChange={(event) => setApiBaseUrl(event.target.value)}
+                    onChange={(event) => {
+                      setApiBaseUrl(event.target.value);
+                      markConfigDirty();
+                    }}
                   />
                 </label>
                 <label className="mt-7 flex h-10 items-center gap-2 text-sm text-white/64">
-                  <input className="size-4 accent-[#7cf0cf]" checked={advancedUrl} onChange={(event) => setAdvancedUrl(event.target.checked)} type="checkbox" />
+                  <input className="size-4 accent-[#7cf0cf]" checked={advancedUrl} onChange={(event) => {
+                    setAdvancedUrl(event.target.checked);
+                    markConfigDirty();
+                  }} type="checkbox" />
                   完整 URL
                 </label>
               </div>
@@ -644,7 +664,7 @@ export default function SettingsPage() {
                 <StatusRow detail={maskedApiKey || "未配置"} label="Key" state={maskedApiKey ? "success" : "idle"} />
                 <StatusRow detail={supportsModelsList ? "支持" : "未确认"} label="模型列表" state={supportsModelsList ? "success" : "idle"} />
                 <StatusRow detail={[supportsResponses ? "Responses" : "", supportsChatCompletions ? "Chat" : ""].filter(Boolean).join(" / ") || "未确认"} label="文本接口" state={supportsResponses || supportsChatCompletions ? "success" : "idle"} />
-                <StatusRow detail={supportsImageGeneration ? "支持" : "未确认"} label="图片生成" state={supportsImageGeneration ? "success" : "idle"} />
+                <StatusRow detail={supportsImageGeneration ? "支持" : "未通过 / 未开通"} label="图片生成" state={supportsImageGeneration ? "success" : "error"} />
                 <StatusRow detail={`${passedImageModels.length} 个`} label="首页图片模型" state={passedImageModels.length ? "success" : "idle"} />
               </div>
             </Panel>

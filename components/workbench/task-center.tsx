@@ -17,6 +17,9 @@ type TaskCenterImage = {
 
 export type TaskCenterTask = {
   id: string;
+  requestId?: string;
+  projectId?: string;
+  projectName?: string;
   nodeName: string;
   type: string;
   model?: string;
@@ -36,10 +39,14 @@ export type TaskCenterTask = {
   resultOnCanvas?: boolean;
   progress?: number;
   progressLabel?: string;
+  backendRunState?: "waiting" | "active" | "finished" | "failed" | "cancelled";
+  lastHeartbeatAt?: number;
   deferred?: boolean;
   materialType?: string;
   targetSize?: string;
 };
+
+type TaskMachinePhase = "queued" | "model" | "saving" | "verifying" | "completed" | "needs_review" | "failed" | "cancelled" | "stuck";
 
 export function TaskCenter({
   onCancel,
@@ -85,17 +92,22 @@ export function TaskCenter({
   const visibleTimelineTasks = timelineTasks.slice(0, visibleCount);
   const finishedCount = tasks.filter(isFinishedTask).length;
   const runningCount = tasks.filter((task) => !isDeferredQueuedTask(task) && (task.status === "queued" || task.status === "running" || task.status === "saving")).length;
+  const successCount = tasks.filter((task) => !taskIsPartialSuccess(task) && ((task.status === "completed" && task.resultOnCanvas) || taskHasVisibleResult(task))).length;
+  const failedCount = tasks.filter((task) => task.status === "failed" && !taskHasAnyResult(task)).length;
+  const cancelledCount = tasks.filter((task) => task.status === "cancelled").length;
   const attentionTasks = visibleTimelineTasks.filter((task) =>
-    task.status === "failed" ||
+    (task.status === "failed" && !taskHasAnyResult(task)) ||
+    taskIsPartialSuccess(task) ||
     task.status === "cancelled" ||
     isTaskPossiblyStuck(task) ||
     (task.status === "completed" && !task.resultOnCanvas));
   const attentionIds = new Set(attentionTasks.map((task) => task.id));
   const runningTasks = visibleTimelineTasks.filter((task) =>
     !attentionIds.has(task.id) && (task.status === "queued" || task.status === "running" || task.status === "saving"));
-  const completedTasks = visibleTimelineTasks.filter((task) => task.status === "completed" && task.resultOnCanvas);
+  const completedTasks = visibleTimelineTasks.filter((task) => !attentionIds.has(task.id) && ((task.status === "completed" && task.resultOnCanvas) || taskHasVisibleResult(task)));
   const attentionCount = timelineTasks.filter((task) =>
-    task.status === "failed" ||
+    (task.status === "failed" && !taskHasAnyResult(task)) ||
+    taskIsPartialSuccess(task) ||
     task.status === "cancelled" ||
     isTaskPossiblyStuck(task) ||
     (task.status === "completed" && !task.resultOnCanvas)).length;
@@ -106,14 +118,16 @@ export function TaskCenter({
     const previewImages = resultImages.length ? resultImages.slice(0, 2) : task.inputs?.[0] ? [task.inputs[0]] : [];
     const previewImage = previewImages[0] || null;
     const canStop = task.status === "running" || task.status === "saving" || (task.status === "queued" && !task.deferred);
-    const canRetry = (task.status !== "completed" || !task.resultOnCanvas) && !canStop;
+    const visibleResult = taskHasVisibleResult(task);
+    const canRetry = !visibleResult && (task.status !== "completed" || !task.resultOnCanvas) && !canStop;
     const elapsedMs = (task.endedAt || now) - task.startedAt;
     const modelMs = task.modelDurationMs || (task.requestStartedAt && (task.status === "running" || task.status === "saving") ? now - task.requestStartedAt : undefined);
     const saveMs = task.saveDurationMs || (task.saveStartedAt && task.status === "saving" ? now - task.saveStartedAt : undefined);
     const outputsCount = task.resultCount || task.outputs?.length || (task.result ? 1 : 0);
     const stageLabel = task.stage ? taskStageText(task.stage) : taskStatusLabel(task.status);
-    const statusText = taskStatusText(task, stuck, stageLabel);
-    const progressText = taskProgressText(task, stuck, outputsCount, stageLabel);
+    const machinePhase = taskMachinePhase(task, stuck, visibleResult);
+    const statusText = taskStatusText(task, stuck, stageLabel, visibleResult, machinePhase);
+    const progressText = taskProgressText(task, stuck, outputsCount, stageLabel, visibleResult, machinePhase);
     const showDetailedTiming = task.status === "running" || task.status === "saving" || stuck;
 
     return (
@@ -166,11 +180,15 @@ export function TaskCenter({
             <div className="truncate text-[11px] text-white/56">
               {progressText}
             </div>
+            <TaskPhaseRail phase={machinePhase} />
             <div className="apple-caption mt-1 grid grid-cols-2 gap-x-2 gap-y-1 text-white/42">
               <span className="truncate">开始 {formatGeneratedAt(new Date(task.startedAt).toISOString())}</span>
               <span className="text-right">总耗时 {formatDuration(elapsedMs)}</span>
               {showDetailedTiming && modelMs ? <span className="truncate">模型 {formatDuration(modelMs)}</span> : null}
               {showDetailedTiming && saveMs ? <span className="text-right">保存 {formatDuration(saveMs)}</span> : null}
+              {task.projectName || task.projectId ? <span className="truncate">项目 {task.projectName || shortTaskRequestId(task.projectId || "")}</span> : null}
+              {task.requestId ? <span className="truncate">请求 {shortTaskRequestId(task.requestId)}</span> : null}
+              {task.backendRunState ? <span className="text-right">进程 {taskRunStateLabel(task.backendRunState)}</span> : null}
             </div>
             {task.error ? <div className="apple-caption mt-1 truncate text-[#ffb4a8]">{task.error}</div> : null}
           </div>
@@ -187,10 +205,14 @@ export function TaskCenter({
               {task.status === "queued" ? "运行" : "重试"}
             </button>
           ) : null}
-          <button className="apple-button flex items-center gap-1 px-3 py-1.5 text-[11px]" onClick={() => onDelete(task.id)} type="button">
-            <Trash2 className="size-3" />
-            删除记录
-          </button>
+          {canStop ? (
+            <span className="apple-caption px-2 text-white/38">停止后可删除</span>
+          ) : (
+            <button className="apple-button flex items-center gap-1 px-3 py-1.5 text-[11px]" onClick={() => onDelete(task.id)} type="button">
+              <Trash2 className="size-3" />
+              删除记录
+            </button>
+          )}
         </div>
       </article>
     );
@@ -202,7 +224,10 @@ export function TaskCenter({
         <div className="min-w-0">
           <div className="apple-section-title">任务状态</div>
           <div className="apple-caption mt-0.5 truncate">
-            {runningCount ? `${runningCount} 个进行中` : "暂无进行中"}
+            {runningCount ? `${runningCount} 个后台进程` : "暂无后台进程"}
+            {successCount ? ` · 成功 ${successCount}` : ""}
+            {failedCount ? ` · 失败 ${failedCount}` : ""}
+            {cancelledCount ? ` · 已停 ${cancelledCount}` : ""}
             {deferredTasks.length ? ` · ${deferredTasks.length} 个待执行` : ""}
             {attentionCount ? ` · ${attentionCount} 个需处理` : ""}
           </div>
@@ -268,11 +293,7 @@ function isFinishedTask(task: TaskCenterTask) {
 }
 
 function taskImageLabel(image: TaskCenterImage) {
-  if (image.materialType === "无文字背景") return "无文字背景";
-  if (image.materialType === "文字透明PNG") return "文字透明 PNG";
   if (image.materialType) return image.materialType;
-  if (image.mode?.includes("无文字背景")) return "无文字背景";
-  if (image.mode?.includes("文字透明")) return "文字透明 PNG";
   return image.fileName?.split("/").pop() || image.id || "任务预览";
 }
 
@@ -290,43 +311,163 @@ function taskStageText(stage: string) {
   return labels[stage] || stage;
 }
 
+function shortTaskRequestId(id: string) {
+  const clean = id.replace(/^req_/, "");
+  if (clean.length <= 8) return clean;
+  return clean.slice(-8);
+}
+
+function taskRunStateLabel(state: NonNullable<TaskCenterTask["backendRunState"]>) {
+  const labels: Record<NonNullable<TaskCenterTask["backendRunState"]>, string> = {
+    waiting: "等待",
+    active: "运行",
+    finished: "已完成",
+    failed: "异常",
+    cancelled: "已停",
+  };
+  return labels[state] || state;
+}
+
 function taskCardClass(task: TaskCenterTask, stuck: boolean) {
-  if (task.status === "failed" || stuck) return "border-[#ff6b5f]/20 bg-[#ff6b5f]/[0.045]";
+  if (taskHasVisibleResult(task)) return "border-[#74e3c5]/18 bg-[#74e3c5]/[0.035]";
+  if (taskIsPartialSuccess(task)) return "border-[#ffd166]/22 bg-[#ffd166]/[0.045]";
+  if (task.status === "failed") return "border-[#ff6b5f]/20 bg-[#ff6b5f]/[0.045]";
+  if (stuck) return "border-[#ffd166]/22 bg-[#ffd166]/[0.045]";
   if (task.status === "completed") return "border-[#74e3c5]/18 bg-[#74e3c5]/[0.035]";
   if (task.status === "cancelled") return "border-white/10 bg-white/[0.035]";
   return "border-white/10 bg-white/[0.04]";
 }
 
 function taskStatusClass(task: TaskCenterTask, stuck: boolean) {
-  if (task.status === "failed" || stuck) return "bg-[#ff6b5f]/14 text-[#ffb4a8]";
+  if (taskHasVisibleResult(task)) return "bg-[#74e3c5]/12 text-[#adf8e5]";
+  if (taskIsPartialSuccess(task)) return "bg-[#ffd166]/14 text-[#ffe1a0]";
+  if (task.status === "failed") return "bg-[#ff6b5f]/14 text-[#ffb4a8]";
+  if (stuck) return "bg-[#ffd166]/14 text-[#ffe1a0]";
   if (task.status === "completed") return "bg-[#74e3c5]/12 text-[#adf8e5]";
   if (task.status === "cancelled") return "bg-white/[0.08] text-white/58";
   return "bg-white/[0.08] text-white/58";
 }
 
 function taskProgressClass(task: TaskCenterTask, stuck: boolean) {
-  if (task.status === "failed" || stuck) return "bg-[#ff6b5f]";
+  if (taskHasVisibleResult(task)) return "bg-[#74e3c5]";
+  if (taskIsPartialSuccess(task)) return "bg-[#ffd166]";
+  if (task.status === "failed") return "bg-[#ff6b5f]";
+  if (stuck) return "bg-[#ffd166]";
   if (task.status === "completed") return "bg-[#74e3c5]";
   if (task.status === "cancelled") return "bg-white/32";
   return "bg-[#8fa7ff]";
 }
 
-function taskStatusText(task: TaskCenterTask, stuck: boolean, stageLabel: string) {
+function taskStatusText(task: TaskCenterTask, stuck: boolean, stageLabel: string, visibleResult = false, phase = taskMachinePhase(task, stuck, visibleResult)) {
+  const phaseLabel = taskPhaseLabel(phase);
+  if (phaseLabel) return phaseLabel;
+  if (visibleResult) return "成功";
+  if (taskIsPartialSuccess(task)) return "部分成功";
+  if (task.status === "completed" && taskHasAnyResult(task) && !task.resultOnCanvas) return "待展示";
   if (task.status === "completed") return "成功";
   if (task.status === "failed") return "失败";
   if (task.status === "cancelled") return "已停止";
-  if (stuck) return "可能卡住";
+  if (stuck) return "运行较久";
   if (task.deferred && task.status === "queued") return "待运行";
   return stageLabel;
 }
 
-function taskProgressText(task: TaskCenterTask, stuck: boolean, outputsCount: number, stageLabel: string) {
+function taskProgressText(task: TaskCenterTask, stuck: boolean, outputsCount: number, stageLabel: string, visibleResult = false, phase = taskMachinePhase(task, stuck, visibleResult)) {
+  if (visibleResult) return "结果已显示在画布，任务记录已自动修正";
+  if (taskIsPartialSuccess(task)) {
+    return "已有可用输出，但结果未完整通过；请预览后决定是否重试";
+  }
   if (task.status === "completed") {
     if (task.resultOnCanvas) return "结果已显示在画布，稍后自动收起";
     return outputsCount > 0 ? "已生成结果，但画布未找到结果节点，请检查" : "任务成功，但没有可查看结果，请检查";
   }
   if (task.status === "failed") return task.progressLabel || "任务失败，可重试或删除记录";
   if (task.status === "cancelled") return "已停止，可重试或删除记录";
-  if (stuck) return "超过 3 分钟无结果，可停止或重试";
+  if (stuck) return "运行较久，仍在等服务端结果；可继续等待、停止或稍后核验";
+  if (phase === "verifying") return task.progressLabel || "正在核验任务记录、结果库和画布节点";
   return task.progressLabel || stageLabel;
+}
+
+function taskMachinePhase(task: TaskCenterTask, stuck: boolean, visibleResult = taskHasVisibleResult(task)): TaskMachinePhase {
+  if (task.status === "cancelled") return "cancelled";
+  if (visibleResult) return "completed";
+  if (taskIsPartialSuccess(task)) return "needs_review";
+  if (task.status === "failed") return taskHasAnyResult(task) ? "needs_review" : "failed";
+  if (task.status === "completed") return taskHasAnyResult(task) && !task.resultOnCanvas ? "needs_review" : "completed";
+  if (stuck) return "stuck";
+  if (task.status === "saving" || task.stage === "saving") return "saving";
+  if (task.stage === "quality") return "verifying";
+  if (task.status === "running" || task.stage === "preparing" || task.stage === "generating") return "model";
+  if (task.status === "queued" || task.stage === "queued") return "queued";
+  return "verifying";
+}
+
+function taskPhaseLabel(phase: TaskMachinePhase) {
+  const labels: Record<TaskMachinePhase, string> = {
+    queued: "排队",
+    model: "模型处理中",
+    saving: "保存中",
+    verifying: "结果核验",
+    completed: "成功",
+    needs_review: "需处理",
+    failed: "失败",
+    cancelled: "已停止",
+    stuck: "运行较久",
+  };
+  return labels[phase];
+}
+
+const phaseRailSteps: Array<{ key: "queued" | "model" | "saving" | "verifying" | "completed"; label: string }> = [
+  { key: "queued", label: "排队" },
+  { key: "model", label: "模型" },
+  { key: "saving", label: "保存" },
+  { key: "verifying", label: "核验" },
+  { key: "completed", label: "完成" },
+];
+
+function TaskPhaseRail({ phase }: { phase: TaskMachinePhase }) {
+  const activeIndex = taskPhaseIndex(phase);
+  return (
+    <div className="mt-2 grid grid-cols-5 gap-1" aria-label={`任务阶段：${taskPhaseLabel(phase)}`}>
+      {phaseRailSteps.map((step, index) => (
+        <span
+          className={`h-1.5 rounded-full ${taskPhaseStepClass(phase, index, activeIndex)}`}
+          key={step.key}
+          title={step.label}
+        />
+      ))}
+    </div>
+  );
+}
+
+function taskPhaseIndex(phase: TaskMachinePhase) {
+  if (phase === "queued") return 0;
+  if (phase === "model" || phase === "stuck") return 1;
+  if (phase === "saving") return 2;
+  if (phase === "verifying" || phase === "needs_review") return 3;
+  return 4;
+}
+
+function taskPhaseStepClass(phase: TaskMachinePhase, index: number, activeIndex: number) {
+  if (phase === "failed") return index <= activeIndex ? "bg-[#ff6b5f]" : "bg-white/[0.08]";
+  if (phase === "cancelled") return index <= activeIndex ? "bg-white/32" : "bg-white/[0.08]";
+  if (phase === "needs_review" || phase === "stuck") return index <= activeIndex ? "bg-[#ffd166]" : "bg-white/[0.08]";
+  if (phase === "completed") return "bg-[#74e3c5]";
+  if (index < activeIndex) return "bg-[#74e3c5]/75";
+  if (index === activeIndex) return "bg-[#8fa7ff]";
+  return "bg-white/[0.08]";
+}
+
+function taskHasVisibleResult(task: TaskCenterTask) {
+  return Boolean(task.resultOnCanvas && (task.outputs?.length || task.result?.url));
+}
+
+function taskHasAnyResult(task: TaskCenterTask) {
+  return Boolean(task.outputs?.length || task.result?.url || task.resultCount);
+}
+
+function taskIsPartialSuccess(task: TaskCenterTask) {
+  const outputsCount = task.outputs?.length || (task.result?.url ? 1 : 0) || task.resultCount || 0;
+  if (task.status === "failed" && outputsCount > 0) return true;
+  return false;
 }

@@ -98,6 +98,7 @@ const materialPriority = [
 
 const noInventPolicy = "禁止在没有来源素材时编造机构名称、电话、地址、Logo、二维码、医生照片、真实活动信息。缺失信息只能标记为待补充。";
 const missingMaterialsWarning = "当前缺少品牌素材，建议后续补充 logo、电话、地址、品牌色、真实照片，以便生成正式版本。";
+const layoutTheoryPolicy = "版式设计依据：使用明确栅格、对齐轴、统一间距、清晰分组和阅读动线；Logo 默认宽度 6%-10%、最大 12%，放品牌区或安全角，不压主标题。";
 
 export function buildCreativeBriefFallback(input: CreativeBriefInput, aiPatch?: Partial<CreativeBrief> | null): CreativeBrief {
   const mode = input.mode;
@@ -227,7 +228,7 @@ function buildImageUnderstanding(input: CreativeBriefInput, industry: string, de
     layoutStructure: `以上传图版式为参考，先保留主体、信息层级和画面比例；当前记录：${imageSize}。`,
     coreTextsAndSellingPoints: "只保留参考图中真实可见或用户明确输入的核心文字；不新增电话、地址、机构名。",
     keepElements: ["参考图主题", "主体构图", "可识别文字", "已有品牌元素", "主要色彩倾向"],
-    optimizations: ["强化主标题层级", "减少信息拥挤", "提升远距离识别", "统一色彩和留白", "让主体更完整"],
+    optimizations: ["强化主标题层级", "减少信息拥挤", "提升远距离识别", "统一色彩和留白", "建立栅格对齐和分组", "让主体更完整"],
     creativeDirections: ["专业清晰改版", "更强视觉传播改版"],
   };
 }
@@ -369,6 +370,7 @@ function sharedPromptRules(missingMaterials: string[]) {
     missingMaterials.length ? missingMaterialsWarning : "",
     "缺少真实素材时只做灵感初稿，不要伪造正式品牌落版。",
     "画面中不要出现假电话、假地址、假 Logo、假二维码、虚构医生姓名或虚构机构背书。",
+    layoutTheoryPolicy,
     "商业成熟度：信息层级最多 3 层，卖点 3-5 个以内，Logo 默认只占画面宽度 6%-12%，主体/标题/卖点必须在中心安全区内。",
     "输出完整性：不要裁切标题、主体、人物、产品、Logo 或底部信息；不要使用模糊补边、磨砂补边或居中缩小图。",
   ].filter(Boolean).join("\n");

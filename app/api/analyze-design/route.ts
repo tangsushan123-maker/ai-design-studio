@@ -52,7 +52,8 @@ export async function POST(request: Request) {
           ],
         },
       ],
-    });
+      max_output_tokens: 1600,
+    }, { timeout: 9000 });
 
     const raw = response.output_text || "";
     const diagnosis = safeParseDiagnosis(raw);

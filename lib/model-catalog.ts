@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { toApiError } from "./api-errors";
 import { getOpenAIConfig, updateModelCache, upsertModelCacheItem } from "./local-config";
 import { createOpenAIClient as createConfiguredOpenAIClient } from "./openai";
+import { runQueuedImageModelRequestWithRetry } from "./image-request-queue";
 import { findProviderPreset, inferModelCapabilities, type ModelCapability, type ModelCatalogItem, type ModelWireApi } from "./openai-defaults";
 
 export type ModelTestKind = Extract<ModelCapability, "text" | "image" | "video">;
@@ -14,7 +15,7 @@ export type ModelTestResult = {
 };
 
 const textTimeoutMs = 20_000;
-const imageTimeoutMs = 35_000;
+const imageTimeoutMs = 180_000;
 const videoTimeoutMs = 20_000;
 
 export async function refreshModelCatalog() {
@@ -160,15 +161,19 @@ function buildTextTestAttempts(openai: OpenAI, model: string, preferredWireApi: 
 
 async function testImageModel(openai: OpenAI, model: string): Promise<ModelTestResult> {
   try {
-    await openai.images.generate({
-      model,
-      prompt: "A small green square on a clean white background. Minimal test image.",
-      size: "1024x1024",
-      quality: "medium",
-      n: 1,
-    }, {
-      timeout: imageTimeoutMs,
-    });
+    await runQueuedImageModelRequestWithRetry(
+      { label: `图片模型测试/${model}` },
+      () => openai.images.generate({
+        model,
+        prompt: "A small green square on a clean white background. Minimal test image.",
+        size: "1024x1024",
+        quality: "medium",
+        n: 1,
+      }, {
+        timeout: imageTimeoutMs,
+        maxRetries: 0,
+      }),
+    );
     return { ok: true, kind: "image", model, message: "图片模型可用。" };
   } catch (error) {
     const apiError = toApiError(error, "图片模型不可用。");

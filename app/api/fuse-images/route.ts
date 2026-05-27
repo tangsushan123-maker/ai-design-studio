@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { toFile } from "openai/uploads";
+import sharp from "sharp";
 import { toApiError } from "@/lib/api-errors";
 import type { AspectRatioValue, QualityValue } from "@/lib/design-options";
 import {
+  getOpenAIImageSize,
   getOpenAIRequestedSize,
   getTargetPixels,
+  isNativeAspectRatioMismatchError,
   parseDataUrl,
   processToTarget,
   readPublicImageUrl,
@@ -13,26 +16,32 @@ import {
   saveImageBuffer,
   saveImageMetadata,
 } from "@/lib/image-utils";
-import { getImageModel } from "@/lib/model-config";
+import { resolveImageModel, supportsConfigurableImageInputFidelity } from "@/lib/model-config";
 import { getOpenAI } from "@/lib/openai";
+import { imageRequestOptions, runQueuedImageModelRequestWithRetry } from "@/lib/image-request-queue";
 import { assertSupportedImage, getImageRatio } from "@/lib/request-guards";
 import { parseProtectionContext } from "@/lib/design-production";
 import { buildFuseImagesPrompt } from "@/lib/prompt";
 import { inspectImageQuality } from "@/lib/image-quality";
+import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
 import { stat } from "node:fs/promises";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const startedAt = Date.now();
+  let taskTrace: TaskRunTrace | null = null;
 
   try {
     const formData = await request.formData();
+    taskTrace = taskTraceFromFormData(formData, "fuse_images", "/api/fuse-images");
+    await recordTaskRunStarted(taskTrace);
     const promptText = String(formData.get("prompt") ?? "");
     const first = await readImageInput(formData, "imageA", "sourceUrlA", "subject-source.png");
     const second = await readImageInput(formData, "imageB", "sourceUrlB", "scene-source.png");
 
     if (!first || !second) {
+      await recordTaskRunFailed(taskTrace, "请先连接图1主体来源和图2场景来源。");
       return NextResponse.json({ error: "请先连接图1主体来源和图2场景来源。" }, { status: 400 });
     }
 
@@ -41,7 +50,7 @@ export async function POST(request: Request) {
     const customHeight = Number(formData.get("customHeight") || 0) || undefined;
     const quality = String(formData.get("quality") ?? "standard") as QualityValue;
     const keepOriginalRatio = String(formData.get("keepOriginalRatio") ?? "") === "true";
-    const model = String(formData.get("model") ?? "").trim() || getImageModel();
+    const imageModel = resolveImageModel(formData.get("imageModel"), formData.get("model"));
     const protectionContext = parseProtectionContext(formData.get("protectionContext"));
     const brandReferenceImages = await readBrandReferenceImages(formData);
     const originalRatio = await getImageRatio(second.buffer);
@@ -51,8 +60,12 @@ export async function POST(request: Request) {
       : ratioLabel(aspectRatio, customWidth, customHeight);
     const outputSize = getTargetPixels(ratio, quality);
     const generatedAt = new Date().toISOString();
+    const preparedSceneCanvas = !keepOriginalRatio && ratioMismatch(originalRatio, ratio)
+      ? await prepareFusionTargetCanvas(second.buffer, outputSize)
+      : null;
 
-    const promptVariants = (["natural", "advertising"] as const).map((compositeVariant) => buildFuseImagesPrompt({
+    const targetCount = wantsMultipleImageOutputs(promptText) ? 2 : 1;
+    const promptVariants = (["natural", "advertising"] as const).slice(0, targetCount).map((compositeVariant) => buildFuseImagesPrompt({
       task: "fuse",
       userPrompt: promptText,
       aspectRatioLabel: outputRatioLabel,
@@ -66,25 +79,40 @@ export async function POST(request: Request) {
     const responsePrompt = promptVariants.join("\n\n---\n\n");
 
     const openai = getOpenAI();
-    const createFuseRequest = async (requestPrompt: string) => {
+    const createFuseRequestWithSize = async (requestPrompt: string, requestSize: string) => {
       const imageA = await toFile(first.buffer, first.fileName, { type: first.mimeType });
-      const imageB = await toFile(second.buffer, second.fileName, { type: second.mimeType });
+      const imageB = await toFile(preparedSceneCanvas || second.buffer, preparedSceneCanvas ? "target-ratio-scene.png" : second.fileName, { type: preparedSceneCanvas ? "image/png" : second.mimeType });
       const brandFiles = await Promise.all(brandReferenceImages.map((item, index) => toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType })));
-      const result = await openai.images.edit({
-        model,
-        image: [imageA, imageB, ...brandFiles] as never,
-        input_fidelity: "high" as const,
-        output_format: "png" as const,
-        background: "opaque" as const,
-        prompt: requestPrompt,
-        size: (keepOriginalRatio ? "auto" : getOpenAIRequestedSize(ratio, quality, model)) as "1024x1024",
-        quality: quality === "standard" ? "medium" : "high",
-        n: 1,
-      });
+      const result = await runQueuedImageModelRequestWithRetry(
+        { label: `AI合成/${imageModel}` },
+        () => openai.images.edit({
+          model: imageModel,
+          image: [imageA, imageB, ...brandFiles] as never,
+          ...(supportsConfigurableImageInputFidelity(imageModel) ? { input_fidelity: "high" as const } : {}),
+          output_format: "png" as const,
+          background: "opaque" as const,
+          prompt: requestPrompt,
+          size: requestSize as "1024x1024",
+          quality: quality === "standard" ? "medium" : "high",
+          n: 1,
+        }, imageRequestOptions()),
+      );
       return {
         prompt: requestPrompt,
         items: result.data ?? [],
       };
+    };
+    const createFuseRequest = async (requestPrompt: string) => {
+      const requestedSize = keepOriginalRatio || preparedSceneCanvas ? "auto" : getOpenAIRequestedSize(ratio, quality, imageModel);
+      try {
+        return await createFuseRequestWithSize(requestPrompt, requestedSize);
+      } catch (error) {
+        if (requestedSize === "auto" || !shouldRetryFuseSizeWithNativeFallback(error)) throw error;
+        return createFuseRequestWithSize(
+          buildFuseModelNativeSizeFallbackPrompt(requestPrompt, outputRatioLabel, outputSize),
+          getOpenAIImageSize(ratio),
+        );
+      }
     };
     const requests = promptVariants.map(createFuseRequest);
     const settledResults = await Promise.allSettled(requests);
@@ -98,38 +126,52 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "AI合成没有返回可用方案。" }, { status: 500 });
     }
 
-    const images = await Promise.all(
-      resultItems.slice(0, 2).map(async (item, index) => {
+    const processedSettled = await Promise.allSettled(
+      resultItems.slice(0, targetCount).map(async (item, index) => {
         const imagePrompt = item.prompt || promptVariants[index] || responsePrompt;
-        let final = await processFuseResult(item, imagePrompt, {
+        const processContext = {
           ratio,
           quality,
           outputSize,
           outputRatioLabel,
           protectionContext,
+        };
+        let lastRatioMismatchItem: { b64_json?: string | null; url?: string | null; prompt: string } | null = item;
+        let final = await processFuseResult(item, imagePrompt, processContext).catch((error) => {
+          if (isNativeAspectRatioMismatchError(error)) return null;
+          throw error;
         });
-        if (shouldRetryFuseQuality(final.qualityCheck)) {
-          const retryPrompt = buildFuseCompositionRetryPrompt(imagePrompt, outputRatioLabel, outputSize);
-          const retryResponse = await createFuseRequest(retryPrompt).catch(() => null);
-          const retryItem = retryResponse?.items?.[0]
-            ? { ...retryResponse.items[0], prompt: retryPrompt }
-            : null;
-          if (retryItem) {
-            const retry = await processFuseResult(retryItem, retryPrompt, {
-              ratio,
-              quality,
-              outputSize,
-              outputRatioLabel,
-              protectionContext,
-            }).catch(() => null);
-            if (retry && (!shouldRetryFuseQuality(retry.qualityCheck) || fuseRiskValue(retry.qualityCheck) < fuseRiskValue(final.qualityCheck))) {
-              final = retry;
+        if (!final || shouldRetryFuseQuality(final.qualityCheck)) {
+          for (let attempt = 1; attempt <= 2 && (!final || shouldRetryFuseQuality(final.qualityCheck)); attempt += 1) {
+            const retryPrompt = final
+              ? buildFuseCompositionRetryPrompt(imagePrompt, outputRatioLabel, outputSize)
+              : buildFuseNativeRatioRetryPrompt(imagePrompt, outputRatioLabel, outputSize);
+            const retryResponse = await createFuseRequest(retryPrompt).catch(() => null);
+            const retryItem = retryResponse?.items?.[0]
+              ? { ...retryResponse.items[0], prompt: retryPrompt }
+              : null;
+            if (retryItem) {
+              lastRatioMismatchItem = retryItem;
+              const retry = await processFuseResult(retryItem, retryPrompt, processContext).catch(() => null);
+              if (retry && (!final || !shouldRetryFuseQuality(retry.qualityCheck) || fuseRiskValue(retry.qualityCheck) < fuseRiskValue(final.qualityCheck))) {
+                final = retry;
+              }
             }
           }
+        }
+        if (!final && lastRatioMismatchItem) {
+          final = await processFuseResult(lastRatioMismatchItem, lastRatioMismatchItem.prompt || imagePrompt, processContext, {
+            allowSafeRatioFallback: true,
+          });
+        }
+        if (!final) {
+          throw new Error(`AI合成连续返回非 ${outputRatioLabel} 原生比例图片，已阻止裁切兜底。请重新运行。`);
         }
         const saved = await saveImageBuffer(final.processed, "png", {
           ratioLabel: outputRatioLabel,
           quality,
+          projectId: protectionContext.version?.projectId || taskTrace?.projectId,
+          storageKind: "results",
         });
         const savedStat = await stat(saved.path);
         const qualityCheck = await inspectImageQuality(saved.path, {
@@ -152,7 +194,7 @@ export async function POST(request: Request) {
           variant: index + 1,
           ratio,
           mode: "AI合成",
-          model,
+          model: imageModel,
           aspectRatio: outputRatioLabel,
           quality,
           generatedAt,
@@ -162,21 +204,38 @@ export async function POST(request: Request) {
           fileSizeBytes: savedStat.size,
           savedPath: saved.path,
           durationMs: Date.now() - startedAt,
-          projectId: protectionContext.version?.projectId,
+          projectId: protectionContext.version?.projectId || taskTrace?.projectId,
           protectionContext,
           version: protectionContext.version,
           nodeOperation: "fuse_images",
+          sourceTaskId: taskTrace?.taskId || taskTrace?.requestId?.replace(/^req_/, "task_"),
+          sourceRequestId: taskTrace?.requestId,
+          sourceNodeId: taskTrace?.nodeId,
+          sourceNodeName: taskTrace?.nodeName,
+          sourceNodeKind: taskTrace?.nodeKind,
         };
         await saveImageMetadata(saved.fileName, image);
         return image;
       }),
     );
+    const images = processedSettled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+    if (!images.length) {
+      const failed = processedSettled.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+      return NextResponse.json({ error: "AI合成后处理没有得到可用方案。" }, { status: 500 });
+    }
 
-    return NextResponse.json({ images, prompt: responsePrompt, model });
+    await recordTaskRunFinished(taskTrace, { outputs: images, model: imageModel, message: `AI合成完成，生成 ${images.length} 张。` });
+    return NextResponse.json({ ...taskRunResponseMeta(taskTrace, startedAt, images), images, prompt: responsePrompt, model: imageModel, imageModel });
   } catch (error) {
     const apiError = toApiError(error, "AI合成失败。");
+    await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
   }
+}
+
+function wantsMultipleImageOutputs(text: string) {
+  return /(?:两张|2张|两个|2个|双方案|多方案|多版|方案一|方案二|A\/B|AB|variants?)/i.test(text);
 }
 
 type FuseResultProcessContext = {
@@ -191,9 +250,13 @@ async function processFuseResult(
   item: { b64_json?: string | null; url?: string | null },
   prompt: string,
   context: FuseResultProcessContext,
+  options: { allowSafeRatioFallback?: boolean } = {},
 ) {
   const raw = await imageResultToBuffer(item.b64_json, item.url);
-  const processed = await processToTarget(raw, context.ratio, context.quality, "png", "safe_no_crop");
+  const processed = await processToTarget(raw, context.ratio, context.quality, "png", "strict_full_bleed").catch((error) => {
+    if (!options.allowSafeRatioFallback || !isNativeAspectRatioMismatchError(error)) throw error;
+    throw new Error(`模型返回比例不符合 ${context.outputRatioLabel}，系统已阻止裁切、拉伸、留白和磨砂补边兜底。`);
+  });
   const qualityCheck = await inspectImageQuality(processed, {
     quality: context.quality,
     ratio: context.ratio,
@@ -206,16 +269,91 @@ async function processFuseResult(
   return { processed, prompt, qualityCheck };
 }
 
-function buildFuseCompositionRetryPrompt(prompt: string, ratioText: string, target: { width: number; height: number }) {
+function buildFuseNativeRatioRetryPrompt(prompt: string, ratioText: string, target: { width: number; height: number }) {
+  const core = compactRetryPrompt(prompt);
   return [
-    prompt,
-    "",
-    "自动构图复查：上一版 AI 合成疑似主体、Logo、标题或边缘信息贴边/被裁。",
-    `目标画幅：${ratioText}，目标尺寸 ${target.width}×${target.height}。`,
-    "重新合成：full composition, complete subject visible, no cropping, zoom out, larger safe margins.",
-    "主体、头发/手脚、产品包装、Logo、二维码、标题和底部信息放入中心 76% 安全区；四周 16%-18% 只放背景和光影。",
-    "保持光影、接触阴影、透视和色温匹配。",
+    "Regenerate the composite with corrected native canvas.",
+    `Core request:\n${core}`,
+    `Target: ${ratioText}, ${target.width}x${target.height}.`,
+    "The subject from image 1 must be complete inside image 2 scene; subject/logo/title/QR/product edges cannot touch edges or be cropped.",
+    "Avoid another ratio, centered smaller image, blur/frosted padding, cropped subject.",
   ].join("\n");
+}
+
+function buildFuseCompositionRetryPrompt(prompt: string, ratioText: string, target: { width: number; height: number }) {
+  const core = compactRetryPrompt(prompt);
+  return [
+    "Regenerate the composite after composition QA failed.",
+    `Core request:\n${core}`,
+    `Target: ${ratioText}, ${target.width}x${target.height}.`,
+    "Full composition, complete subject visible, no cropping, zoom out, larger safe margins.",
+    "Place subject/hair/hands/feet/product/logo/QR/title/footer inside safe area; edges should be scene background and lighting only.",
+    "Keep lighting, contact shadow, perspective, color temperature, and edge softness matched.",
+  ].join("\n");
+}
+
+function buildFuseModelNativeSizeFallbackPrompt(prompt: string, ratioText: string, target: { width: number; height: number }) {
+  const core = compactRetryPrompt(prompt);
+  return [
+    "Generate the same composite with extra safe margins for system size adaptation.",
+    `Core request:\n${core}`,
+    `Final system output will be ${ratioText}, ${target.width}x${target.height}.`,
+    "Place subject/title/logo/product/QR safely away from edges and leave more natural scene background around them.",
+    "Avoid edge-touching important content, oversized subject, borders, blur/frosted padding, centered smaller image.",
+  ].join("\n");
+}
+
+function compactRetryPrompt(prompt: string, maxLength = 1600) {
+  const cleaned = prompt
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^(- )?(Avoid:|禁止|自动|模型尺寸兜底|Regenerate)/i.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (cleaned.length <= maxLength) return cleaned || prompt.slice(0, maxLength);
+  return `${cleaned.slice(0, maxLength).trim()}...`;
+}
+
+function shouldRetryFuseSizeWithNativeFallback(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /invalid.*size|unsupported.*size|size.*unsupported|size.*invalid|invalid_image_size|unsupported_image_size|尺寸.*不支持|不支持.*尺寸/i.test(message);
+}
+
+function ratioMismatch(a: { width: number; height: number }, b: { width: number; height: number }) {
+  const first = a.width / Math.max(1, a.height);
+  const second = b.width / Math.max(1, b.height);
+  return Math.abs(first - second) / Math.max(0.0001, second) > 0.012;
+}
+
+async function prepareFusionTargetCanvas(input: Buffer, target: { width: number; height: number }) {
+  const resized = await sharp(input)
+    .resize(target.width, target.height, {
+      fit: "inside",
+      withoutEnlargement: false,
+      kernel: sharp.kernel.lanczos3,
+    })
+    .png()
+    .toBuffer();
+  const meta = await sharp(resized).metadata();
+  const imageWidth = meta.width || target.width;
+  const imageHeight = meta.height || target.height;
+  return sharp({
+    create: {
+      width: target.width,
+      height: target.height,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 0 },
+    },
+  })
+    .composite([{
+      input: resized,
+      left: Math.max(0, Math.round((target.width - imageWidth) / 2)),
+      top: Math.max(0, Math.round((target.height - imageHeight) / 2)),
+    }])
+    .png({ compressionLevel: 6, palette: false })
+    .toBuffer();
 }
 
 function shouldRetryFuseQuality(qualityCheck: Awaited<ReturnType<typeof inspectImageQuality>>) {

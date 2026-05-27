@@ -68,6 +68,7 @@ export const providerPresets = [
     models: [
       { id: "gpt-5-mini", label: "GPT-5 mini", capabilities: ["text"], description: "默认分析模型。" },
       { id: "gpt-5.1", label: "GPT-5.1", capabilities: ["text"], description: "更强文本与分析模型，需账号支持。" },
+      { id: "gpt-image-2", label: "GPT Image 2", capabilities: ["image"], description: "优先图片模型；检测通过后用于更高清的生图、改图和画质增强。" },
       { id: "gpt-image-1", label: "GPT Image 1", capabilities: ["image"], description: "默认图片生成/编辑模型。" },
       { id: "gpt-image-1-mini", label: "GPT Image mini", capabilities: ["image"], description: "轻量图片模型，需服务商支持。" },
       { id: "sora-2", label: "Sora 2", capabilities: ["video"], description: "视频生成模型，需账号和接口支持。" },
@@ -93,6 +94,7 @@ export const providerPresets = [
     videoModel: "",
     models: [
       { id: "gpt-5.5", label: "gpt-5.5", capabilities: ["text"], description: "CCS 文本模型，Responses 测试通过后可用。" },
+      { id: "gpt-image-2", label: "gpt-image-2", capabilities: ["image"], description: "如中转站支持图片接口，测试通过后优先用于高清生图/改图。" },
       { id: "gpt-image-1", label: "gpt-image-1", capabilities: ["image"], description: "如中转站支持图片接口，测试通过后可在首页切换。" },
     ],
   },

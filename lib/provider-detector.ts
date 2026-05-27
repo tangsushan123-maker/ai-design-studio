@@ -161,9 +161,11 @@ export async function detectProvider(input: DetectorInput): Promise<ProviderDete
 
   const imageCandidates = uniqueStrings([
     input.manual?.imageModel,
+    "gpt-image-2",
     recommendedBeforeTests.imageModel,
     provider.imageModel,
     "gpt-image-1",
+    "gpt-image-1.5",
     "dall-e-3",
   ]).filter(Boolean);
   const imageProbeResult = await probeImageGeneration(bestBaseUrl, apiKey, imageCandidates, issues);
@@ -511,7 +513,7 @@ function buildPassedModels(input: {
 function recommendModels(models: ModelCatalogItem[], provider: ReturnType<typeof findProviderPreset>) {
   return {
     textModel: pickModel(models, "text", [provider.textModel, "gpt-5.5", "gpt-5-mini", "gpt-4o-mini"]),
-    imageModel: pickModel(models, "image", [provider.imageModel, "gpt-image-1", "dall-e-3"]),
+    imageModel: pickModel(models, "image", ["gpt-image-2", provider.imageModel, "gpt-image-1", "dall-e-3"]),
     videoModel: pickModel(models, "video", [provider.videoModel, "sora-2", "veo-3.1-generate-preview"]),
   };
 }
@@ -584,7 +586,9 @@ function issue(step: ProviderDetectionIssue["step"], requestUrl: string, status:
 function possibleCauses(status: number | undefined, message: string, step: ProviderDetectionIssue["step"]) {
   const lower = message.toLowerCase();
   if (status === 401 || status === 403 || /unauthorized|forbidden|invalid api key|incorrect api key|api key/.test(lower)) {
-    return ["API Key 错误", "Key 没有该接口权限", "中转站要求 Bearer Token"];
+    return step === "images"
+      ? ["Key 没有图片接口权限", "该中转站未开通图片生成", "图片模型需要单独购买或授权"]
+      : ["API Key 错误", "Key 没有该接口权限", "中转站要求 Bearer Token"];
   }
   if (status === 404 || /not found|route|endpoint/.test(lower)) {
     return step === "responses"
@@ -607,11 +611,13 @@ function possibleCauses(status: number | undefined, message: string, step: Provi
 function suggestions(status: number | undefined, message: string, step: ProviderDetectionIssue["step"], requestUrl: string) {
   const next = new Set<string>();
   if (!/\/v1\//.test(requestUrl) && !requestUrl.endsWith("/v1")) next.add("尝试把 API 地址改为带 /v1 的地址。");
-  if (status === 401 || status === 403) next.add("重新复制中转站后台生成的 Key，确认没有空格。");
+  if (status === 401 || status === 403) {
+    next.add(step === "images" ? "到中转站后台确认该 Key 是否开通图片生成权限。" : "重新复制中转站后台生成的 Key，确认没有空格。");
+  }
   if (status === 404) next.add("在手动高级配置里切换 /v1 或原始地址。");
   if (step === "responses") next.add("如果 Responses 失败，优先尝试 Chat Completions。");
   if (step === "chat_completions") next.add("确认中转站是否提供 OpenAI Chat Completions 兼容接口。");
-  if (step === "images") next.add("手动填写中转站后台显示的图片模型名，再单独测试。");
+  if (step === "images") next.add("手动填写中转站后台显示的图片模型名，再单独测试；如果仍是 401/403，需要换有图片权限的 Key。");
   if (/model|unsupported|does not exist/i.test(message)) next.add("从中转站后台复制准确模型名。");
   if (/balance|billing|quota|insufficient|credit/i.test(message)) next.add("检查余额、套餐和模型权限。");
   if (!next.size) next.add("打开手动高级配置，填写准确 API 地址和模型名后再测试。");

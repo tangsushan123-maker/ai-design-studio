@@ -328,11 +328,9 @@ function normalizeProjectKind(value: unknown, project?: StoredProject): NonNulla
 }
 
 function stripVolatileProjectState(project: StoredProject): StoredProject {
-  const {
-    activeStrategyPackage: _activeStrategyPackage,
-    activeStrategyMaterialId: _activeStrategyMaterialId,
-    ...stableProject
-  } = project as StoredProject & { activeStrategyPackage?: unknown; activeStrategyMaterialId?: unknown };
+  const stableProject = { ...project } as StoredProject & { activeStrategyPackage?: unknown; activeStrategyMaterialId?: unknown };
+  delete stableProject.activeStrategyPackage;
+  delete stableProject.activeStrategyMaterialId;
   return {
     ...stableProject,
     runs: Array.isArray(stableProject.runs) ? stableProject.runs : [],

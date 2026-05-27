@@ -10,6 +10,7 @@ export async function POST(request: Request) {
     const file = formData.get("image");
     const source = String(formData.get("source") || "upload");
     const materialType = String(formData.get("materialType") || "");
+    const projectId = String(formData.get("projectId") || "");
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "没有收到图片文件。" }, { status: 400 });
@@ -32,6 +33,8 @@ export async function POST(request: Request) {
     const saved = await saveImageBuffer(buffer, extension, {
       ratioLabel: materialType || "asset",
       quality: "standard",
+      projectId,
+      storageKind: file.name?.startsWith("mask-") ? "masks" : "uploads",
     });
     const [metadata, alphaCheck] = await Promise.all([
       readImageMetadata(buffer),
@@ -63,6 +66,7 @@ export async function POST(request: Request) {
       resourceFileName: saved.fileName,
       savedPath: saved.path,
       source,
+      projectId: projectId || undefined,
       materialType: materialType || undefined,
       alphaCheck,
     };
@@ -76,6 +80,7 @@ export async function POST(request: Request) {
       originalFileName: file.name,
       mimeType: file.type,
       uploadSource: source,
+      projectId: projectId || undefined,
       materialType: materialType || undefined,
       alphaCheck,
     });

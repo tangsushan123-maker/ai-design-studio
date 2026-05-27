@@ -60,6 +60,7 @@ export function ImageFrame({
       {failed ? (
         <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-[11px] text-white/42">图片不可用</div>
       ) : (
+        // eslint-disable-next-line @next/next/no-img-element -- Workbench images include local, generated, and blob-like URLs that should bypass Next optimization.
         <img
           src={src}
           alt={alt}

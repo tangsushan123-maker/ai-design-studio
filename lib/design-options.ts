@@ -75,6 +75,7 @@ export type DesignRequest = {
   customHeight?: number;
   exactSize?: boolean;
   quality: QualityValue;
+  imageModel?: string;
   model?: string;
   keepOriginalRatio?: boolean;
   sourceAnalysis?: string;

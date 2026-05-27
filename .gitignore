@@ -2,7 +2,10 @@ node_modules
 .next
 out
 dist
+build
 .DS_Store
+.cleanup-reports/
+.codex-backups/
 docs_副本/
 .env
 .env*.local
@@ -13,6 +16,9 @@ project.local.json
 project.local.json.bak
 projects.local.json
 projects.local.json.bak
+projects.local.json.*.tmp
+task-runs.local.json
+task-runs.local.json.bak
 *.codex-backup-*
 strategies.local.json
 style-libraries.local.json

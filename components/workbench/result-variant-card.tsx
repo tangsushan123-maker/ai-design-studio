@@ -22,7 +22,6 @@ export function ResultVariantCard({
   onDelete,
   onDownload,
   onFork,
-  onLayerOutputNode,
   onOptimize,
   onPreview,
   onResize,
@@ -36,7 +35,6 @@ export function ResultVariantCard({
   onDelete?: () => void;
   onDownload?: () => void;
   onFork?: () => void;
-  onLayerOutputNode?: () => void;
   onOptimize?: () => void;
   onPreview: () => void;
   onResize?: () => void;
@@ -49,7 +47,6 @@ export function ResultVariantCard({
   const secondaryActions = [
     onResize ? { label: "改尺寸", onClick: onResize } : null,
     onDownload ? { label: "下载", onClick: onDownload } : null,
-    onLayerOutputNode ? { label: "分层拆图", onClick: onLayerOutputNode } : null,
     onFork ? { label: "复制方案", onClick: onFork } : null,
     onDelete ? { label: "删除", onClick: onDelete, danger: true } : null,
   ].filter(Boolean) as Array<{ label: string; onClick: () => void; danger?: boolean }>;

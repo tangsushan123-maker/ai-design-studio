@@ -15,6 +15,14 @@ export type ImageQualityStatus =
   | "failed"
   | "empty";
 
+export type ImageDeliverabilityStatus = "ready" | "needs_review" | "not_ready";
+
+export type ImageQualityCheckItem = {
+  label: string;
+  passed: boolean;
+  detail?: string;
+};
+
 export type ImageQualityCheck = {
   status: ImageQualityStatus;
   label: string;
@@ -52,6 +60,11 @@ export type ImageQualityCheck = {
   clarityGain?: number;
   clarityImproved?: boolean;
   clarityCheckLabel?: string;
+  deliverability?: ImageDeliverabilityStatus;
+  deliverabilityLabel?: string;
+  textDetailRisk?: boolean;
+  textDetailLabel?: string;
+  fourKCheckItems?: ImageQualityCheckItem[];
   checkedAt: string;
 };
 
@@ -66,6 +79,11 @@ type QualityInput = {
   sourceImage?: Buffer | string;
   operation?: string;
   safeMarginPercent?: number;
+  textDetailRecovery?: {
+    applied?: boolean;
+    coverage?: number;
+    message?: string;
+  };
 };
 
 export async function inspectImageQuality(input: Buffer | string, options: QualityInput = {}): Promise<ImageQualityCheck> {
@@ -102,10 +120,13 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
   const is4kTarget = options.quality === "4k" || Boolean(target && Math.max(target.width, target.height) >= 3840);
   const border = await detectWhiteBorder(input);
   const composition = await detectCompositionRisk(input, options.safeMarginPercent || 10);
-  const blurredPadding = await detectBlurredPaddingComposition(input);
+  const rawBlurredPadding = await detectBlurredPaddingComposition(input);
+  const sourceBlurredPadding = options.sourceImage ? await detectBlurredPaddingComposition(options.sourceImage) : null;
+  const blurredPadding = normalizeBlurredPaddingRisk(rawBlurredPadding, sourceBlurredPadding, options.operation);
   const protection = summarizeProtection(options.protectionContext);
   const detailScore = await estimateDetailScore(input);
   const clarityComparison = options.sourceImage ? await compareImageClarity(options.sourceImage, input) : undefined;
+  const textDetailRecovery = options.textDetailRecovery;
   const megapixels = (width * height) / 1_000_000;
   const bytesPerMegapixel = fileSizeBytes ? fileSizeBytes / Math.max(0.1, megapixels) : undefined;
   const suspectedStretch =
@@ -147,6 +168,17 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
     actions.push("检查文字/Logo/二维码");
   }
 
+  const textDetailRisk = Boolean(
+    options.operation === "hd_redraw"
+    && protection.hasProtectedContent
+    && (!textDetailRecovery?.applied || (clarityComparison && !clarityComparison.improved)),
+  );
+  const textDetailLabel = buildTextDetailLabel(protection, textDetailRecovery, clarityComparison);
+  if (textDetailRisk) {
+    issues.push(textDetailLabel || "重要文字、Logo 或二维码需要放大复查。");
+    actions.push("放大检查文字/Logo/二维码，必要时走文字重建");
+  }
+
   const status: ImageQualityStatus = !issues.length
     ? "passed"
     : !reachedTargetSize
@@ -164,11 +196,31 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
                   : options.operation === "hd_redraw" && clarityComparison && !clarityComparison.improved
                     ? "pending"
                     : "pending";
+  const fourKCheckItems = buildFourKCheckItems({
+    reachedTargetSize,
+    ratioMatched,
+    hasWhiteBorder: border.hasWhiteBorder,
+    compositionRisk: composition.risk,
+    suspectedBlurredPadding: blurredPadding.risk,
+    suspectedStretch,
+    clarityComparison,
+    protection,
+    textDetailRecovery,
+    target,
+    width,
+    height,
+    operation: options.operation,
+  });
+  const deliverability = summarizeDeliverability(status, {
+    textDetailRisk,
+    clarityComparison,
+    operation: options.operation,
+  });
 
   return {
     status,
-    label: options.operation === "hd_redraw" && clarityComparison
-      ? `${width}×${height}｜${clarityComparison.improved ? "清晰度已提升" : "清晰度待复查"}`
+    label: options.operation === "hd_redraw"
+      ? `${width}×${height}｜${deliverability.label}`
       : statusLabel(status, width, height, is4kTarget),
     issues,
     actions: actions.length ? Array.from(new Set(actions)) : ["下载原图"],
@@ -204,6 +256,11 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
     clarityGain: clarityComparison?.gain,
     clarityImproved: clarityComparison?.improved,
     clarityCheckLabel: clarityComparison?.label,
+    deliverability: deliverability.status,
+    deliverabilityLabel: deliverability.label,
+    textDetailRisk,
+    textDetailLabel,
+    fourKCheckItems,
     checkedAt: new Date().toISOString(),
   };
 }
@@ -237,6 +294,105 @@ function summarizeProtection(context?: ProtectionContext) {
     assetCount,
     label: hasProtectedContent ? `重要信息待核对｜文字 ${textCount} / 资产 ${assetCount}` : undefined,
   };
+}
+
+function buildTextDetailLabel(
+  protection: ReturnType<typeof summarizeProtection>,
+  textDetailRecovery?: QualityInput["textDetailRecovery"],
+  clarityComparison?: Awaited<ReturnType<typeof compareImageClarity>>,
+) {
+  if (!protection.hasProtectedContent) return undefined;
+  const base = `重要信息保护｜文字 ${protection.textCount} / 资产 ${protection.assetCount}`;
+  if (textDetailRecovery?.applied) {
+    const coverage = `${(Math.max(0, textDetailRecovery.coverage || 0) * 100).toFixed(2)}%`;
+    return `${base}｜已原图细节回贴 ${coverage}${clarityComparison?.improved ? "" : "，清晰度仍需复查"}`;
+  }
+  return `${base}｜未命中文字细节回贴，需要人工核对`;
+}
+
+function buildFourKCheckItems(input: {
+  reachedTargetSize: boolean;
+  ratioMatched: boolean;
+  hasWhiteBorder: boolean;
+  compositionRisk: boolean;
+  suspectedBlurredPadding: boolean;
+  suspectedStretch: boolean;
+  clarityComparison?: Awaited<ReturnType<typeof compareImageClarity>>;
+  protection: ReturnType<typeof summarizeProtection>;
+  textDetailRecovery?: QualityInput["textDetailRecovery"];
+  target?: PixelSize;
+  width: number;
+  height: number;
+  operation?: string;
+}): ImageQualityCheckItem[] {
+  const items: ImageQualityCheckItem[] = [
+    {
+      label: "尺寸达标",
+      passed: input.reachedTargetSize,
+      detail: input.target ? `${input.width}×${input.height} / 目标 ${input.target.width}×${input.target.height}` : `${input.width}×${input.height}`,
+    },
+    {
+      label: "比例正确",
+      passed: input.ratioMatched,
+      detail: input.ratioMatched ? "输出比例与目标一致" : "输出比例和目标不一致",
+    },
+    {
+      label: "无白边空边",
+      passed: !input.hasWhiteBorder,
+      detail: input.hasWhiteBorder ? "检测到疑似白边或空白边缘" : "未检测到明显白边",
+    },
+    {
+      label: "无磨砂补边",
+      passed: !input.suspectedBlurredPadding,
+      detail: input.suspectedBlurredPadding ? "边缘低细节、中心内容集中" : "未检测到模糊补边特征",
+    },
+    {
+      label: "构图安全",
+      passed: !input.compositionRisk,
+      detail: input.compositionRisk ? "边缘重要内容偏多，可能贴边" : "边缘风险正常",
+    },
+    {
+      label: "细节密度",
+      passed: !input.suspectedStretch,
+      detail: input.suspectedStretch ? "疑似只是插值放大" : "细节密度达标",
+    },
+  ];
+  if (input.operation === "hd_redraw") {
+    items.push({
+      label: "清晰度提升",
+      passed: input.clarityComparison ? input.clarityComparison.improved : true,
+      detail: input.clarityComparison?.label || "无源图对比",
+    });
+    items.push({
+      label: "文字/Logo保护",
+      passed: !input.protection.hasProtectedContent || Boolean(input.textDetailRecovery?.applied),
+      detail: input.protection.hasProtectedContent
+        ? input.textDetailRecovery?.message || "重要信息需要人工核对"
+        : "未检测到需保护的重要信息",
+    });
+  }
+  return items;
+}
+
+function summarizeDeliverability(
+  status: ImageQualityStatus,
+  input: {
+    textDetailRisk: boolean;
+    clarityComparison?: Awaited<ReturnType<typeof compareImageClarity>>;
+    operation?: string;
+  },
+): { status: ImageDeliverabilityStatus; label: string } {
+  if (["size_insufficient", "ratio_mismatch", "white_border", "suspected_stretch", "failed", "empty"].includes(status)) {
+    return { status: "not_ready", label: "不可交付，需重试" };
+  }
+  if (status === "composition_risk" || status === "blurred_padding" || input.textDetailRisk) {
+    return { status: "needs_review", label: "可预览，需复查" };
+  }
+  if (input.operation === "hd_redraw" && input.clarityComparison && !input.clarityComparison.improved) {
+    return { status: "needs_review", label: "清晰度待复查" };
+  }
+  if (status === "pending") return { status: "needs_review", label: "待人工复查" };
+  return { status: "ready", label: "可交付" };
 }
 
 export function statusLabel(status: ImageQualityStatus, width?: number, height?: number, is4kTarget?: boolean) {
@@ -355,6 +511,21 @@ async function detectBlurredPaddingComposition(input: Buffer | string) {
       ? "疑似模糊补边/居中缩小图，不像原生比例设计稿。"
       : "未检测到明显模糊补边。",
   };
+}
+
+function normalizeBlurredPaddingRisk(
+  output: Awaited<ReturnType<typeof detectBlurredPaddingComposition>>,
+  source: Awaited<ReturnType<typeof detectBlurredPaddingComposition>> | null,
+  operation?: string,
+) {
+  if (operation === "hd_redraw" && source?.risk && output.risk) {
+    return {
+      ...output,
+      risk: false,
+      label: "源图本身为边缘留白构图，未按磨砂补边处理。",
+    };
+  }
+  return output;
 }
 
 function detailRegionScore(

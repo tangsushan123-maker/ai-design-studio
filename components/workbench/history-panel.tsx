@@ -17,6 +17,11 @@ type HistoryPanelImage = {
   mode?: string;
   nodeOperation?: string;
   projectId?: string;
+  sourceTaskId?: string;
+  sourceRequestId?: string;
+  sourceNodeId?: string;
+  sourceNodeName?: string;
+  sourceNodeKind?: string;
   favorite?: boolean;
   qualityCheck?: {
     importantContentRisk?: boolean;
@@ -41,6 +46,7 @@ export function HistoryPanel({
   emptyState,
   historyMatchesFilter,
   historyMatchesQuery,
+  nodeOperationLabel,
   onDrag,
   onLoadMore,
   onPreview,
@@ -58,7 +64,6 @@ export function HistoryPanel({
   nodeOperationLabel: (value?: string) => string;
   onAddToCanvas: (image: HistoryPanelImage) => void;
   onDrag: (event: DragEvent<HTMLElement>, image: HistoryPanelImage) => void;
-  onLayerOutputNode?: (image: HistoryPanelImage) => void;
   onLoadMore?: () => void;
   onDelete?: (image: HistoryPanelImage) => void;
   onPreview: (image: HistoryPanelImage) => void;
@@ -67,7 +72,6 @@ export function HistoryPanel({
   onUpscale: (image: HistoryPanelImage) => void;
   qualityBadgeLabel: (image: HistoryPanelImage) => string;
   qualityTone: (image: HistoryPanelImage) => string;
-  canLayerOutput?: (image: HistoryPanelImage) => boolean;
 }) {
   const [filter, setFilter] = useState<(typeof resultFilterTabs)[number]>("项目");
   const [visibleCount, setVisibleCount] = useState(resultPageSize);
@@ -156,6 +160,7 @@ export function HistoryPanel({
               <button className="block w-full min-w-0 text-left" onClick={() => onPreview(image)} type="button">
                 <div className="min-w-0">
                   <div className="truncate text-[10px] font-semibold text-white/64">{historyCardTitle(image)}</div>
+                  <div className="mt-0.5 truncate text-[9px] text-white/34">{historySourceLine(image, nodeOperationLabel)}</div>
                 </div>
               </button>
             </div>
@@ -183,11 +188,21 @@ export function HistoryPanel({
 }
 
 function historyCardTitle(image: HistoryPanelImage) {
-  if (image.materialType === "无文字背景") return "无文字背景";
-  if (image.materialType === "文字透明PNG") return "文字透明 PNG";
   if (image.materialType) return image.materialType;
-  if (image.mode && image.mode !== "本地历史") return image.mode.replace(/^分层拆图\s*·\s*/u, "");
+  if (image.mode && image.mode !== "本地历史") return image.mode;
   return image.fileName?.split("/").pop() || "结果图片";
+}
+
+function historySourceLine(image: HistoryPanelImage, nodeOperationLabel: (value?: string) => string) {
+  const operation = nodeOperationLabel(image.sourceNodeKind || image.nodeOperation);
+  const node = image.sourceNodeName ? `节点 ${image.sourceNodeName}` : "";
+  const request = image.sourceRequestId ? `请求 ${shortTraceId(image.sourceRequestId)}` : image.sourceTaskId ? `任务 ${shortTraceId(image.sourceTaskId)}` : "";
+  return [operation, node, request].filter(Boolean).join(" · ") || "来源未记录";
+}
+
+function shortTraceId(id: string) {
+  const clean = id.replace(/^req_/, "").replace(/^task_/, "");
+  return clean.length <= 8 ? clean : clean.slice(-8);
 }
 
 function compareHistoryImages(a: HistoryPanelImage, b: HistoryPanelImage) {

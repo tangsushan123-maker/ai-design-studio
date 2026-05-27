@@ -6,6 +6,19 @@ export function getImageModel() {
   return passed?.id || config.imageModel;
 }
 
+export function resolveImageModel(...candidates: unknown[]) {
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const value = candidate.trim();
+    if (value) return value;
+  }
+  return getImageModel();
+}
+
+export function supportsConfigurableImageInputFidelity(modelId: string) {
+  return !/\bgpt-image-2\b/i.test(modelId);
+}
+
 export function getAnalysisModel() {
   return getOpenAIConfig().textModel;
 }

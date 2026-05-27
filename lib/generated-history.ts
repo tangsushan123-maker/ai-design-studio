@@ -3,14 +3,18 @@ import path from "node:path";
 import sharp from "sharp";
 import type { QualityValue } from "./design-options";
 import { getGeneratedDir, getGeneratedUrl, getImageVariantApiUrl } from "./image-utils";
-import { inspectImageQuality } from "./image-quality";
+import type { ImageQualityCheck } from "./image-quality";
 import { readJsonWithBackup } from "./local-json-store";
 
 const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp"]);
+const generatedTrashDirName = "_trash";
 
 export type GeneratedHistoryOptions = {
   limit?: number;
   offset?: number;
+  projectId?: string;
+  requestIds?: string[];
+  trashOnly?: boolean;
 };
 
 export async function listGeneratedImages(options: GeneratedHistoryOptions = {}) {
@@ -19,7 +23,7 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
   const limit = Math.min(100, Math.max(1, Math.floor(options.limit || 20)));
 
   try {
-    const files = await listGeneratedImageFiles(dir);
+    const files = await listGeneratedImageFiles(dir, options.trashOnly ? generatedTrashDirName : "", { includeTrash: Boolean(options.trashOnly) });
     const fileEntries = await Promise.all(
       files.map(async (fileName) => {
         const fullPath = path.join(dir, fileName);
@@ -30,9 +34,23 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
         return { fileName, fullPath, fileStat, savedMetadata };
       }),
     );
-    fileEntries.sort((a, b) => historySortTime(b.savedMetadata, b.fileStat) - historySortTime(a.savedMetadata, a.fileStat));
-    const total = fileEntries.length;
-    const pagedEntries = fileEntries.slice(offset, offset + limit);
+    const requestIdSet = new Set((options.requestIds || []).map((item) => item.trim()).filter(Boolean));
+    const taskIdSet = new Set([...requestIdSet].map((item) => item.replace(/^req_/, "task_")));
+    const scopedEntries = fileEntries.filter((entry) => {
+      if (options.projectId && stringValue(entry.savedMetadata.projectId) !== options.projectId) return false;
+      if (!requestIdSet.size) return true;
+      const sourceRequestId = stringValue(entry.savedMetadata.sourceRequestId);
+      const sourceTaskId = stringValue(entry.savedMetadata.sourceTaskId);
+      const resultGroupId = stringValue(entry.savedMetadata.resultGroupId);
+      return Boolean(
+        (sourceRequestId && requestIdSet.has(sourceRequestId)) ||
+        (sourceTaskId && taskIdSet.has(sourceTaskId)) ||
+        (resultGroupId && taskIdSet.has(resultGroupId)),
+      );
+    });
+    scopedEntries.sort((a, b) => historySortTime(b.savedMetadata, b.fileStat) - historySortTime(a.savedMetadata, a.fileStat));
+    const total = scopedEntries.length;
+    const pagedEntries = scopedEntries.slice(offset, offset + limit);
 
     const images = await Promise.all(
       pagedEntries.map(async ({ fileName, fullPath, fileStat, savedMetadata }) => {
@@ -47,16 +65,15 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
               }
             : undefined;
         const qualityCheck =
-          objectValue(savedMetadata.qualityCheck) ||
-          (await inspectImageQuality(fullPath, {
-            quality: normalizeQuality(savedMetadata.quality) || quality,
-            ratio: objectValue(savedMetadata.ratio) as { width: number; height: number } | undefined,
-            targetSize: objectValue(savedMetadata.targetSize) as { width: number; height: number } | undefined,
-            expectedSize: objectValue(savedMetadata.expectedOutputSize) as { width: number; height: number } | undefined,
-            aspectRatio: stringValue(savedMetadata.aspectRatio) || aspectRatio,
+          qualityCheckValue(savedMetadata.qualityCheck) ||
+          lightweightHistoryQualityCheck({
+            width: metadata.width || 0,
+            height: metadata.height || 0,
+            format: metadata.format,
             fileSizeBytes: fileStat.size,
-            protectionContext: objectValue(savedMetadata.protectionContext),
-          }).catch(() => undefined));
+            quality: normalizeQuality(savedMetadata.quality) || quality,
+            expectedSize: objectValue(savedMetadata.expectedOutputSize) as { width?: number; height?: number } | undefined,
+          });
 
         const publicUrl = getGeneratedUrl(fileName);
         const originalUrl = stringValue(savedMetadata.originalUrl) || publicUrl;
@@ -77,6 +94,9 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
           durationMs: numberValue(savedMetadata.durationMs),
           fileSizeBytes: fileStat.size,
           alphaCheck: objectValue(savedMetadata.alphaCheck),
+          trashed: fileName.startsWith(`${generatedTrashDirName}/`),
+          deletedAt: stringValue(savedMetadata.deletedAt),
+          originalFileName: stringValue(savedMetadata.originalFileName),
           projectId: stringValue(savedMetadata.projectId),
           parentImageId: stringValue(savedMetadata.parentImageId),
           rootImageId: stringValue(savedMetadata.rootImageId),
@@ -85,6 +105,10 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
           resultGroupId: stringValue(savedMetadata.resultGroupId),
           nextImageIds: Array.isArray(savedMetadata.nextImageIds) ? savedMetadata.nextImageIds : undefined,
           sourceTaskId: stringValue(savedMetadata.sourceTaskId),
+          sourceRequestId: stringValue(savedMetadata.sourceRequestId),
+          sourceNodeId: stringValue(savedMetadata.sourceNodeId),
+          sourceNodeName: stringValue(savedMetadata.sourceNodeName),
+          sourceNodeKind: stringValue(savedMetadata.sourceNodeKind),
           strategyPackageId: stringValue(savedMetadata.strategyPackageId),
           sourceStrategyTitle: stringValue(savedMetadata.sourceStrategyTitle),
           materialPlanItemId: stringValue(savedMetadata.materialPlanItemId),
@@ -96,9 +120,6 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
           version: objectValue(savedMetadata.version),
           maskProtectionCheck: objectValue(savedMetadata.maskProtectionCheck),
           nodeOperation: stringValue(savedMetadata.nodeOperation),
-          editableLayers: Array.isArray(savedMetadata.editableLayers) ? savedMetadata.editableLayers : undefined,
-          layoutCheck: layoutCheckValue(savedMetadata.layoutCheck),
-          layoutTemplate: stringValue(savedMetadata.layoutTemplate),
           outputSize,
           qualityCheck,
           savedPath: fullPath,
@@ -137,12 +158,13 @@ function historySortTime(metadata: Record<string, unknown>, fileStat: { mtime: D
   return Number.isFinite(metadataTime) && metadataTime > 0 ? metadataTime : fileStat.mtime.getTime();
 }
 
-async function listGeneratedImageFiles(dir: string, base = ""): Promise<string[]> {
+async function listGeneratedImageFiles(dir: string, base = "", options: { includeTrash?: boolean } = {}): Promise<string[]> {
   const entries = await readdir(path.join(dir, base), { withFileTypes: true });
   const files = await Promise.all(entries.map(async (entry) => {
     const relative = path.join(base, entry.name);
     if (entry.isDirectory() && entry.name === "_variants") return [];
-    if (entry.isDirectory()) return listGeneratedImageFiles(dir, relative);
+    if (entry.isDirectory() && entry.name === generatedTrashDirName && !options.includeTrash) return [];
+    if (entry.isDirectory()) return listGeneratedImageFiles(dir, relative, options);
     if (entry.isFile() && imageExtensions.has(path.extname(entry.name).toLowerCase())) return [relative];
     return [];
   }));
@@ -179,15 +201,66 @@ function objectValue(value: unknown) {
   return value && typeof value === "object" ? value : undefined;
 }
 
-function layoutCheckValue(value: unknown) {
+function qualityCheckValue(value: unknown): ImageQualityCheck | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const source = value as Record<string, unknown>;
-  if (source.status !== "passed" && source.status !== "risk" && source.status !== "failed") return undefined;
-  const status = source.status as "passed" | "risk" | "failed";
+  const source = value as Partial<ImageQualityCheck>;
+  if (!source.status || !source.label || typeof source.width !== "number" || typeof source.height !== "number") return undefined;
+  return source as ImageQualityCheck;
+}
+
+function lightweightHistoryQualityCheck(input: {
+  width: number;
+  height: number;
+  format?: string;
+  fileSizeBytes?: number;
+  quality: QualityValue;
+  expectedSize?: { width?: number; height?: number };
+}): ImageQualityCheck {
+  const target = input.expectedSize?.width && input.expectedSize?.height
+    ? { width: input.expectedSize.width, height: input.expectedSize.height }
+    : undefined;
+  const reachedTargetSize = target
+    ? input.width >= Math.round(target.width * 0.98) && input.height >= Math.round(target.height * 0.98)
+    : true;
+  const ratioMatched = target
+    ? Math.abs((input.width / Math.max(1, input.height)) - (target.width / target.height)) / (target.width / target.height) <= 0.018
+    : true;
+  const issues: string[] = [];
+  const actions: string[] = [];
+  if (!input.width || !input.height) {
+    issues.push("图片没有有效宽高。");
+    actions.push("重新生成");
+  } else if (!reachedTargetSize) {
+    issues.push(`实际尺寸 ${input.width}×${input.height}，未达到目标 ${target?.width}×${target?.height}。`);
+    actions.push("重新生成或重新导出");
+  } else if (!ratioMatched) {
+    issues.push("实际比例与目标比例不一致。");
+    actions.push("按目标比例重新输出");
+  }
+  const status = !input.width || !input.height
+    ? "empty"
+    : !reachedTargetSize
+      ? "size_insufficient"
+      : !ratioMatched
+        ? "ratio_mismatch"
+        : "pending";
   return {
     status,
-    label: stringValue(source.label) || "排版待检查",
-    issues: Array.isArray(source.issues) ? source.issues.filter((item): item is string => typeof item === "string") : [],
-    suggestions: Array.isArray(source.suggestions) ? source.suggestions.filter((item): item is string => typeof item === "string") : [],
+    label: status === "pending" ? "历史记录待复检" : issues[0] || "历史记录待复检",
+    issues,
+    actions,
+    width: input.width,
+    height: input.height,
+    ratio: input.width && input.height ? input.width / input.height : 0,
+    targetWidth: target?.width,
+    targetHeight: target?.height,
+    format: input.format,
+    fileSizeBytes: input.fileSizeBytes,
+    is4kTarget: input.quality === "4k" || Boolean(target && Math.max(target.width, target.height) >= 3840),
+    reachedTargetSize,
+    ratioMatched,
+    suspectedStretch: false,
+    hasWhiteBorder: false,
+    checkedAt: new Date().toISOString(),
   };
 }

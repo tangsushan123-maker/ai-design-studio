@@ -19,7 +19,7 @@ export async function POST(request: Request) {
 
     const input = (await request.json()) as CreativeBriefInput;
     const fallback = buildCreativeBriefFallback(input);
-    const aiBrief = await withTimeout(tryAiCreativeBrief(input, fallback), 9000).catch(() => null);
+    const aiBrief = await withTimeout(tryAiCreativeBrief(input, fallback), 5500).catch(() => null);
     const brief = aiBrief
       ? normalizeCreativeBrief({ ...aiBrief, source: "ai" }, fallback, input)
       : fallback;
@@ -76,6 +76,7 @@ async function tryAiCreativeBrief(input: CreativeBriefInput, fallback: CreativeB
         content,
       },
     ],
+    max_output_tokens: 1200,
   });
 
   const text = response.output_text || "";

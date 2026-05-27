@@ -839,25 +839,48 @@ function PreferenceGroup({
   selected: Set<string>;
   onToggle: (value: string) => void;
 }) {
+  const isSizeGroup = /尺寸|比例/.test(label);
   return (
     <div className="mt-4">
       <div className="mb-2.5 text-[11px] text-white/42">{label}</div>
-      <div className="flex flex-wrap gap-2">
+      <div className={isSizeGroup ? "grid grid-cols-3 gap-2" : "flex flex-wrap gap-2"}>
         {items.map((item) => {
           const active = selected.has(item);
           return (
             <button
-              className={`rounded-full px-3.5 py-2 text-[11px] transition ${active ? "bg-[#74e3c5] text-[#07121f]" : "bg-white/[0.05] text-white/64 hover:bg-white/[0.08]"}`}
+              className={isSizeGroup
+                ? `flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-[17px] border px-1.5 text-[14px] font-semibold transition ${
+                    active
+                      ? "border-white/75 bg-white text-[#07121f] shadow-[0_14px_34px_rgba(255,255,255,0.16)]"
+                      : "border-white/10 bg-white/[0.055] text-white/58 hover:bg-white/[0.09] hover:text-white/74"
+                  }`
+                : `rounded-full px-3.5 py-2 text-[11px] transition ${active ? "bg-[#74e3c5] text-[#07121f]" : "bg-white/[0.05] text-white/64 hover:bg-white/[0.08]"}`}
               key={item}
               onClick={() => onToggle(item)}
               type="button"
             >
-              {item}
+              {isSizeGroup ? <RatioPreferenceGlyph ratio={item} selected={active} /> : null}
+              <span className="whitespace-nowrap">{item}</span>
             </button>
           );
         })}
       </div>
     </div>
+  );
+}
+
+function RatioPreferenceGlyph({ ratio, selected }: { ratio: string; selected: boolean }) {
+  const normalized = ratio === "自定义" ? "custom" : ratio;
+  const [rawWidth, rawHeight] = normalized === "custom" ? [5, 4] : normalized.split(":").map((item) => Number(item) || 1);
+  const width = Math.max(9, Math.min(22, rawWidth >= rawHeight ? 22 : Math.round((rawWidth / rawHeight) * 22)));
+  const height = Math.max(9, Math.min(22, rawHeight > rawWidth ? 22 : Math.round((rawHeight / rawWidth) * 22)));
+  return (
+    <span aria-hidden="true" className={`flex h-[22px] w-6 shrink-0 items-center justify-center ${selected ? "text-[#07121f]" : "text-white/58"}`}>
+      <span
+        className={`block rounded-[4px] border ${selected ? "border-[#07121f]/70 bg-[#07121f]/7" : "border-current bg-white/[0.035]"}`}
+        style={{ height, width }}
+      />
+    </span>
   );
 }
 
