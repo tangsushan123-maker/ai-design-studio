@@ -1058,7 +1058,7 @@ describe("Workflow canvas performance", () => {
 
 describe("Project stability and task tracing", () => {
   it("keeps local snapshots and explicit task run traces", async () => {
-    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, projectCreationSource, assetLibraryPanelSource, imageUtilsSource, imageQualitySource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
+    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, projectCreationSource, assetLibraryPanelSource, imageUtilsSource, imageQualitySource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource, materialLibrariesRouteSource] = await Promise.all([
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/task-run-ledger.ts", import.meta.url), "utf8"),
@@ -1078,6 +1078,7 @@ describe("Project stability and task tracing", () => {
       readFile(new URL("../app/api/edit-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/redraw-upscale-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/workbench-image-source.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/material-libraries/route.ts", import.meta.url), "utf8"),
     ]);
     const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}\n${projectLibraryPanelSource}\n${projectHomeSource}\n${projectCreationSource}\n${assetLibraryPanelSource}\n${imageSourceSource}`;
 
@@ -1298,7 +1299,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("projectListLoading"), true);
     assert.equal(workbenchSource.includes("projectListError"), true);
     assert.equal(workbenchSource.includes("materialLibrariesLoadingRef"), true);
-    assert.equal(workbenchSource.includes("素材库刷新失败。"), true);
+    assert.equal(workbenchSource.includes("data.error || `素材库刷新失败（HTTP ${response.status}）。`"), true);
+    assert.equal(materialLibrariesRouteSource.includes("materialLibraryErrorMessage"), true);
+    assert.equal(materialLibrariesRouteSource.includes('materialLibraryErrorMessage("保存素材库失败", error)'), true);
     assert.equal(workbenchSource.includes("refreshMaterialLibraries({ quiet: true })"), true);
     assert.equal(workbenchSource.includes("imageImportInFlightRef"), true);
     assert.equal(workbenchSource.includes("正在导入上一张图片，请稍候。"), true);

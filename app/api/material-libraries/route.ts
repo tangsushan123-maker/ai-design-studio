@@ -55,8 +55,8 @@ export async function POST(request: Request) {
       : [{ ...nextLibrary, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, ...store.libraries];
     await writeStyleLibraryStore({ libraries });
     return NextResponse.json({ ok: true, library: nextLibrary, libraries: libraries.map((library) => summarizeLibrary(library, false)) });
-  } catch {
-    return NextResponse.json({ error: "保存素材库失败。" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: materialLibraryErrorMessage("保存素材库失败", error) }, { status: 500 });
   }
 }
 
@@ -125,4 +125,10 @@ function summarizeLibrary(library: MaterialLibraryRecord, includeItems: boolean)
     updatedAt: library.updatedAt,
     items: includeItems ? library.items : undefined,
   };
+}
+
+function materialLibraryErrorMessage(prefix: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const clean = message.replace(process.cwd(), "[project]").slice(0, 180);
+  return clean ? `${prefix}：${clean}` : `${prefix}，请检查项目目录写入权限。`;
 }

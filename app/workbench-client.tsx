@@ -4778,11 +4778,12 @@ function NodeWorkflowWorkbench({
     materialLibrariesLoadingRef.current = true;
     try {
       const response = await fetch("/api/material-libraries?mode=detail");
-      if (!response.ok) throw new Error("素材库刷新失败。");
-      const data = (await response.json()) as {
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
         projectLibraries?: MaterialLibrarySummary[];
         publicStyleLibraries?: MaterialLibrarySummary[];
       };
+      if (!response.ok) throw new Error(data.error || `素材库刷新失败（HTTP ${response.status}）。`);
       setProjectLibraries(data.projectLibraries || []);
       setPublicStyleLibraries(data.publicStyleLibraries || []);
       return true;
