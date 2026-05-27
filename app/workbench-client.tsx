@@ -7854,6 +7854,11 @@ function ImageLightbox({
   const isDeliveryReady = image.qualityCheck?.deliverability === "ready" || image.qualityCheck?.status === "passed";
   const primaryDeliverySuggestion = deliveryActions[0]
     || (isDeliveryReady ? "可下载交付，也可以继续做 PNG 分层或局部精修。" : "建议先做画质增强并放大检查文字、Logo、二维码。");
+  const deliverySummary = buildDeliverySummary(image, {
+    actualSizeLabel,
+    expectedSizeLabel,
+    qualityLabel: image.qualityCheck?.deliverabilityLabel || qualityBadgeLabel(image),
+  });
   const showQualityComparison = Boolean(
     compareBefore
     && (image.nodeOperation === "hd_redraw" || image.nodeOperation === "upscale_4k" || image.nodeOperation === "mask_edit" || image.nodeOperation === "design_optimize" || image.mode?.includes("画质增强") || image.mode?.includes("局部") || image.mode?.includes("设计优化")),
@@ -7950,6 +7955,7 @@ function ImageLightbox({
                   <div className="mt-2 grid grid-cols-2 gap-2 rounded-[16px] border border-white/10 bg-white/[0.05] p-2">
                     <button className="apple-button px-3 py-2 text-[11px]" onClick={() => void runAction("下载 JPG", () => downloadImageFile(image, "jpg"))} type="button">下载 JPG</button>
                     <button className="apple-button px-3 py-2 text-[11px]" onClick={() => void runAction("下载 WebP", () => downloadImageFile(image, "webp"))} type="button">下载 WebP</button>
+                    <button className="apple-button px-3 py-2 text-[11px]" onClick={() => void runAction("复制交付摘要", () => onCopyPrompt(deliverySummary))} type="button">交付摘要</button>
                     <button className="apple-button px-3 py-2 text-[11px]" onClick={() => void runAction("复制 Prompt", () => onCopyPrompt(image.prompt || ""))} type="button">复制 Prompt</button>
                     <button className="apple-button-danger px-3 py-2 text-[11px]" onClick={onDelete} type="button">删除当前图</button>
                   </div>
@@ -11074,6 +11080,21 @@ function qualityDeliveryTone(status?: "ready" | "needs_review" | "not_ready") {
   if (status === "ready") return "border-[#74e3c5]/18 bg-[#74e3c5]/12 text-[#adf8e5]";
   if (status === "not_ready") return "border-[#ff6b5f]/18 bg-[#ff6b5f]/12 text-[#ffb4a8]";
   return "border-[#ffd166]/18 bg-[#ffd166]/10 text-[#ffe1a3]";
+}
+
+function buildDeliverySummary(image: ImageAsset, options: { actualSizeLabel: string; expectedSizeLabel: string; qualityLabel: string }) {
+  const lines = [
+    `文件：${image.fileName || image.id || "未命名图片"}`,
+    `尺寸：${options.actualSizeLabel || "未知"}`,
+    options.expectedSizeLabel && options.expectedSizeLabel !== options.actualSizeLabel ? `目标：${options.expectedSizeLabel}` : "",
+    image.fileSizeBytes ? `大小：${formatFileSize(image.fileSizeBytes)}` : "",
+    `交付状态：${options.qualityLabel || "待检查"}`,
+    image.model ? `模型：${image.model}` : "",
+    image.mode || image.materialType ? `类型：${image.mode || image.materialType}` : "",
+    image.qualityCheck?.issues?.length ? `复查项：${image.qualityCheck.issues.slice(0, 3).join("；")}` : "",
+    image.prompt ? `Prompt：${image.prompt}` : "",
+  ];
+  return lines.filter(Boolean).join("\n");
 }
 
 function historyMatchesFilter(image: ImageAsset, filter: string, projectId: string) {
