@@ -7196,6 +7196,15 @@ function NodeInspectorPanel({
   onParamChange: (nodeId: string, key: string, value: unknown) => void;
   onRunNode: (nodeId: string) => void;
 }) {
+  const [activeInspectorAction, setActiveInspectorAction] = useState("");
+
+  function runInspectorAction(label: string, action: () => void) {
+    if (activeInspectorAction) return;
+    setActiveInspectorAction(label);
+    action();
+    window.setTimeout(() => setActiveInspectorAction(""), 700);
+  }
+
   if (!node) {
     return (
       <EmptyPanel
@@ -7408,9 +7417,14 @@ function NodeInspectorPanel({
 
       {node.data.kind === "mask_edit" ? (
         <InspectorSection title="局部 AI 修改">
-          <button className="apple-button-primary flex h-9 w-full items-center justify-center gap-1.5 text-[11px] font-semibold transition" onClick={() => onMaskEdit(node.id)} type="button">
+          <button
+            className="apple-button-primary flex h-9 w-full items-center justify-center gap-1.5 text-[11px] font-semibold transition disabled:opacity-45"
+            disabled={Boolean(activeInspectorAction)}
+            onClick={() => runInspectorAction("打开涂抹修改", () => onMaskEdit(node.id))}
+            type="button"
+          >
             <Brush className="size-3.5" />
-            打开涂抹修改
+            {activeInspectorAction === "打开涂抹修改" ? "打开中" : "打开涂抹修改"}
           </button>
         </InspectorSection>
       ) : null}
@@ -7468,12 +7482,12 @@ function NodeInspectorPanel({
       {node.data.kind !== "image_input" && !isComposerDrivenNode(node.data.kind) ? (
         <button
           className="apple-button-primary flex h-10 w-full items-center justify-center gap-1.5 text-[12px] font-semibold transition disabled:opacity-45"
-          disabled={isRunning}
-          onClick={() => onRunNode(node.id)}
+          disabled={isRunning || Boolean(activeInspectorAction)}
+          onClick={() => runInspectorAction("运行节点", () => onRunNode(node.id))}
           type="button"
         >
-          {isRunning ? <RefreshCcw className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-          运行
+          {isRunning || activeInspectorAction === "运行节点" ? <RefreshCcw className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+          {activeInspectorAction === "运行节点" ? "启动中" : "运行"}
         </button>
       ) : node.data.kind !== "image_input" ? (
         <div className="rounded-[14px] border border-white/10 bg-white/[0.035] px-3 py-2 text-[10px] leading-5 text-white/44">
@@ -7500,21 +7514,31 @@ function SmartRecommendations({
   node: FlowNode;
   onCreateAction: (nodeId: string, type: NodeKind, handle: string, params?: Record<string, unknown>) => void;
 }) {
+  const [activeRecommendation, setActiveRecommendation] = useState("");
   const image = node.data.output || node.data.image || null;
   const recommendations = buildImageRecommendations(image as ImageAsset | null);
+
+  function createRecommendedAction(item: ReturnType<typeof buildImageRecommendations>[number]) {
+    const key = `${item.type}-${item.label}`;
+    if (activeRecommendation) return;
+    setActiveRecommendation(key);
+    onCreateAction(node.id, item.type, item.handle, item.params);
+    window.setTimeout(() => setActiveRecommendation(""), 700);
+  }
 
   return (
     <InspectorSection title="智能推荐">
       <div className="space-y-2">
         {recommendations.map((item) => (
           <button
-            className="apple-panel flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2.5 text-left transition hover:bg-white/[0.08]"
+            className="apple-panel flex w-full items-center justify-between gap-2 rounded-2xl px-3 py-2.5 text-left transition hover:bg-white/[0.08] disabled:opacity-45"
+            disabled={Boolean(activeRecommendation)}
             key={`${item.type}-${item.label}`}
-            onClick={() => onCreateAction(node.id, item.type, item.handle, item.params)}
+            onClick={() => createRecommendedAction(item)}
             type="button"
           >
             <span className="min-w-0">
-              <span className="block text-[11px] font-semibold text-white/76">{item.label}</span>
+              <span className="block text-[11px] font-semibold text-white/76">{activeRecommendation === `${item.type}-${item.label}` ? "创建中" : item.label}</span>
               <span className="apple-caption mt-1 block truncate">{item.reason}</span>
             </span>
             <ChevronRight className="size-3.5 shrink-0 text-white/28" />

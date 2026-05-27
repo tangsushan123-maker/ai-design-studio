@@ -1167,6 +1167,11 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("disabled={actionBusy}"), true);
     assert.equal(workbenchSource.includes("const [creating, setCreating]"), true);
     assert.equal(workbenchSource.includes("创建中"), true);
+    assert.equal(workbenchSource.includes("activeInspectorAction"), true);
+    assert.equal(workbenchSource.includes("runInspectorAction"), true);
+    assert.equal(workbenchSource.includes("打开中"), true);
+    assert.equal(workbenchSource.includes("启动中"), true);
+    assert.equal(workbenchSource.includes("activeRecommendation"), true);
     assert.equal(workbenchSource.includes("创建二次优化节点"), true);
     assert.equal(workbenchSource.includes("创建改尺寸任务"), true);
     assert.equal(workbenchSource.includes("创建 AI 画质增强任务"), true);
