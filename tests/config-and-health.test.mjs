@@ -347,7 +347,8 @@ describe("Workbench result cards", () => {
     assert.equal(resultCardSource.includes("{badgeLabel}"), true);
     assert.equal(resultCardSource.includes("{meta}"), true);
     assert.equal(resultCardSource.includes("{description}"), true);
-    assert.equal(resultCardSource.includes("px-2 py-0.5 text-[10px] font-semibold"), true);
+    assert.equal(resultCardSource.includes("px-2 py-0.5 text-[11px] font-semibold"), true);
+    assert.equal(resultCardSource.includes("mt-1 truncate text-[11px] text-white/38"), true);
     assert.equal(resultCardSource.includes("confirmDelete"), true);
     assert.equal(resultCardSource.includes("确认删除"), true);
   });
@@ -1671,6 +1672,20 @@ describe("Workbench compact typography", () => {
 
     assert.equal(panelSources.some((source) => source.includes("text-[9px]") || source.includes("text-[10px]")), false);
     assert.equal(panelSources.some((source) => source.includes("leading-4")), false);
+  });
+
+  it("keeps result and task status cards readable in dense panels", async () => {
+    const [resultCardSource, taskCenterSource] = await Promise.all([
+      readFile(new URL("../components/workbench/result-variant-card.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(resultCardSource.includes("text-[10px]"), false);
+    assert.equal(resultCardSource.includes("leading-4"), false);
+    assert.equal(taskCenterSource.includes("rounded-full px-2.5 py-1 text-[10px]"), false);
+    assert.equal(taskCenterSource.includes("rounded-[14px] border px-3 py-2 text-[10px] leading-4"), false);
+    assert.equal(taskCenterSource.includes("rounded-full px-2.5 py-1 text-[11px]"), true);
+    assert.equal(taskCenterSource.includes("rounded-[14px] border px-3 py-2 text-[11px] leading-5"), true);
   });
 });
 

@@ -81,12 +81,12 @@ export function ResultVariantCard({
           <div className="flex min-w-0 items-center gap-2">
             <div className="truncate text-[13px] font-semibold text-white/84">{title}</div>
             {badgeLabel ? (
-              <span className="shrink-0 rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[10px] font-semibold text-[#adf8e5]">
+              <span className="shrink-0 rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[11px] font-semibold text-[#adf8e5]">
                 {badgeLabel}
               </span>
             ) : null}
           </div>
-          {meta ? <div className="mt-1 truncate text-[10px] text-white/38">{meta}</div> : null}
+          {meta ? <div className="mt-1 truncate text-[11px] text-white/38">{meta}</div> : null}
         </div>
         {onOptimize ? (
           <button className="apple-button-primary shrink-0 px-3 py-2 text-[11px] font-semibold" onClick={onOptimize} type="button">
@@ -95,7 +95,7 @@ export function ResultVariantCard({
           </button>
         ) : null}
       </div>
-      {description ? <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-white/46">{description}</p> : null}
+      {description ? <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-white/46">{description}</p> : null}
       {secondaryActions.length ? (
         <button className="apple-button mt-2 flex w-full items-center justify-center gap-1.5 px-3 py-2 text-[11px]" data-result-menu-root="true" onClick={() => {
           setMenuOpen((value) => !value);

@@ -184,7 +184,7 @@ export function TaskCenter({
             <div className="apple-caption mt-1 truncate">{[task.materialType || task.type, task.targetSize].filter(Boolean).join(" · ")}</div>
           </div>
           <span
-            className={`rounded-full px-2.5 py-1 text-[10px] ${taskStatusClass(task, stuck)}`}
+            className={`rounded-full px-2.5 py-1 text-[11px] ${taskStatusClass(task, stuck)}`}
           >
             {statusText}
           </span>
@@ -221,7 +221,7 @@ export function TaskCenter({
                   style={{ width: `${Math.max(4, Math.min(100, task.progress || 4))}%` }}
                 />
               </span>
-              <span className="w-9 text-right text-[10px] text-white/46">{Math.round(task.progress || 0)}%</span>
+              <span className="w-10 text-right text-[11px] text-white/46">{Math.round(task.progress || 0)}%</span>
             </div>
             <div className="truncate text-[11px] text-white/56">
               {progressText}
@@ -238,7 +238,7 @@ export function TaskCenter({
             </div>
             {task.error ? <div className="apple-caption mt-1 truncate text-[#ffb4a8]">{task.error}</div> : null}
             {recoveryHint ? (
-              <div className={`mt-2 rounded-[12px] border px-2.5 py-2 text-[10px] leading-4 ${recoveryHint.tone === "danger" ? "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]" : "border-[#ffd166]/18 bg-[#ffd166]/10 text-[#ffe1a3]"}`}>
+              <div className={`mt-2 rounded-[12px] border px-2.5 py-2 text-[11px] leading-5 ${recoveryHint.tone === "danger" ? "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]" : "border-[#ffd166]/18 bg-[#ffd166]/10 text-[#ffe1a3]"}`}>
                 {recoveryHint.text}
               </div>
             ) : null}
@@ -297,7 +297,7 @@ export function TaskCenter({
         ) : null}
       </div>
       {actionMessage ? (
-        <div className={`rounded-[14px] border px-3 py-2 text-[10px] leading-4 ${
+        <div className={`rounded-[14px] border px-3 py-2 text-[11px] leading-5 ${
           actionMessage.tone === "success"
             ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
             : "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
