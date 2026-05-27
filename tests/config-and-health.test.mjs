@@ -1231,6 +1231,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("onRefreshProjects"), true);
     assert.equal(workbenchSource.includes("项目列表刷新失败。"), true);
     assert.equal(workbenchSource.includes("正在刷新项目列表"), true);
+    assert.equal(workbenchSource.includes("organization: explicitAdd"), true);
+    assert.equal(workbenchSource.includes("保留|保持|沿用|复用|还原"), true);
+    assert.equal(workbenchSource.includes("visibleRequests.organization"), true);
     assert.equal(projectLibraryPanelSource.includes("confirmDeleteId"), true);
     assert.equal(projectLibraryPanelSource.includes("deletingId"), true);
     assert.equal(projectLibraryPanelSource.includes("openingId"), true);

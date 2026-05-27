@@ -11332,7 +11332,7 @@ function buildProjectConstraintText(
   const projectMemory = sanitizeProjectMemoryForPrompt(text.trim(), visibleRequestText || "");
   const canMentionTextAssets = !hiddenRequests.noText;
   const profileNotes = [
-    canMentionTextAssets && visibleRequests.logo && profile.organizationName ? `机构名称：${profile.organizationName}` : "",
+    canMentionTextAssets && visibleRequests.organization && profile.organizationName ? `机构名称：${profile.organizationName}` : "",
     projectProfileColors(profile).length ? `品牌色：${projectProfileColors(profile).join("、")}` : "",
     !hiddenRequests.noLogo && visibleRequests.logo && profile.logoName ? `用户要求 Logo：${profile.logoName}` : "",
     !hiddenRequests.noContact && visibleRequests.phone && profile.phone ? `用户要求电话：${profile.phone}` : "",
@@ -11377,7 +11377,7 @@ function buildBrandAssetContextPack(profile: ProjectProfile, brandAssets: ImageA
   const hiddenRequests = resolveNoVisibleProjectOutputPolicy(visibleRequestText);
   const lines = [
     "【项目素材】",
-    !hiddenRequests.noText && visibleRequests.logo && profile.organizationName ? `机构名称：${profile.organizationName}` : "",
+    !hiddenRequests.noText && visibleRequests.organization && profile.organizationName ? `机构名称：${profile.organizationName}` : "",
     usage.usePrimaryColors && primaryColors.length ? `项目主色：${primaryColors.join("、")}` : "",
     usage.useSecondaryColors && secondaryColors.length ? `辅助配色：${secondaryColors.join("、")}` : "",
     !hiddenRequests.noLogo && usage.useLogo && (profile.logoName || logoAssets.length) ? `Logo：${[profile.logoName, assetNames(logoAssets)].filter(Boolean).join("；")}` : "",
@@ -11420,8 +11420,9 @@ function missingBrandAssetWarning(profile: ProjectProfile, brandAssets: ImageAss
 
 function resolveVisibleProjectInfoRequests(text: string) {
   const prompt = text || "";
-  const explicitAdd = /放上|加上|加入|添加|写上|显示|展示|露出|带上|包含|需要|必须有|要有|使用|引用|贴上/.test(prompt);
+  const explicitAdd = /放上|加上|加入|添加|写上|显示|展示|露出|带上|包含|需要|必须有|要有|使用|引用|贴上|保留|保持|沿用|复用|还原|不要改|别改/.test(prompt);
   return {
+    organization: explicitAdd && /机构名称|机构名|公司名称|公司名|品牌名称|品牌名|医院名称|医院名|门店名称|店名|馆名/.test(prompt),
     phone: explicitAdd && /电话|联系方式|联系电话|手机号|热线|预约电话/.test(prompt),
     address: explicitAdd && /地址|位置|定位|地图|导航|门店|院区/.test(prompt),
     logo: explicitAdd && /logo|Logo|LOGO|标志|品牌标识|院标|馆标/.test(prompt),
