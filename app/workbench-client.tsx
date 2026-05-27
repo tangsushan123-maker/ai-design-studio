@@ -8170,8 +8170,13 @@ function ImageLightbox({
                         placeholder="例如：保持构图和人物不变，减弱过亮装饰，标题更清楚。"
                         value={optimizePrompt}
                       />
-                      <button className="apple-button-primary mt-2 w-full px-3 py-2 text-[11px] font-semibold disabled:opacity-40" disabled={!optimizePrompt.trim()} onClick={() => onEditImage(optimizePrompt.trim())} type="button">
-                        创建二次优化节点
+                      <button
+                        className="apple-button-primary mt-2 w-full px-3 py-2 text-[11px] font-semibold disabled:opacity-40"
+                        disabled={!optimizePrompt.trim() || actionBusy}
+                        onClick={() => void runAction("创建二次优化节点", () => onEditImage(optimizePrompt.trim()))}
+                        type="button"
+                      >
+                        {activeActionLabel === "创建二次优化节点" ? "创建中..." : "创建二次优化节点"}
                       </button>
                     </section>
                   ) : null}
@@ -8202,14 +8207,15 @@ function ImageLightbox({
                       />
                       <button
                         className="apple-button-primary mt-2 w-full px-3 py-2 text-[11px] font-semibold disabled:opacity-40"
-                        onClick={() => onMaskEdit({
-                          prompt: maskPrompt.trim() || "去掉这里并补全背景",
-                          quality: image.quality === "4k" ? "2k" : image.quality || "standard",
-                          ...inferSimpleMaskEditIntent(maskPrompt.trim() || "去掉这里并补全背景"),
-                        })}
+                        disabled={actionBusy}
+                        onClick={() => void runAction("打开局部修改", () => onMaskEdit({
+                            prompt: maskPrompt.trim() || "去掉这里并补全背景",
+                            quality: image.quality === "4k" ? "2k" : image.quality || "standard",
+                            ...inferSimpleMaskEditIntent(maskPrompt.trim() || "去掉这里并补全背景"),
+                          }))}
                         type="button"
                       >
-                        进入涂抹
+                        {activeActionLabel === "打开局部修改" ? "打开中..." : "进入涂抹"}
                       </button>
                     </section>
                   ) : null}
@@ -8245,11 +8251,11 @@ function ImageLightbox({
                       </div>
                       <button
                         className="apple-button-primary mt-2 w-full px-3 py-2 text-[11px] font-semibold disabled:opacity-40"
-                        disabled={!parseTargetSize(resizeSize).width || !parseTargetSize(resizeSize).height}
-                        onClick={() => onResize({ targetRatio: resizeRatio, targetSize: resizeSize, fitMode: resizeFitMode, quality: "standard" })}
+                        disabled={!parseTargetSize(resizeSize).width || !parseTargetSize(resizeSize).height || actionBusy}
+                        onClick={() => void runAction("创建改尺寸任务", () => onResize({ targetRatio: resizeRatio, targetSize: resizeSize, fitMode: resizeFitMode, quality: "standard" }))}
                         type="button"
                       >
-                        按此尺寸创建任务
+                        {activeActionLabel === "创建改尺寸任务" ? "创建中..." : "按此尺寸创建任务"}
                       </button>
                     </section>
                   ) : null}
@@ -8284,11 +8290,11 @@ function ImageLightbox({
                       </div>
                       <button
                         className="apple-button-primary mt-2 w-full px-3 py-2 text-[11px] font-semibold disabled:opacity-40"
-                        disabled={!isValidUpscaleTarget(activeUpscaleSize)}
-                        onClick={() => onUpscale({ targetSize: activeUpscaleSize, fitMode: upscaleFitMode, quality: qualityForQualityEnhanceTarget(activeUpscaleSize), format: upscaleFormat })}
+                        disabled={!isValidUpscaleTarget(activeUpscaleSize) || actionBusy}
+                        onClick={() => void runAction("创建 AI 画质增强任务", () => onUpscale({ targetSize: activeUpscaleSize, fitMode: upscaleFitMode, quality: qualityForQualityEnhanceTarget(activeUpscaleSize), format: upscaleFormat }))}
                         type="button"
                       >
-                        创建 AI 画质增强任务
+                        {activeActionLabel === "创建 AI 画质增强任务" ? "创建中..." : "创建 AI 画质增强任务"}
                       </button>
                     </section>
                   ) : null}
