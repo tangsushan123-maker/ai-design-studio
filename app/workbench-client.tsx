@@ -7918,7 +7918,7 @@ function ImageLightbox({
                     <Images className="size-3.5" />
                     {activeActionLabel === "复制图片" ? "复制中..." : "复制图片"}
                   </button>
-                  <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => setShowMoreFooterActions((value) => !value)} type="button">
+                  <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => setShowMoreFooterActions((value) => !value)} type="button">
                     <ChevronDown className={`size-3.5 transition ${showMoreFooterActions ? "rotate-180" : ""}`} />
                     {showMoreFooterActions ? "收起更多" : "更多"}
                   </button>
@@ -8024,7 +8024,8 @@ function ImageLightbox({
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <button
-                        className="apple-button-primary flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-semibold"
+                        className="apple-button-primary flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-semibold disabled:opacity-55"
+                        disabled={actionBusy}
                         onClick={() => setActiveEditTool("upscale")}
                         type="button"
                       >
@@ -8032,14 +8033,15 @@ function ImageLightbox({
                         画质增强
                       </button>
                       <button
-                        className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]"
+                        className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55"
+                        disabled={actionBusy}
                         onClick={() => setActiveEditTool("mask")}
                         type="button"
                       >
                         <Brush className="size-3.5" />
                         局部修改
                       </button>
-                      <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("下载 PNG", () => downloadImageFile(image, "png"))} type="button">
+                      <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("下载 PNG", () => downloadImageFile(image, "png"))} type="button">
                         <ArrowDownToLine className="size-3.5" />
                         下载成品
                       </button>
@@ -8068,7 +8070,8 @@ function ImageLightbox({
                         ["upscale", "画质增强"],
                       ].map(([value, label]) => (
                         <button
-                          className={`${activeEditTool === value ? "apple-button-primary font-semibold" : "apple-button"} px-3 py-2 text-[11px]`}
+                          className={`${activeEditTool === value ? "apple-button-primary font-semibold" : "apple-button"} px-3 py-2 text-[11px] disabled:opacity-55`}
+                          disabled={actionBusy}
                           key={value}
                           onClick={() => {
                             setActiveEditTool((current) => current === value ? null : value as typeof activeEditTool);
@@ -8282,8 +8285,8 @@ function ImageLightbox({
                       {image.prompt || "没有记录 Prompt。"}
                     </div>
                     <div className="mt-2 flex gap-2">
-                      <button className="apple-button flex-1 px-3 py-2 text-[11px]" onClick={() => void runAction("复制 Prompt", () => onCopyPrompt(image.prompt || ""))} type="button">复制 Prompt</button>
-                      <button className="apple-button flex-1 px-3 py-2 text-[11px]" onClick={() => void runAction("复制图片", () => onCopyImage(image))} type="button">复制图片</button>
+                      <button className="apple-button flex-1 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("复制 Prompt", () => onCopyPrompt(image.prompt || ""))} type="button">复制 Prompt</button>
+                      <button className="apple-button flex-1 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("复制图片", () => onCopyImage(image))} type="button">复制图片</button>
                     </div>
                   </section>
 

@@ -1177,6 +1177,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("activeActionLabel"), true);
     assert.equal(workbenchSource.includes("if (activeActionLabel) return"), true);
     assert.equal(workbenchSource.includes("disabled={actionBusy}"), true);
+    assert.equal(workbenchSource.includes("disabled={actionBusy} onClick={() => setShowMoreFooterActions"), true);
+    assert.equal(workbenchSource.includes("disabled={actionBusy} onClick={() => void runAction(\"下载 PNG\""), true);
     assert.equal(workbenchSource.includes("ProjectCreationModal"), true);
     assert.equal(projectCreationSource.includes("export function ProjectCreationModal"), true);
     assert.equal(projectCreationSource.includes("const [creating, setCreating]"), true);
