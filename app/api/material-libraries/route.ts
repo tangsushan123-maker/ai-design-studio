@@ -26,15 +26,19 @@ type StyleLibraryStore = {
 };
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const mode = url.searchParams.get("mode");
-  const includeItems = mode === "detail";
-  const [projectLibraries, styleLibraries] = await Promise.all([readProjectLibraries(), readStyleLibraries()]);
+  try {
+    const url = new URL(request.url);
+    const mode = url.searchParams.get("mode");
+    const includeItems = mode === "detail";
+    const [projectLibraries, styleLibraries] = await Promise.all([readProjectLibraries(), readStyleLibraries()]);
 
-  return NextResponse.json({
-    projectLibraries: projectLibraries.map((library) => summarizeLibrary(library, includeItems)),
-    publicStyleLibraries: styleLibraries.map((library) => summarizeLibrary(library, includeItems)),
-  });
+    return NextResponse.json({
+      projectLibraries: projectLibraries.map((library) => summarizeLibrary(library, includeItems)),
+      publicStyleLibraries: styleLibraries.map((library) => summarizeLibrary(library, includeItems)),
+    });
+  } catch (error) {
+    return NextResponse.json({ error: materialLibraryErrorMessage("读取素材库失败", error) }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {

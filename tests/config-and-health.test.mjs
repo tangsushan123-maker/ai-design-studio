@@ -1380,6 +1380,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("readResponseErrorMessage(response, \"删除结果图片失败\")"), true);
     assert.equal(workbenchSource.includes("readResponseErrorMessage(response, \"恢复图片失败\")"), true);
     assert.equal(materialLibrariesRouteSource.includes("materialLibraryErrorMessage"), true);
+    assert.equal(materialLibrariesRouteSource.includes('materialLibraryErrorMessage("读取素材库失败", error)'), true);
     assert.equal(materialLibrariesRouteSource.includes('materialLibraryErrorMessage("保存素材库失败", error)'), true);
     assert.equal(workbenchSource.includes("refreshMaterialLibraries({ quiet: true })"), true);
     assert.equal(workbenchSource.includes("imageImportInFlightRef"), true);
