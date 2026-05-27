@@ -6475,6 +6475,11 @@ function ChatComposer({
   const canSubmit = Boolean(effectiveModel) && (selectedPromptNode ? canSubmitComposerForNode(selectedPromptNode, displayPrompt) : Boolean(prompt.trim()));
   const anyMenuOpen = uploadMenuOpen || modelMenuOpen || ratioMenuOpen || qualityMenuOpen || brandMenuOpen;
   const starterPrompts = composerStarterPrompts(selectedPromptNode);
+  const apiSetupMessage = !hasKey
+    ? "还没有配置 API Key，配置后才能生成图片。"
+    : !effectiveModel
+      ? "Key 已配置，但还没有通过测试的图片模型。"
+      : "";
 
   function closeMenus() {
     setUploadMenuOpen(false);
@@ -6553,8 +6558,13 @@ function ChatComposer({
             placeholder={composerPlaceholder}
             value={displayPrompt}
           />
-          {hasKey && !effectiveModel ? (
-            <div className="apple-caption mt-1 text-[#ffe1a0]">Key 已配置，但还没有通过测试的图片模型；到 API 设置页点“测试模型”后再生成。</div>
+          {apiSetupMessage ? (
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] leading-4 text-[#ffe1a0]">
+              <span>{apiSetupMessage}</span>
+              <Link className="rounded-full border border-[#ffe1a0]/24 bg-[#ffe1a0]/10 px-2 py-0.5 font-semibold text-[#ffe1a0] hover:bg-[#ffe1a0]/16" href="/settings">
+                去设置
+              </Link>
+            </div>
           ) : null}
           {!displayPrompt.trim() && starterPrompts.length ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
