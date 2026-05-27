@@ -5,6 +5,7 @@ import { toApiError } from "../lib/api-errors.ts";
 import { defaultOpenAIConfig, providerPresets } from "../lib/openai-defaults.ts";
 import { parseHealthMode, skippedImageCheck } from "../lib/openai-health.ts";
 import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualityBadgeLabel, qualityDeliveryTone, qualityTone } from "../lib/workbench-delivery.ts";
+import { formatDuration, formatFileSize, formatGeneratedAt } from "../lib/workbench-format.ts";
 import { historyMatchesFilter, historyMatchesQuery, historySearchText } from "../lib/workbench-history.ts";
 import { imageManagerMatchesSearch, imageManagerSearchText } from "../lib/workbench-image-manager.ts";
 import { imageSourceDetailLines, imageSourceSummary, shortImageTraceId } from "../lib/workbench-image-source.ts";
@@ -98,6 +99,26 @@ describe("Workbench delivery helpers", () => {
     assert.equal(summary.includes("复查：文字（小字略糊）"), true);
     assert.equal(summary.includes("复查：Logo 边缘偏软"), true);
     assert.equal(summary.includes("建议：先做画质增强"), true);
+  });
+});
+
+describe("Workbench format helpers", () => {
+  it("formats file sizes for compact UI labels", () => {
+    assert.equal(formatFileSize(), "未记录");
+    assert.equal(formatFileSize(512), "512 B");
+    assert.equal(formatFileSize(2048), "2.0 KB");
+    assert.equal(formatFileSize(24 * 1024), "24 KB");
+    assert.equal(formatFileSize(5 * 1024 * 1024), "5.0 MB");
+    assert.equal(formatFileSize(12 * 1024 * 1024), "12 MB");
+  });
+
+  it("formats generated time and duration labels", () => {
+    assert.equal(formatGeneratedAt(), "未记录");
+    assert.equal(formatGeneratedAt("not-a-date"), "not-a-date");
+    assert.match(formatGeneratedAt("2026-05-28T10:08:09.000Z"), /^\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
+    assert.equal(formatDuration(-250), "0 秒");
+    assert.equal(formatDuration(59000), "59 秒");
+    assert.equal(formatDuration(125000), "2 分 5 秒");
   });
 });
 
