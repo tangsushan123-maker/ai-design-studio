@@ -2,6 +2,7 @@
 
 import { memo, type CSSProperties, type ReactNode } from "react";
 import { Images } from "lucide-react";
+import { DeliveryStatusBadge } from "@/components/workbench/delivery-status-badge";
 import { ImageFrame } from "@/components/workbench/image-frame";
 
 export type NodeResultImage = {
@@ -72,9 +73,7 @@ function NodeResultsPanelComponent<TImage extends NodeResultImage>({
             <span className="min-w-0 flex-1 truncate text-[9px] text-white/34">
               {imageSourceSummary(image, nodeOperationLabel)}
             </span>
-            <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] ${resultQualityClass(image)}`}>
-              {resultQualityLabel(image)}
-            </span>
+            <DeliveryStatusBadge image={image} />
           </div>
           {image.qualityCheck?.issues?.length ? (
             <div className="mt-1 line-clamp-1 px-1 text-[9px] text-[#ffe1a0]/72">
@@ -97,25 +96,4 @@ function EmptyPanel({ description, icon, title }: { description: string; icon: R
       {description ? <p className="mt-1 max-w-[210px] text-[11px] leading-5 text-white/38">{description}</p> : null}
     </div>
   );
-}
-
-function resultQualityLabel(image: NodeResultImage) {
-  if (image.qualityCheck?.deliverabilityLabel) return compactQualityLabel(image.qualityCheck.deliverabilityLabel);
-  if (image.qualityCheck?.label) return compactQualityLabel(image.qualityCheck.label);
-  if (image.qualityCheck?.status === "passed") return "可交付";
-  if (image.qualityCheck?.status) return "需复查";
-  return "待检查";
-}
-
-function compactQualityLabel(label: string) {
-  return label.replace(/\s/g, "").replace("建议复查", "复查").replace("不可交付", "未达标");
-}
-
-function resultQualityClass(image: NodeResultImage) {
-  const status = image.qualityCheck?.deliverability || image.qualityCheck?.status;
-  if (status === "ready" || status === "passed") return "border-[#74e3c5]/20 bg-[#74e3c5]/10 text-[#adf8e5]";
-  if (status === "not_ready" || status === "failed" || status === "empty" || status === "size_insufficient" || status === "white_border" || status === "ratio_mismatch") {
-    return "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]";
-  }
-  return "border-[#ffd166]/18 bg-[#ffd166]/10 text-[#ffe1a3]";
 }

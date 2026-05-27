@@ -2,6 +2,7 @@
 
 import { Star } from "lucide-react";
 import { useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { DeliveryStatusBadge } from "@/components/workbench/delivery-status-badge";
 import { ImageFrame } from "@/components/workbench/image-frame";
 
 type HistoryPanelImage = {
@@ -165,9 +166,7 @@ export function HistoryPanel({
                 <div className="min-w-0">
                   <div className="flex items-center gap-1">
                     <div className="min-w-0 flex-1 truncate text-[10px] font-semibold text-white/64">{historyCardTitle(image)}</div>
-                    <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] ${historyQualityClass(image)}`}>
-                      {historyQualityLabel(image, qualityBadgeLabel)}
-                    </span>
+                    <DeliveryStatusBadge image={image} fallbackLabel={qualityBadgeLabel(image)} />
                   </div>
                   <div className="mt-0.5 truncate text-[9px] text-white/34">{historySourceLine(image, nodeOperationLabel)}</div>
                   {image.qualityCheck?.issues?.length ? (
@@ -210,24 +209,6 @@ function historySourceLine(image: HistoryPanelImage, nodeOperationLabel: (value?
   const node = image.sourceNodeName ? `节点 ${image.sourceNodeName}` : "";
   const request = image.sourceRequestId ? `请求 ${shortTraceId(image.sourceRequestId)}` : image.sourceTaskId ? `任务 ${shortTraceId(image.sourceTaskId)}` : "";
   return [operation, node, request].filter(Boolean).join(" · ") || "来源未记录";
-}
-
-function historyQualityLabel(image: HistoryPanelImage, qualityBadgeLabel: (image: HistoryPanelImage) => string) {
-  if (image.qualityCheck?.deliverabilityLabel) return compactHistoryQualityLabel(image.qualityCheck.deliverabilityLabel);
-  return compactHistoryQualityLabel(qualityBadgeLabel(image));
-}
-
-function compactHistoryQualityLabel(label: string) {
-  return label.replace(/\s/g, "").replace("建议复查", "复查").replace("不可交付", "未达标");
-}
-
-function historyQualityClass(image: HistoryPanelImage) {
-  const status = image.qualityCheck?.deliverability || image.qualityCheck?.status;
-  if (status === "ready" || status === "passed") return "border-[#74e3c5]/20 bg-[#74e3c5]/10 text-[#adf8e5]";
-  if (status === "not_ready" || status === "failed" || status === "empty" || status === "size_insufficient" || status === "white_border" || status === "ratio_mismatch") {
-    return "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]";
-  }
-  return "border-[#ffd166]/18 bg-[#ffd166]/10 text-[#ffe1a3]";
 }
 
 function shortTraceId(id: string) {
