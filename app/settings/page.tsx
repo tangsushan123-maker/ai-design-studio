@@ -113,6 +113,10 @@ function settingsRequestFailure(action: string, error: unknown) {
   return detail ? `${action}：${detail}` : action;
 }
 
+async function readSettingsJson<T>(response: Response): Promise<T & { error?: string; message?: string }> {
+  return await response.json().catch(() => ({})) as T & { error?: string; message?: string };
+}
+
 export default function SettingsPage() {
   const [providerId, setProviderId] = useState<string>(customProvider.id);
   const [providerSiteUrl, setProviderSiteUrl] = useState<string>(customProvider.siteUrl);
@@ -171,7 +175,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetch("/api/settings")
-      .then((response) => response.json())
+      .then((response) => readSettingsJson<SettingsResponse>(response))
       .then((data: SettingsResponse) => applySettings(data))
       .catch((error) => setStatus({ type: "error", message: settingsRequestFailure("读取配置失败", error) }));
   }, []);
@@ -259,7 +263,7 @@ export default function SettingsPage() {
           supportsImageGeneration,
         }),
       });
-      const data = await response.json().catch(() => ({})) as SettingsResponse & { error?: string };
+      const data = await readSettingsJson<SettingsResponse>(response);
       if (!response.ok) {
         setStatus({ type: "error", message: data.error || "保存失败" });
         return false;
@@ -309,7 +313,7 @@ export default function SettingsPage() {
             : undefined,
         }),
       });
-      const data = await response.json() as DetectionResult;
+      const data = await readSettingsJson<DetectionResult>(response);
       setDetectionResult(data);
       setProviderId(data.providerId || providerId);
       setProviderSiteUrl(data.websiteUrl || providerSiteUrl);
@@ -329,7 +333,7 @@ export default function SettingsPage() {
         setApiKey("");
         await reloadSettings();
       }
-      setStatus({ type: response.ok && data.ok ? "success" : "error", message: data.message || (response.ok ? "检测完成" : "检测失败") });
+      setStatus({ type: response.ok && data.ok ? "success" : "error", message: data.message || data.error || (response.ok ? "检测完成" : "检测失败") });
     } catch (error) {
       setStatus({ type: "error", message: settingsRequestFailure("检测失败", error) });
     }
@@ -341,7 +345,7 @@ export default function SettingsPage() {
     setStatus({ type: "loading", message: "刷新模型..." });
     try {
       const response = await fetch("/api/models/refresh", { method: "POST" });
-      const data = await response.json() as { ok: boolean; models?: ModelCatalogItem[]; modelsUpdatedAt?: string; message?: string };
+      const data = await readSettingsJson<{ ok: boolean; models?: ModelCatalogItem[]; modelsUpdatedAt?: string }>(response);
       if (!response.ok || !data.ok) throw new Error(data.message || "刷新失败");
       setModelsCache(data.models || []);
       setModelsUpdatedAt(data.modelsUpdatedAt || "");
@@ -371,15 +375,14 @@ export default function SettingsPage() {
           capabilities: [draft.capability],
         }),
       });
-      const data = await response.json() as {
+      const data = await readSettingsJson<{
         ok: boolean;
         modelsCache?: ModelCatalogItem[];
         modelsUpdatedAt?: string;
         textModel?: string;
         imageModel?: string;
         videoModel?: string;
-        error?: string;
-      };
+      }>(response);
       if (!response.ok || !data.ok) throw new Error(data.error || "模型保存失败");
       setModelsCache(data.modelsCache || modelsCache);
       setModelsUpdatedAt(data.modelsUpdatedAt || modelsUpdatedAt);
@@ -403,15 +406,14 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: modelId }),
       });
-      const data = await response.json() as {
+      const data = await readSettingsJson<{
         ok: boolean;
         modelsCache?: ModelCatalogItem[];
         textModel?: string;
         imageModel?: string;
         videoModel?: string;
         modelsUpdatedAt?: string;
-        error?: string;
-      };
+      }>(response);
       if (!response.ok || !data.ok) throw new Error(data.error || "删除失败");
       setModelsCache(data.modelsCache || []);
       setTextModel(data.textModel || "");
@@ -444,7 +446,7 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind, model }),
       });
-      const data = await response.json() as ModelTestResponse;
+      const data = await readSettingsJson<ModelTestResponse>(response);
       setLastModelTest(data);
       await reloadSettings();
       setStatus({ type: data.ok ? "success" : "error", message: data.message || "测试完成" });
@@ -475,13 +477,12 @@ export default function SettingsPage() {
           capabilities: ["image"],
         }),
       });
-      const data = await response.json() as {
+      const data = await readSettingsJson<{
         ok: boolean;
         modelsCache?: ModelCatalogItem[];
         modelsUpdatedAt?: string;
         imageModel?: string;
-        error?: string;
-      };
+      }>(response);
       if (!response.ok || !data.ok) throw new Error(data.error || "添加图片模型失败");
       setModelsCache(data.modelsCache || modelsCache);
       setModelsUpdatedAt(data.modelsUpdatedAt || modelsUpdatedAt);
@@ -506,7 +507,8 @@ export default function SettingsPage() {
 
   async function reloadSettings() {
     const response = await fetch("/api/settings");
-    const data = await response.json() as SettingsResponse;
+    const data = await readSettingsJson<SettingsResponse>(response);
+    if (!response.ok) throw new Error(data.error || data.message || "读取配置失败");
     applySettings(data);
   }
 

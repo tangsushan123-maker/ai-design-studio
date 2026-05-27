@@ -437,6 +437,8 @@ describe("Settings model management", () => {
     ]);
 
     assert.equal(settingsSource.includes("settingsRequestFailure"), true);
+    assert.equal(settingsSource.includes("readSettingsJson"), true);
+    assert.equal(settingsSource.includes("data.message || data.error || (response.ok ? \"检测完成\" : \"检测失败\")"), true);
     assert.equal(settingsSource.includes("读取配置失败"), true);
     assert.equal(settingsSource.includes("保存配置失败"), true);
     assert.equal(settingsSource.includes("检测失败"), true);
