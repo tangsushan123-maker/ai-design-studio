@@ -388,7 +388,10 @@ describe("API error hygiene", () => {
 
 describe("Settings model management", () => {
   it("guards model row actions with busy and delete confirmation states", async () => {
-    const settingsSource = await readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8");
+    const [settingsSource, modelsManageSource] = await Promise.all([
+      readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/models/manage/route.ts", import.meta.url), "utf8"),
+    ]);
 
     assert.equal(settingsSource.includes("settingsRequestFailure"), true);
     assert.equal(settingsSource.includes("读取配置失败"), true);
@@ -406,6 +409,9 @@ describe("Settings model management", () => {
     assert.equal(settingsSource.includes("保存中"), true);
     assert.equal(settingsSource.includes("删除中"), true);
     assert.equal(settingsSource.includes("确认删"), true);
+    assert.equal(modelsManageSource.includes("modelManageErrorMessage"), true);
+    assert.equal(modelsManageSource.includes('modelManageErrorMessage("模型保存失败", error)'), true);
+    assert.equal(modelsManageSource.includes('modelManageErrorMessage("模型删除失败", error)'), true);
   });
 });
 
