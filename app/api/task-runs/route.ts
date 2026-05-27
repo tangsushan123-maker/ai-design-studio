@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = await parseTaskRunPayload(request);
     const action = typeof body.action === "string" ? body.action : "";
     if (action === "delete") {
       const requestIds = normalizeRequestIds(body.requestIds, body.requestId);
@@ -51,7 +51,25 @@ export async function PATCH(request: Request) {
     const record = await recordTaskRunCancelled(trace, "前端已请求停止任务；如果服务端实际完成，会自动覆盖为完成状态。");
     return NextResponse.json({ ok: true, run: record });
   } catch (error) {
+    if (error instanceof InvalidTaskRunPayloadError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ error: taskRunErrorMessage("更新任务记录失败", error) }, { status: 500 });
+  }
+}
+
+class InvalidTaskRunPayloadError extends Error {}
+
+async function parseTaskRunPayload(request: Request): Promise<Record<string, unknown>> {
+  try {
+    const body = await request.json() as unknown;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new InvalidTaskRunPayloadError("任务记录请求格式不正确。");
+    }
+    return body as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof InvalidTaskRunPayloadError) throw error;
+    throw new InvalidTaskRunPayloadError("任务记录 JSON 无法解析，请刷新任务中心后重试。");
   }
 }
 

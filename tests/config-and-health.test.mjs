@@ -1341,6 +1341,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(routeSource.includes("requestIds"), true);
     assert.equal(routeSource.includes("taskRunRequestIdLimit"), true);
     assert.equal(routeSource.includes("taskRunErrorMessage"), true);
+    assert.equal(routeSource.includes("parseTaskRunPayload"), true);
+    assert.equal(routeSource.includes("InvalidTaskRunPayloadError"), true);
+    assert.equal(routeSource.includes("任务记录 JSON 无法解析"), true);
     assert.equal(routeSource.includes('taskRunErrorMessage("读取任务记录失败", error)'), true);
     assert.equal(routeSource.includes('taskRunErrorMessage("更新任务记录失败", error)'), true);
     assert.equal(routeSource.includes("emptyTaskRunSummary"), true);
