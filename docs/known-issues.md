@@ -27,8 +27,8 @@ Date: 2026-05-28
 
 ## UI And Visual Polish
 
-- The design workbench is moving toward a more restrained Apple-style visual system, but typography still needs one more pass across the remaining secondary surfaces.
-- Some smaller internal admin text still uses older tiny utility sizes outside the main task/history/strategy areas.
+- The design workbench is moving toward a more restrained Apple-style visual system; remaining tiny utility text is now concentrated in the densest canvas and archive surfaces.
+- Settings, local edit, task, result, and project surfaces now use a more readable baseline for status text.
 - The plain text-to-image default state is now calmer, but the left floating rail and some secondary panel copy can still be reduced further in a future UI cleanup pass.
 - Node cards, result cards, task status cards, result history, image manager metadata, and project/archive status messages have had their smallest labels normalized upward.
 - Browser-side automation had intermittent trouble filling the bottom composer in the in-app browser, so one manual click-through pass is still recommended for final polish validation.

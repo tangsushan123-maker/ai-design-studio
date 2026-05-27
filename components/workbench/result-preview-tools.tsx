@@ -116,8 +116,8 @@ export function ImageComparisonSlider({
       <div className="pointer-events-none absolute z-10 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border border-white/45 bg-black/45 text-[13px] font-semibold text-white shadow-[0_10px_32px_rgba(0,0,0,0.42)] backdrop-blur-xl" style={{ left: `${clampedSplit}%`, top: "50%", transform: "translate(-50%, -50%)" }}>
         ↔
       </div>
-      <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/14 bg-black/42 px-2.5 py-1 text-[10px] font-semibold text-white/82 backdrop-blur-xl">优化前</div>
-      <div className="pointer-events-none absolute right-3 top-3 rounded-full border border-[#74e3c5]/24 bg-[#071411]/62 px-2.5 py-1 text-[10px] font-semibold text-[#adf8e5] backdrop-blur-xl">优化后</div>
+      <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/14 bg-black/42 px-2.5 py-1 text-[11px] font-semibold text-white/82 backdrop-blur-xl">优化前</div>
+      <div className="pointer-events-none absolute right-3 top-3 rounded-full border border-[#74e3c5]/24 bg-[#071411]/62 px-2.5 py-1 text-[11px] font-semibold text-[#adf8e5] backdrop-blur-xl">优化后</div>
       <input
         aria-label="优化前后对比"
         className="absolute bottom-3 left-4 right-4 z-20 h-1 cursor-ew-resize appearance-none rounded-full bg-white/18 accent-[#74e3c5] opacity-65"

@@ -368,8 +368,8 @@ describe("Workbench node result panel", () => {
     assert.equal(nodeResultsSource.includes("actions?: string[]"), true);
     assert.equal(nodeResultsSource.includes("const firstAction = image.qualityCheck?.actions?.[0]"), true);
     assert.equal(nodeResultsSource.includes("建议：{firstAction}"), true);
-    assert.equal(nodeResultsSource.includes("line-clamp-1 px-1 text-[10px] text-[#ffe1a0]/76"), true);
-    assert.equal(nodeResultsSource.includes("rounded-[10px] border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px]"), true);
+    assert.equal(nodeResultsSource.includes("line-clamp-1 px-1 text-[11px] text-[#ffe1a0]/76"), true);
+    assert.equal(nodeResultsSource.includes("rounded-[10px] border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px]"), true);
   });
 });
 
@@ -798,6 +798,9 @@ describe("Controlled local mask editing", () => {
     assert.equal(maskUiSource.includes("已恢复上次未保存的涂抹草稿"), true);
     assert.equal(workbenchSource.includes("未涂抹区域会强制保持原图不变"), true);
     assert.equal(workbenchSource.includes("buildMaskEditPrompt(params"), false);
+    assert.equal(maskEditorSource.includes("px-2.5 py-1.5 text-[10px]"), false);
+    assert.equal(maskEditorSource.includes("text-[10px] leading-5"), false);
+    assert.equal(maskEditorSource.includes("apple-pill ml-auto px-2.5 py-1 text-[11px]"), true);
   });
 });
 
@@ -1686,9 +1689,11 @@ describe("Workbench compact typography", () => {
   });
 
   it("keeps result and task status cards readable in dense panels", async () => {
-    const [resultCardSource, taskCenterSource] = await Promise.all([
+    const [resultCardSource, taskCenterSource, nodeResultsSource, resultPreviewSource] = await Promise.all([
       readFile(new URL("../components/workbench/result-variant-card.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/node-results-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/result-preview-tools.tsx", import.meta.url), "utf8"),
     ]);
 
     assert.equal(resultCardSource.includes("text-[10px]"), false);
@@ -1697,6 +1702,8 @@ describe("Workbench compact typography", () => {
     assert.equal(taskCenterSource.includes("rounded-[14px] border px-3 py-2 text-[10px] leading-4"), false);
     assert.equal(taskCenterSource.includes("rounded-full px-2.5 py-1 text-[11px]"), true);
     assert.equal(taskCenterSource.includes("rounded-[14px] border px-3 py-2 text-[11px] leading-5"), true);
+    assert.equal(nodeResultsSource.includes("text-[10px]"), false);
+    assert.equal(resultPreviewSource.includes("px-2.5 py-1 text-[10px] font-semibold"), false);
   });
 });
 

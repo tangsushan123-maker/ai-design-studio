@@ -76,22 +76,22 @@ function NodeResultsPanelComponent<TImage extends NodeResultImage>({
             style={{ ...compactThumbStyle(image, 124, 76), margin: "0 auto" }}
             variant="thumbnail"
           />
-          <div className="mt-1.5 truncate px-1 text-[10px] font-semibold text-white/64">
+          <div className="mt-1.5 truncate px-1 text-[11px] font-semibold text-white/64">
             {image.branchLabel || `方案 ${image.variant || index + 1}`}
           </div>
           <div className="mt-1 flex items-center gap-1 px-1">
-            <span className="min-w-0 flex-1 truncate text-[10px] text-white/38">
+            <span className="min-w-0 flex-1 truncate text-[11px] text-white/38">
               {imageSourceSummary(image, nodeOperationLabel)}
             </span>
             <DeliveryStatusBadge image={image} />
           </div>
           {firstIssue ? (
-            <div className="mt-1 line-clamp-1 px-1 text-[10px] text-[#ffe1a0]/76">
+            <div className="mt-1 line-clamp-1 px-1 text-[11px] text-[#ffe1a0]/76">
               {firstIssue}
             </div>
           ) : null}
           {firstAction ? (
-            <div className="mt-1 line-clamp-1 rounded-[10px] border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] text-white/50">
+            <div className="mt-1 line-clamp-1 rounded-[10px] border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-white/50">
               建议：{firstAction}
             </div>
           ) : null}

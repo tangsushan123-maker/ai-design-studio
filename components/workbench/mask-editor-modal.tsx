@@ -328,7 +328,7 @@ export function MaskEditorModal({
               <span className="apple-field-label">快捷指令</span>
               {maskQuickActions.map((action) => (
                 <button
-                  className={`${prompt === action.prompt ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[10px]`}
+                  className={`${prompt === action.prompt ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[11px]`}
                   key={action.label}
                   onClick={() => applyQuickAction(action)}
                   type="button"
@@ -336,17 +336,17 @@ export function MaskEditorModal({
                   {action.label}
                 </button>
               ))}
-              <span className="apple-pill ml-auto px-2.5 py-1 text-[10px]">{status}</span>
+              <span className="apple-pill ml-auto px-2.5 py-1 text-[11px]">{status}</span>
             </div>
             <div className="flex flex-wrap items-center gap-2 rounded-[18px] border border-white/10 bg-white/[0.035] p-2">
               <span className="apple-field-label">涂抹工具</span>
-              <button className={`${brushMode === "paint" ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[10px]`} onClick={() => setBrushMode("paint")} type="button">
+              <button className={`${brushMode === "paint" ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[11px]`} onClick={() => setBrushMode("paint")} type="button">
                 画笔
               </button>
-              <button className={`${brushMode === "erase" ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[10px]`} onClick={() => setBrushMode("erase")} type="button">
+              <button className={`${brushMode === "erase" ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[11px]`} onClick={() => setBrushMode("erase")} type="button">
                 橡皮擦
               </button>
-              <label className="flex min-w-[180px] items-center gap-2 text-[10px] text-white/56">
+              <label className="flex min-w-[190px] items-center gap-2 text-[11px] text-white/56">
                 <span>画笔大小</span>
                 <input
                   className="h-1 flex-1 accent-[#74e3c5]"
@@ -358,14 +358,14 @@ export function MaskEditorModal({
                 />
                 <span className="w-8 text-right text-white/70">{brushSize}</span>
               </label>
-              <button className="apple-button px-2.5 py-1.5 text-[10px] text-white/66" onClick={undoMaskStroke} type="button">
+              <button className="apple-button px-2.5 py-1.5 text-[11px] text-white/66" onClick={undoMaskStroke} type="button">
                 撤销
               </button>
-              <button className="apple-button px-2.5 py-1.5 text-[10px] text-white/66" onClick={clearMask} type="button">
+              <button className="apple-button px-2.5 py-1.5 text-[11px] text-white/66" onClick={clearMask} type="button">
                 清空涂抹
               </button>
               <button
-                className="apple-button px-2.5 py-1.5 text-[10px] text-white/66"
+                className="apple-button px-2.5 py-1.5 text-[11px] text-white/66"
                 onPointerDown={() => setShowMask(false)}
                 onPointerLeave={() => setShowMask(true)}
                 onPointerUp={() => setShowMask(true)}
@@ -411,12 +411,12 @@ export function MaskEditorModal({
               />
             </label>
             {regionType === "logo" || regionType === "qrcode" ? (
-              <div className="mt-2 rounded-[14px] border border-[#ffd166]/18 bg-[#ffd166]/10 px-3 py-2 text-[10px] leading-5 text-[#ffe1a3]">
+              <div className="mt-2 rounded-[14px] border border-[#ffd166]/18 bg-[#ffd166]/10 px-3 py-2 text-[11px] leading-5 text-[#ffe1a3]">
                 {regionType === "logo" ? "Logo 建议用上传素材覆盖，避免 AI 重绘变形。" : "二维码不要交给 AI 重绘，需要保留或用真实二维码素材替换。"}
               </div>
             ) : null}
             {regionType === "face" ? (
-              <div className="mt-2 rounded-[14px] border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-3 py-2 text-[10px] leading-5 text-[#adf8e5]">
+              <div className="mt-2 rounded-[14px] border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-3 py-2 text-[11px] leading-5 text-[#adf8e5]">
                 人脸区域默认使用严格保护，只修局部瑕疵、光影和质感，避免变脸。
               </div>
             ) : null}
