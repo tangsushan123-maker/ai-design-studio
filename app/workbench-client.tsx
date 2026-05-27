@@ -7799,6 +7799,7 @@ function ImageLightbox({
   const [sidebarTab, setSidebarTab] = useState<"actions" | "info">("actions");
   const [activeEditTool, setActiveEditTool] = useState<"optimize" | "mask" | "resize" | "upscale" | null>(null);
   const [activeActionLabel, setActiveActionLabel] = useState("");
+  const [confirmLightboxAction, setConfirmLightboxAction] = useState("");
   const [showPromptDetails, setShowPromptDetails] = useState(false);
   const [showMoreFooterActions, setShowMoreFooterActions] = useState(false);
   const [compareSplit, setCompareSplit] = useState(50);
@@ -7865,6 +7866,7 @@ function ImageLightbox({
 
   async function runAction(label: string, action: () => void | Promise<void>) {
     if (activeActionLabel) return;
+    setConfirmLightboxAction("");
     setActiveActionLabel(label);
     setMessage(`${label}中...`);
     try {
@@ -7875,6 +7877,16 @@ function ImageLightbox({
     } finally {
       setActiveActionLabel("");
     }
+  }
+
+  async function runConfirmedAction(label: string, action: () => void | Promise<void>) {
+    if (activeActionLabel) return;
+    if (confirmLightboxAction !== label) {
+      setConfirmLightboxAction(label);
+      setMessage(`再点一次确认${label}。`);
+      return;
+    }
+    await runAction(label, action);
   }
   const actionBusy = Boolean(activeActionLabel);
 
@@ -7987,9 +7999,9 @@ function ImageLightbox({
                       <Wand2 className="size-3.5" />
                       复制 Prompt
                     </button>
-                    <button className="apple-button-danger flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("删除当前图", onDelete)} type="button">
+                    <button className="apple-button-danger flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runConfirmedAction("删除当前图", onDelete)} type="button">
                       <Trash2 className="size-3.5" />
-                      {activeActionLabel === "删除当前图" ? "删除中..." : "删除当前图"}
+                      {activeActionLabel === "删除当前图" ? "删除中..." : confirmLightboxAction === "删除当前图" ? "确认删除" : "删除当前图"}
                     </button>
                   </div>
                 ) : null}

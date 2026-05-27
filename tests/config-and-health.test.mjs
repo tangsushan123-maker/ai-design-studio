@@ -1213,7 +1213,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("来源节点"), true);
     assert.equal(workbenchUiSource.includes("请求ID"), true);
     assert.equal(workbenchSource.includes("activeActionLabel"), true);
+    assert.equal(workbenchSource.includes("confirmLightboxAction"), true);
     assert.equal(workbenchSource.includes("if (activeActionLabel) return"), true);
+    assert.equal(workbenchSource.includes("runConfirmedAction"), true);
+    assert.equal(workbenchSource.includes("再点一次确认"), true);
     assert.equal(workbenchSource.includes("disabled={actionBusy}"), true);
     assert.equal(workbenchSource.includes("disabled={actionBusy} onClick={() => setShowMoreFooterActions"), true);
     assert.equal(workbenchSource.includes("disabled={actionBusy} onClick={() => void runAction(\"下载 PNG\""), true);
@@ -1236,6 +1239,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("创建 AI 画质增强任务"), true);
     assert.equal(workbenchSource.includes("打开局部修改"), true);
     assert.equal(workbenchSource.includes("删除中..."), true);
+    assert.equal(workbenchSource.includes("确认删除"), true);
     assert.equal(workbenchSource.includes("服务端确认完成，结果已恢复到画布"), true);
     assert.equal(workbenchSource.includes("appendTaskTrace(formData"), true);
     assert.equal(workbenchSource.includes("taskTracePayload(taskId"), true);
