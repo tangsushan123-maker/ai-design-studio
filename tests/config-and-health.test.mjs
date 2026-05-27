@@ -1081,6 +1081,12 @@ describe("Project stability and task tracing", () => {
     assert.equal(taskCenterSource.includes("const finishedTasks = matchedTasks.filter(isFinishedTask)"), true);
     assert.equal(taskCenterSource.includes("onDeleteFinished(finishedTasks.map((task) => task.id))"), true);
     assert.equal(taskCenterSource.includes("清理匹配已结束"), true);
+    assert.equal(taskCenterSource.includes("activeTaskAction"), true);
+    assert.equal(taskCenterSource.includes("runTaskAction"), true);
+    assert.equal(taskCenterSource.includes("停止中"), true);
+    assert.equal(taskCenterSource.includes("重试中"), true);
+    assert.equal(taskCenterSource.includes("删除中"), true);
+    assert.equal(taskCenterSource.includes("清理中"), true);
     assert.equal(workbenchSource.includes("function removeFinishedTasks(targetTaskIds?: string[])"), true);
     assert.equal(workbenchSource.includes("targetIdSet.has(task.id)"), true);
     assert.equal(taskCenterSource.includes('waiting: "等待"'), true);

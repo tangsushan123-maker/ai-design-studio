@@ -63,11 +63,11 @@ export function TaskCenter({
   isTaskPossiblyStuck,
   taskStatusLabel,
 }: {
-  onCancel: (taskId: string) => void;
-  onDelete: (taskId: string) => void;
-  onDeleteFinished: (taskIds: string[]) => void;
+  onCancel: (taskId: string) => void | Promise<unknown>;
+  onDelete: (taskId: string) => void | Promise<unknown>;
+  onDeleteFinished: (taskIds: string[]) => void | Promise<unknown>;
   onPreview: (image: TaskCenterImage) => void;
-  onRetry: (taskId: string) => void;
+  onRetry: (taskId: string) => void | Promise<unknown>;
   tasks: TaskCenterTask[];
   emptyState?: React.ReactNode;
   formatDuration: (milliseconds: number) => string;
@@ -79,6 +79,8 @@ export function TaskCenter({
   const [now, setNow] = useState(() => Date.now());
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(12);
+  const [activeTaskAction, setActiveTaskAction] = useState("");
+  const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const normalizedQuery = query.trim();
 
   useEffect(() => {
@@ -117,6 +119,21 @@ export function TaskCenter({
     isTaskPossiblyStuck(task) ||
     (task.status === "completed" && !task.resultOnCanvas)).length;
 
+  async function runTaskAction(label: string, key: string, action: () => void | Promise<unknown>) {
+    const actionKey = `${label}:${key}`;
+    if (activeTaskAction) return;
+    setActiveTaskAction(actionKey);
+    setActionMessage(null);
+    try {
+      await action();
+      setActionMessage({ tone: "success", text: `${label}已提交。` });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : `${label}失败。` });
+    } finally {
+      setActiveTaskAction("");
+    }
+  }
+
   function renderTask(task: TaskCenterTask) {
     const stuck = isTaskPossiblyStuck(task);
     const resultImages = task.outputs?.length ? task.outputs : task.result ? [task.result] : [];
@@ -125,6 +142,9 @@ export function TaskCenter({
     const canStop = task.status === "running" || task.status === "saving" || (task.status === "queued" && !task.deferred);
     const visibleResult = taskHasVisibleResult(task);
     const canRetry = !visibleResult && (task.status !== "completed" || !task.resultOnCanvas) && !canStop;
+    const cancelActionKey = `停止:${task.id}`;
+    const deleteActionKey = `删除记录:${task.id}`;
+    const retryActionKey = `${task.status === "queued" ? "运行" : "重试"}:${task.id}`;
     const elapsedMs = (task.endedAt || now) - task.startedAt;
     const modelMs = task.modelDurationMs || (task.requestStartedAt && (task.status === "running" || task.status === "saving") ? now - task.requestStartedAt : undefined);
     const saveMs = task.saveDurationMs || (task.saveStartedAt && task.status === "saving" ? now - task.saveStartedAt : undefined);
@@ -207,21 +227,21 @@ export function TaskCenter({
 
         <div className="mt-3 flex items-center gap-1.5">
           {canStop ? (
-            <button className="apple-button-danger px-3 py-1.5 text-[11px]" onClick={() => onCancel(task.id)} type="button">
-              停止
+            <button className="apple-button-danger px-3 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeTaskAction)} onClick={() => void runTaskAction("停止", task.id, () => onCancel(task.id))} type="button">
+              {activeTaskAction === cancelActionKey ? "停止中" : "停止"}
             </button>
           ) : null}
           {canRetry ? (
-            <button className="apple-button px-3 py-1.5 text-[11px]" onClick={() => onRetry(task.id)} type="button">
-              {task.status === "queued" ? "运行" : "重试"}
+            <button className="apple-button px-3 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeTaskAction)} onClick={() => void runTaskAction(task.status === "queued" ? "运行" : "重试", task.id, () => onRetry(task.id))} type="button">
+              {activeTaskAction === retryActionKey ? (task.status === "queued" ? "运行中" : "重试中") : task.status === "queued" ? "运行" : "重试"}
             </button>
           ) : null}
           {canStop ? (
             <span className="apple-caption px-2 text-white/38">停止后可删除</span>
           ) : (
-            <button className="apple-button flex items-center gap-1 px-3 py-1.5 text-[11px]" onClick={() => onDelete(task.id)} type="button">
+            <button className="apple-button flex items-center gap-1 px-3 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeTaskAction)} onClick={() => void runTaskAction("删除记录", task.id, () => onDelete(task.id))} type="button">
               <Trash2 className="size-3" />
-              删除记录
+              {activeTaskAction === deleteActionKey ? "删除中" : "删除记录"}
             </button>
           )}
         </div>
@@ -245,12 +265,26 @@ export function TaskCenter({
           </div>
         </div>
         {finishedCount ? (
-          <button className="apple-button flex shrink-0 items-center gap-1 px-3 py-1.5 text-[11px]" onClick={() => onDeleteFinished(finishedTasks.map((task) => task.id))} type="button">
+          <button
+            className="apple-button flex shrink-0 items-center gap-1 px-3 py-1.5 text-[11px] disabled:opacity-45"
+            disabled={Boolean(activeTaskAction)}
+            onClick={() => void runTaskAction(normalizedQuery ? "清理匹配已结束" : "清理已结束", "finished", () => onDeleteFinished(finishedTasks.map((task) => task.id)))}
+            type="button"
+          >
             <Trash2 className="size-3" />
-            {normalizedQuery ? "清理匹配已结束" : "清理已结束"}
+            {activeTaskAction.endsWith(":finished") ? "清理中" : normalizedQuery ? "清理匹配已结束" : "清理已结束"}
           </button>
         ) : null}
       </div>
+      {actionMessage ? (
+        <div className={`rounded-[14px] border px-3 py-2 text-[10px] leading-4 ${
+          actionMessage.tone === "success"
+            ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
+            : "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
+        }`}>
+          {actionMessage.text}
+        </div>
+      ) : null}
       <label className="flex h-9 items-center gap-2 rounded-[16px] border border-white/10 bg-white/[0.05] px-3 text-[11px] text-white/58 focus-within:border-[#8fa7ff]/40 focus-within:bg-white/[0.075]">
         <Search className="size-3.5 shrink-0 text-white/38" />
         <input

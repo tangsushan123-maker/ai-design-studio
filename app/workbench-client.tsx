@@ -6965,12 +6965,12 @@ function RightPanel({
   onClose: () => void;
   selectedNode: FlowNode | null;
   tasks: TaskRecord[];
-  onCancelTask: (taskId: string) => void;
-  onDeleteTask: (taskId: string) => void;
-  onDeleteFinishedTasks: (taskIds?: string[]) => void;
+  onCancelTask: (taskId: string) => void | Promise<unknown>;
+  onDeleteTask: (taskId: string) => void | Promise<unknown>;
+  onDeleteFinishedTasks: (taskIds?: string[]) => void | Promise<unknown>;
   onMaskEdit: (nodeId: string) => void;
   onParamChange: (nodeId: string, key: string, value: unknown) => void;
-  onRetryTask: (taskId: string) => void;
+  onRetryTask: (taskId: string) => void | Promise<unknown>;
   onCreateAction: (nodeId: string, type: NodeKind, handle: string, params?: Record<string, unknown>) => void;
   onRunNode: (nodeId: string) => void;
 }) {
