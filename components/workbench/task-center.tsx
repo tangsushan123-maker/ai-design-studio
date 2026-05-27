@@ -1,8 +1,9 @@
 "use client";
 
-import { RefreshCcw, Sparkles, Trash2 } from "lucide-react";
+import { RefreshCcw, Search, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ImageFrame } from "@/components/workbench/image-frame";
+import { taskMatchesSearch } from "@/lib/workbench-tasks";
 
 type TaskCenterImage = {
   id?: string;
@@ -76,7 +77,9 @@ export function TaskCenter({
   taskStatusLabel: (status: string) => string;
 }) {
   const [now, setNow] = useState(() => Date.now());
+  const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(12);
+  const normalizedQuery = query.trim();
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -87,14 +90,15 @@ export function TaskCenter({
     return emptyState || null;
   }
 
-  const deferredTasks = tasks.filter(isDeferredQueuedTask);
-  const timelineTasks = tasks.filter((task) => !isDeferredQueuedTask(task));
+  const matchedTasks = tasks.filter((task) => taskMatchesSearch(task, normalizedQuery));
+  const deferredTasks = matchedTasks.filter(isDeferredQueuedTask);
+  const timelineTasks = matchedTasks.filter((task) => !isDeferredQueuedTask(task));
   const visibleTimelineTasks = timelineTasks.slice(0, visibleCount);
-  const finishedCount = tasks.filter(isFinishedTask).length;
-  const runningCount = tasks.filter((task) => !isDeferredQueuedTask(task) && (task.status === "queued" || task.status === "running" || task.status === "saving")).length;
-  const successCount = tasks.filter((task) => !taskIsPartialSuccess(task) && ((task.status === "completed" && task.resultOnCanvas) || taskHasVisibleResult(task))).length;
-  const failedCount = tasks.filter((task) => task.status === "failed" && !taskHasAnyResult(task)).length;
-  const cancelledCount = tasks.filter((task) => task.status === "cancelled").length;
+  const finishedCount = matchedTasks.filter(isFinishedTask).length;
+  const runningCount = matchedTasks.filter((task) => !isDeferredQueuedTask(task) && (task.status === "queued" || task.status === "running" || task.status === "saving")).length;
+  const successCount = matchedTasks.filter((task) => !taskIsPartialSuccess(task) && ((task.status === "completed" && task.resultOnCanvas) || taskHasVisibleResult(task))).length;
+  const failedCount = matchedTasks.filter((task) => task.status === "failed" && !taskHasAnyResult(task)).length;
+  const cancelledCount = matchedTasks.filter((task) => task.status === "cancelled").length;
   const attentionTasks = visibleTimelineTasks.filter((task) =>
     (task.status === "failed" && !taskHasAnyResult(task)) ||
     taskIsPartialSuccess(task) ||
@@ -227,7 +231,7 @@ export function TaskCenter({
   return (
     <div className="space-y-3">
       <div className="apple-surface-section flex items-center justify-between gap-2 rounded-[18px] px-3 py-2">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="apple-section-title">任务状态</div>
           <div className="apple-caption mt-0.5 truncate">
             {runningCount ? `${runningCount} 个后台进程` : "暂无后台进程"}
@@ -236,6 +240,7 @@ export function TaskCenter({
             {cancelledCount ? ` · 已停 ${cancelledCount}` : ""}
             {deferredTasks.length ? ` · ${deferredTasks.length} 个待执行` : ""}
             {attentionCount ? ` · ${attentionCount} 个需处理` : ""}
+            {normalizedQuery ? ` · 匹配 ${matchedTasks.length}/${tasks.length}` : ""}
           </div>
         </div>
         {finishedCount ? (
@@ -245,6 +250,48 @@ export function TaskCenter({
           </button>
         ) : null}
       </div>
+      <label className="flex h-9 items-center gap-2 rounded-[16px] border border-white/10 bg-white/[0.05] px-3 text-[11px] text-white/58 focus-within:border-[#8fa7ff]/40 focus-within:bg-white/[0.075]">
+        <Search className="size-3.5 shrink-0 text-white/38" />
+        <input
+          className="min-w-0 flex-1 bg-transparent text-white/72 outline-none placeholder:text-white/30"
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setVisibleCount(12);
+          }}
+          placeholder="搜索节点、模型、请求、错误、状态"
+          value={query}
+        />
+        {query ? (
+          <button
+            aria-label="清空任务搜索"
+            className="flex size-5 shrink-0 items-center justify-center rounded-full text-white/42 transition hover:bg-white/10 hover:text-white/72"
+            onClick={() => {
+              setQuery("");
+              setVisibleCount(12);
+            }}
+            type="button"
+          >
+            <X className="size-3" />
+          </button>
+        ) : null}
+      </label>
+      {!matchedTasks.length ? (
+        <div className="rounded-[20px] border border-dashed border-white/12 bg-white/[0.035] p-6 text-center text-[12px] text-white/44">
+          没有匹配的任务。
+          {normalizedQuery ? (
+            <button
+              className="apple-button mt-3 px-3 py-1.5 text-[11px]"
+              onClick={() => {
+                setQuery("");
+                setVisibleCount(12);
+              }}
+              type="button"
+            >
+              清空搜索
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {deferredTasks.length ? (
         <section className="space-y-2">
           <div className="flex items-center justify-between px-1">

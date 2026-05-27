@@ -7,6 +7,7 @@ import { parseHealthMode, skippedImageCheck } from "../lib/openai-health.ts";
 import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualityBadgeLabel, qualityDeliveryTone, qualityTone } from "../lib/workbench-delivery.ts";
 import { historyMatchesFilter, historyMatchesQuery, historySearchText } from "../lib/workbench-history.ts";
 import { imageManagerMatchesSearch, imageManagerSearchText } from "../lib/workbench-image-manager.ts";
+import { taskMatchesSearch, taskSearchText } from "../lib/workbench-tasks.ts";
 
 describe("OpenAI defaults", () => {
   it("keeps the official provider aligned with shared defaults", () => {
@@ -196,6 +197,52 @@ describe("Workbench image manager search", () => {
     assert.equal(imageManagerMatchesSearch({ id: "layer_pack" }, cleanableProtection, "png三层"), true);
     assert.equal(imageManagerMatchesSearch({ id: "deleted" }, trashedProtection, "回收站"), true);
     assert.equal(imageManagerMatchesSearch({ id: "deleted" }, trashedProtection, "已删除"), true);
+  });
+});
+
+describe("Workbench task search", () => {
+  it("searches task metadata, request ids, errors, and result images", () => {
+    const task = {
+      error: "API timeout from upstream",
+      id: "task_001",
+      model: "gpt-image-2",
+      nodeName: "主视觉节点",
+      outputs: [{ fileName: "result/poster.png", mode: "文生图", url: "/generated/poster.png" }],
+      progressLabel: "模型仍在生成",
+      projectName: "活动项目",
+      requestId: "req_task_search_123456",
+      status: "failed",
+      targetSize: "长边3840",
+      type: "text_to_image",
+    };
+
+    assert.equal(taskMatchesSearch(task, "主视觉节点"), true);
+    assert.equal(taskMatchesSearch(task, "gpt-image-2"), true);
+    assert.equal(taskMatchesSearch(task, "timeout"), true);
+    assert.equal(taskMatchesSearch(task, "可重试"), true);
+    assert.equal(taskMatchesSearch(task, "poster.png"), true);
+    assert.equal(taskSearchText(task).includes("req_task_search_123456"), true);
+  });
+
+  it("searches localized task status aliases", () => {
+    const queued = {
+      id: "task_queue",
+      nodeName: "排队节点",
+      status: "queued",
+      type: "text_to_image",
+    };
+    const completed = {
+      backendRunState: "finished",
+      id: "task_done",
+      nodeName: "完成节点",
+      result: { url: "/generated/done.png" },
+      status: "completed",
+      type: "text_to_image",
+    };
+
+    assert.equal(taskMatchesSearch(queued, "待执行"), true);
+    assert.equal(taskMatchesSearch(completed, "已完成"), true);
+    assert.equal(taskMatchesSearch(completed, "有结果"), true);
   });
 });
 
