@@ -33,6 +33,10 @@ describe("OpenAI defaults", () => {
     assert.equal(preflightSource.includes("Node.js is >=20.9.0"), true);
     assert.equal(preflightSource.includes("OPENAI_API_KEY is empty"), true);
     assert.equal(preflightSource.includes("public/generated is writable"), true);
+    assert.equal(preflightSource.includes("Git is not tracking secrets, local data, generated images, or build info"), true);
+    assert.equal(preflightSource.includes("git\", [\"ls-files\"]"), true);
+    assert.equal(preflightSource.includes("allowedTrackedRuntimeFiles"), true);
+    assert.equal(preflightSource.includes("*.tsbuildinfo"), true);
     assert.equal(deploySource.includes("npm run preflight"), true);
   });
 });

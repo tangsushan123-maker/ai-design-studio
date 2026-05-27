@@ -1,10 +1,38 @@
 import { access, mkdir, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
+import { execFile } from "node:child_process";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 const root = process.cwd();
+const execFileAsync = promisify(execFile);
 const requiredNode = { major: 20, minor: 9 };
-const requiredIgnores = ["node_modules/", ".next/", "dist/", "build/", ".env", ".env.local", ".DS_Store", "public/generated/*"];
+const requiredIgnores = [
+  "node_modules/",
+  ".next/",
+  "dist/",
+  "build/",
+  ".env",
+  ".env.local",
+  ".DS_Store",
+  "config.local.json",
+  "projects.local.json",
+  "task-runs.local.json",
+  "style-libraries.local.json",
+  "public/generated/*",
+  "*.tsbuildinfo",
+];
+const forbiddenTrackedPatterns = [
+  /^\.env(?:\.|$)(?!example$)/,
+  /(^|\/)config\.local\.json(?:\.bak)?$/,
+  /(^|\/)project\.local\.json(?:\.bak)?$/,
+  /(^|\/)projects\.local\.json(?:\.bak)?$/,
+  /(^|\/)task-runs\.local\.json(?:\.bak)?$/,
+  /(^|\/)style-libraries\.local\.json$/,
+  /^public\/generated\//,
+  /\.tsbuildinfo$/,
+];
+const allowedTrackedRuntimeFiles = new Set([".env.example", "public/generated/.gitkeep"]);
 const checks = [];
 
 await check("Node.js is >=20.9.0", () => {
@@ -26,6 +54,13 @@ await check(".gitignore protects dependencies, builds, secrets, and generated im
   const gitignore = await readFile(join(root, ".gitignore"), "utf8");
   const missing = requiredIgnores.filter((entry) => !gitignore.includes(entry));
   if (missing.length) throw new Error(`missing: ${missing.join(", ")}`);
+});
+
+await check("Git is not tracking secrets, local data, generated images, or build info", async () => {
+  const { stdout } = await execFileAsync("git", ["ls-files"], { cwd: root });
+  const tracked = stdout.split(/\r?\n/).filter(Boolean);
+  const forbidden = tracked.filter((file) => !allowedTrackedRuntimeFiles.has(file) && forbiddenTrackedPatterns.some((pattern) => pattern.test(file)));
+  if (forbidden.length) throw new Error(`tracked forbidden files: ${forbidden.slice(0, 8).join(", ")}`);
 });
 
 await check(".env.local exists and does not expose empty OPENAI_API_KEY", async () => {
