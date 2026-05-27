@@ -1178,8 +1178,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(generatedHistorySource.includes("trashOnly?: boolean"), true);
     assert.equal(generatedHistorySource.includes('entry.name === generatedTrashDirName && !options.includeTrash'), true);
     assert.equal(workbenchSource.includes("imageMatchesGeneratedFile"), true);
+    assert.equal(workbenchSource.includes("applyHistoryFavoriteState"), true);
     assert.equal(workbenchSource.includes("favorite: nextFavorite"), true);
     assert.equal(workbenchSource.includes("metadata: { favorite: nextFavorite }"), true);
+    assert.equal(workbenchSource.includes("throw new Error(\"收藏状态保存失败。\")"), true);
     assert.equal(workbenchSource.includes("这张图已受保护"), true);
     assert.equal(workbenchUiSource.includes("可清理"), true);
     assert.equal(generatedImagesRouteSource.includes("requestIds"), true);
@@ -1194,8 +1196,13 @@ describe("Project stability and task tracing", () => {
     assert.equal(historyPanelSource.includes('aria-label="删除图片"'), true);
     assert.equal(historyPanelSource.includes("actionMessage"), true);
     assert.equal(historyPanelSource.includes("deletingKey"), true);
+    assert.equal(historyPanelSource.includes("favoritingKey"), true);
+    assert.equal(historyPanelSource.includes("toggleFavorite"), true);
     assert.equal(historyPanelSource.includes("runInlineAction"), true);
     assert.equal(historyPanelSource.includes("historyImageKey"), true);
+    assert.equal(workbenchUiSource.includes("favoritingKey"), true);
+    assert.equal(workbenchUiSource.includes("\"收藏中\""), true);
+    assert.equal(workbenchUiSource.includes("\"取消中\""), true);
     assert.equal(imageUtilsSource.includes("GeneratedStorageKind"), true);
     assert.equal(imageUtilsSource.includes("getGeneratedProjectRelativeDir"), true);
     assert.equal(imageUtilsSource.includes('path.join("projects", safeProjectId, kind)'), true);

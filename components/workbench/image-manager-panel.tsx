@@ -127,12 +127,13 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   onPermanentDelete: (image: TImage) => void | Promise<unknown>;
   onPreview: (image: TImage) => void;
   onRestore: (image: TImage) => void | Promise<unknown>;
-  onToggleFavorite: (image: TImage) => void;
+  onToggleFavorite: (image: TImage) => void | Promise<unknown>;
 }) {
   const [filter, setFilter] = useState<ImageManagerFilter>("全部");
   const [query, setQuery] = useState("");
   const [batchActionLabel, setBatchActionLabel] = useState("");
   const [downloadingKey, setDownloadingKey] = useState("");
+  const [favoritingKey, setFavoritingKey] = useState("");
   const [rowActionKey, setRowActionKey] = useState("");
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
@@ -239,6 +240,21 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
       setActionMessage({ tone: "error", text: error instanceof Error ? error.message : `${label}失败。` });
     } finally {
       setRowActionKey("");
+    }
+  }
+
+  async function toggleFavorite(image: TImage) {
+    const key = imageManagerKey(image);
+    if (favoritingKey) return;
+    setFavoritingKey(key);
+    setActionMessage(null);
+    try {
+      await onToggleFavorite(image);
+      setActionMessage({ tone: "success", text: image.favorite ? "已取消收藏。" : "已收藏。" });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "收藏状态保存失败。" });
+    } finally {
+      setFavoritingKey("");
     }
   }
 
@@ -461,12 +477,13 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
                 <span className="apple-button flex h-8 items-center justify-center text-[10px] text-white/28">已删除</span>
               ) : (
                 <button
-                  className={`apple-button flex h-8 items-center justify-center gap-1 text-[10px] ${image.favorite ? "text-[#ffe1a0]" : ""}`}
-                  onClick={() => onToggleFavorite(image)}
+                  className={`apple-button flex h-8 items-center justify-center gap-1 text-[10px] disabled:opacity-45 ${image.favorite ? "text-[#ffe1a0]" : ""}`}
+                  disabled={Boolean(favoritingKey)}
+                  onClick={() => void toggleFavorite(image)}
                   type="button"
                 >
-                  <Star className={`size-3 ${image.favorite ? "fill-current" : ""}`} />
-                  {image.favorite ? "已藏" : "收藏"}
+                  <Star className={`size-3 ${favoritingKey === imageManagerKey(image) ? "animate-pulse" : ""} ${image.favorite ? "fill-current" : ""}`} />
+                  {favoritingKey === imageManagerKey(image) ? (image.favorite ? "取消中" : "收藏中") : image.favorite ? "已藏" : "收藏"}
                 </button>
               )}
               <button

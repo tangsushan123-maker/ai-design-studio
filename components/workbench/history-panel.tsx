@@ -77,7 +77,7 @@ export function HistoryPanel({
   onDelete?: (image: HistoryPanelImage) => void | Promise<unknown>;
   onPreview: (image: HistoryPanelImage) => void;
   onResize: (image: HistoryPanelImage) => void;
-  onToggleFavorite: (image: HistoryPanelImage) => void;
+  onToggleFavorite: (image: HistoryPanelImage) => void | Promise<unknown>;
   onUpscale: (image: HistoryPanelImage) => void;
   qualityBadgeLabel: (image: HistoryPanelImage) => string;
   qualityTone: (image: HistoryPanelImage) => string;
@@ -87,6 +87,7 @@ export function HistoryPanel({
   const [visibleCount, setVisibleCount] = useState(resultPageSize);
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [deletingKey, setDeletingKey] = useState("");
+  const [favoritingKey, setFavoritingKey] = useState("");
   const normalizedQuery = query.trim();
 
   const orderedImages = useMemo(() => [...images].sort(compareHistoryImages), [images]);
@@ -118,6 +119,22 @@ export function HistoryPanel({
       setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "删除失败。" });
     } finally {
       setDeletingKey("");
+    }
+  }
+
+  async function toggleFavorite(image: HistoryPanelImage) {
+    if (favoritingKey) return;
+    const key = historyImageKey(image);
+    const nextFavorite = !image.favorite;
+    setFavoritingKey(key);
+    setActionMessage(null);
+    try {
+      await onToggleFavorite(image);
+      setActionMessage({ tone: "success", text: nextFavorite ? "已收藏。" : "已取消收藏。" });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "收藏状态保存失败。" });
+    } finally {
+      setFavoritingKey("");
     }
   }
 
@@ -221,15 +238,16 @@ export function HistoryPanel({
 
             <button
               aria-label={image.favorite ? "取消收藏" : "收藏"}
-              className={`absolute right-2.5 top-2.5 z-10 flex size-6 items-center justify-center rounded-full border border-white/16 shadow-[0_8px_20px_rgba(0,0,0,0.22)] backdrop-blur-xl transition ${image.favorite ? "bg-[rgba(102,76,19,0.86)] text-[#ffe1a0]" : "bg-[rgba(18,23,32,0.58)] text-white/82 hover:bg-[rgba(28,34,46,0.82)]"}`}
+              className={`absolute right-2.5 top-2.5 z-10 flex size-6 items-center justify-center rounded-full border border-white/16 shadow-[0_8px_20px_rgba(0,0,0,0.22)] backdrop-blur-xl transition disabled:opacity-55 ${image.favorite ? "bg-[rgba(102,76,19,0.86)] text-[#ffe1a0]" : "bg-[rgba(18,23,32,0.58)] text-white/82 hover:bg-[rgba(28,34,46,0.82)]"}`}
+              disabled={Boolean(favoritingKey)}
               onClick={(event) => {
                 event.stopPropagation();
-                onToggleFavorite(image);
+                void toggleFavorite(image);
               }}
               title={image.favorite ? "取消收藏" : "收藏"}
               type="button"
             >
-              <Star className={`size-3 ${image.favorite ? "fill-current" : ""}`} />
+              <Star className={`size-3 ${favoritingKey === historyImageKey(image) ? "animate-pulse" : ""} ${image.favorite ? "fill-current" : ""}`} />
             </button>
 
             <div className="px-1 pb-1 pt-1.5">
@@ -249,10 +267,10 @@ export function HistoryPanel({
                 <button
                   aria-label="加入画布"
                   className="apple-button flex h-7 items-center justify-center text-white/62"
-	                  onClick={(event) => {
-	                    event.stopPropagation();
-	                    runInlineAction("加入画布", () => onAddToCanvas(image));
-	                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    runInlineAction("加入画布", () => onAddToCanvas(image));
+                  }}
                   title="加入画布"
                   type="button"
                 >
@@ -261,10 +279,10 @@ export function HistoryPanel({
                 <button
                   aria-label="改尺寸"
                   className="apple-button flex h-7 items-center justify-center text-white/62"
-	                  onClick={(event) => {
-	                    event.stopPropagation();
-	                    runInlineAction("改尺寸", () => onResize(image));
-	                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    runInlineAction("改尺寸", () => onResize(image));
+                  }}
                   title="改尺寸"
                   type="button"
                 >
@@ -273,10 +291,10 @@ export function HistoryPanel({
                 <button
                   aria-label="画质增强"
                   className="apple-button flex h-7 items-center justify-center text-white/62"
-	                  onClick={(event) => {
-	                    event.stopPropagation();
-	                    runInlineAction("画质增强", () => onUpscale(image));
-	                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    runInlineAction("画质增强", () => onUpscale(image));
+                  }}
                   title="画质增强"
                   type="button"
                 >
@@ -284,17 +302,17 @@ export function HistoryPanel({
                 </button>
                 {onDelete ? (
                   <button
-	                    aria-label="删除图片"
-	                    className="apple-button flex h-7 items-center justify-center text-[#ffb4a8] disabled:opacity-45"
-	                    disabled={Boolean(deletingKey)}
-	                    onClick={(event) => {
-	                      event.stopPropagation();
-	                      void deleteImage(image);
-	                    }}
+                    aria-label="删除图片"
+                    className="apple-button flex h-7 items-center justify-center text-[#ffb4a8] disabled:opacity-45"
+                    disabled={Boolean(deletingKey)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void deleteImage(image);
+                    }}
                     title="删除图片"
                     type="button"
                   >
-	                    {deletingKey === historyImageKey(image) ? <X className="size-3 animate-pulse" /> : <Trash2 className="size-3" />}
+                    {deletingKey === historyImageKey(image) ? <X className="size-3 animate-pulse" /> : <Trash2 className="size-3" />}
                   </button>
                 ) : null}
               </div>

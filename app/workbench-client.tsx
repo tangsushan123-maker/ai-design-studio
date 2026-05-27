@@ -3988,29 +3988,41 @@ function NodeWorkflowWorkbench({
     setStatus("已加入画布，可以继续连接改比例、局部修改或4K节点。");
   }
 
-  function toggleHistoryFavorite(image: ImageAsset) {
-    const key = imageKey(image);
-    const nextFavorite = !favoriteIds.has(key);
+  function applyHistoryFavoriteState(key: string, favorite: boolean) {
     setFavoriteIds((current) => {
       const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (favorite) next.add(key);
+      else next.delete(key);
       saveFavoriteIds(next);
       return next;
     });
-    setHistoryImages((current) => current.map((item) => (imageKey(item) === key ? { ...item, favorite: nextFavorite } : item)));
-    setImageManagerImages((current) => current.map((item) => (imageKey(item) === key ? { ...item, favorite: nextFavorite } : item)));
-    setProjectAssets((current) => current.map((item) => (imageKey(item) === key ? { ...item, favorite: nextFavorite } : item)));
-    setLightboxImage((current) => (current && imageKey(current) === key ? { ...current, favorite: nextFavorite } : current));
+    setHistoryImages((current) => current.map((item) => (imageKey(item) === key ? { ...item, favorite } : item)));
+    setImageManagerImages((current) => current.map((item) => (imageKey(item) === key ? { ...item, favorite } : item)));
+    setProjectAssets((current) => current.map((item) => (imageKey(item) === key ? { ...item, favorite } : item)));
+    setLightboxImage((current) => (current && imageKey(current) === key ? { ...current, favorite } : current));
+  }
+
+  async function toggleHistoryFavorite(image: ImageAsset) {
+    const key = imageKey(image);
+    const nextFavorite = !favoriteIds.has(key);
+    applyHistoryFavoriteState(key, nextFavorite);
     const fileName = generatedFileNameForImage(image);
-    if (fileName) {
-      void fetch("/api/generated-images", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName, metadata: { favorite: nextFavorite } }),
-      }).catch(() => {});
+    try {
+      if (fileName) {
+        const response = await fetch("/api/generated-images", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName, metadata: { favorite: nextFavorite } }),
+        });
+        if (!response.ok) throw new Error("收藏状态保存失败。");
+      }
+      setStatus(nextFavorite ? "已收藏到素材库。" : "已取消收藏。");
+      return nextFavorite;
+    } catch (error) {
+      applyHistoryFavoriteState(key, !nextFavorite);
+      setStatus(error instanceof Error ? error.message : "收藏状态保存失败。");
+      throw error;
     }
-    setStatus(nextFavorite ? "已收藏到素材库。" : "已取消收藏。");
   }
 
   function createTask(node: FlowNode, taskProjectId = projectId) {
@@ -6939,7 +6951,7 @@ function RightPanel({
   onBatchPermanentDeleteHistory: (images: ImageAsset[]) => void | Promise<unknown>;
   onBatchRestoreHistory: (images: ImageAsset[]) => void | Promise<unknown>;
   onAddHistoryToCanvas: (image: ImageAsset) => void;
-  onToggleFavorite: (image: ImageAsset) => void;
+  onToggleFavorite: (image: ImageAsset) => void | Promise<unknown>;
   onEnsureImageManager: () => void;
   onLoadMoreImageManager: () => void;
   onLoadMoreTrash: () => void;
