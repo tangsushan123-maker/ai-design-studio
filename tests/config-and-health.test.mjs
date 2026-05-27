@@ -271,6 +271,19 @@ describe("Workbench image source trace", () => {
   });
 });
 
+describe("Workbench result cards", () => {
+  it("renders result badge, metadata, and description instead of dropping props", async () => {
+    const resultCardSource = await readFile(new URL("../components/workbench/result-variant-card.tsx", import.meta.url), "utf8");
+
+    assert.equal(resultCardSource.includes("void badgeLabel"), false);
+    assert.equal(resultCardSource.includes("void description"), false);
+    assert.equal(resultCardSource.includes("void meta"), false);
+    assert.equal(resultCardSource.includes("{badgeLabel}"), true);
+    assert.equal(resultCardSource.includes("{meta}"), true);
+    assert.equal(resultCardSource.includes("{description}"), true);
+  });
+});
+
 describe("Workbench task search", () => {
   it("searches task metadata, request ids, errors, and result images", () => {
     const task = {
