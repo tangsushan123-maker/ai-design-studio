@@ -5365,6 +5365,7 @@ function NodeWorkflowWorkbench({
               const node = addNode(type, nextStandaloneNodePosition());
               if (type !== "image_input") focusNodeParams(node.id);
               setStatus(nodeCreationHint(type, false));
+              setNodeMenuOpen(false);
             }}
           />
         ) : null}
@@ -5378,6 +5379,7 @@ function NodeWorkflowWorkbench({
               const node = addNode(type, menu.position);
               if (type !== "image_input") focusNodeParams(node.id);
               setStatus(nodeCreationHint(type, false));
+              setMenu(null);
             }}
           />
         ) : null}
@@ -5386,9 +5388,15 @@ function NodeWorkflowWorkbench({
           <QuickMenu
             x={menu.x}
             y={menu.y}
-            onDelete={() => deleteNode(menu.nodeId)}
+            onDelete={() => {
+              deleteNode(menu.nodeId);
+              setMenu(null);
+            }}
             onClose={() => setMenu(null)}
-            onSelect={(action) => addQuickNode(menu.nodeId, action.type, action.handle)}
+            onSelect={(action) => {
+              addQuickNode(menu.nodeId, action.type, action.handle);
+              setMenu(null);
+            }}
           />
         ) : null}
 
@@ -7669,6 +7677,14 @@ function NodeMenu({
   x: number;
   y: number;
 }) {
+  const [activeSelection, setActiveSelection] = useState<NodeKind | "">("");
+
+  function selectNode(type: NodeKind) {
+    if (activeSelection) return;
+    setActiveSelection(type);
+    onSelect(type);
+  }
+
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
       if (event.target instanceof Element && event.target.closest("[data-node-menu-root='true']")) return;
@@ -7696,14 +7712,15 @@ function NodeMenu({
       <div className="max-h-[560px] overflow-auto">
         {nodeCatalog.filter((item) => !item.hiddenFromAddMenu).map((item) => (
           <button
-            className="apple-menu-item flex w-full items-center gap-3 px-2.5 py-2.5 text-left"
+            className="apple-menu-item flex w-full items-center gap-3 px-2.5 py-2.5 text-left disabled:opacity-45"
+            disabled={Boolean(activeSelection)}
             key={item.type}
-            onClick={() => onSelect(item.type)}
+            onClick={() => selectNode(item.type)}
             type="button"
           >
             <span className="apple-button flex size-8 items-center justify-center rounded-xl text-white/72">{item.icon}</span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[12px] font-semibold text-white/82">{item.label}</span>
+              <span className="block text-[12px] font-semibold text-white/82">{activeSelection === item.type ? "创建中" : item.label}</span>
               <span className="apple-menu-meta mt-0.5 block truncate">{item.description}</span>
             </span>
             <ChevronRight className="size-3.5 text-white/24" />
@@ -7727,6 +7744,21 @@ function QuickMenu({
   x: number;
   y: number;
 }) {
+  const [activeQuickAction, setActiveQuickAction] = useState("");
+
+  function selectQuickAction(action: (typeof quickActions)[number]) {
+    const key = `${action.type}:${action.handle}`;
+    if (activeQuickAction) return;
+    setActiveQuickAction(key);
+    onSelect(action);
+  }
+
+  function deleteFromMenu() {
+    if (activeQuickAction) return;
+    setActiveQuickAction("delete");
+    onDelete();
+  }
+
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
       if (event.target instanceof Element && event.target.closest("[data-quick-menu-root='true']")) return;
@@ -7752,14 +7784,20 @@ function QuickMenu({
         </button>
       </div>
       {quickActions.map((action) => (
-        <button className="apple-menu-item flex w-full items-center justify-between px-3 py-2 text-[11px] text-white/72" key={action.type} onClick={() => onSelect(action)} type="button">
-          {action.label}
+        <button
+          className="apple-menu-item flex w-full items-center justify-between px-3 py-2 text-[11px] text-white/72 disabled:opacity-45"
+          disabled={Boolean(activeQuickAction)}
+          key={`${action.type}-${action.handle}`}
+          onClick={() => selectQuickAction(action)}
+          type="button"
+        >
+          {activeQuickAction === `${action.type}:${action.handle}` ? "创建中" : action.label}
           <ChevronRight className="size-3.5 text-white/28" />
         </button>
       ))}
       <div className="my-1 border-t border-white/10" />
-      <button className="apple-menu-item flex w-full items-center justify-between px-3 py-2 text-[11px] text-[#ffb4a8] hover:bg-[#ff6b5f]/10" onClick={onDelete} type="button">
-        删除节点
+      <button className="apple-menu-item flex w-full items-center justify-between px-3 py-2 text-[11px] text-[#ffb4a8] hover:bg-[#ff6b5f]/10 disabled:opacity-45" disabled={Boolean(activeQuickAction)} onClick={deleteFromMenu} type="button">
+        {activeQuickAction === "delete" ? "删除中" : "删除节点"}
         <Trash2 className="size-3.5" />
       </button>
     </div>
