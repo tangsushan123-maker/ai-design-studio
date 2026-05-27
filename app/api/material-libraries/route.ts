@@ -43,7 +43,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const input = (await request.json()) as Partial<MaterialLibraryRecord> & { mode?: "create" | "update" };
+    const input = await parseMaterialLibraryPayload(request);
     const store = await readStyleLibraryStore();
     const fallback = createEmptyMaterialLibrary({
       id: input.id,
@@ -60,7 +60,25 @@ export async function POST(request: Request) {
     await writeStyleLibraryStore({ libraries });
     return NextResponse.json({ ok: true, library: nextLibrary, libraries: libraries.map((library) => summarizeLibrary(library, false)) });
   } catch (error) {
+    if (error instanceof InvalidMaterialLibraryPayloadError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ error: materialLibraryErrorMessage("保存素材库失败", error) }, { status: 500 });
+  }
+}
+
+class InvalidMaterialLibraryPayloadError extends Error {}
+
+async function parseMaterialLibraryPayload(request: Request): Promise<Partial<MaterialLibraryRecord> & { mode?: "create" | "update" }> {
+  try {
+    const input = await request.json() as Partial<MaterialLibraryRecord> & { mode?: "create" | "update" };
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new InvalidMaterialLibraryPayloadError("素材库请求格式不正确。");
+    }
+    return input;
+  } catch (error) {
+    if (error instanceof InvalidMaterialLibraryPayloadError) throw error;
+    throw new InvalidMaterialLibraryPayloadError("素材库 JSON 无法解析，请检查请求内容后重试。");
   }
 }
 

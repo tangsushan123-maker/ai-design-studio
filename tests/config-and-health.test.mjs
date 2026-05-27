@@ -1438,6 +1438,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(materialLibrariesRouteSource.includes("materialLibraryErrorMessage"), true);
     assert.equal(materialLibrariesRouteSource.includes('materialLibraryErrorMessage("读取素材库失败", error)'), true);
     assert.equal(materialLibrariesRouteSource.includes('materialLibraryErrorMessage("保存素材库失败", error)'), true);
+    assert.equal(materialLibrariesRouteSource.includes("parseMaterialLibraryPayload"), true);
+    assert.equal(materialLibrariesRouteSource.includes("InvalidMaterialLibraryPayloadError"), true);
+    assert.equal(materialLibrariesRouteSource.includes("素材库 JSON 无法解析"), true);
     assert.equal(workbenchSource.includes("refreshMaterialLibraries({ quiet: true })"), true);
     assert.equal(workbenchSource.includes("imageImportInFlightRef"), true);
     assert.equal(workbenchSource.includes("正在导入上一张图片，请稍候。"), true);
