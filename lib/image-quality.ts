@@ -167,6 +167,10 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
   if (protection.hasProtectedContent) {
     actions.push("检查文字/Logo/二维码");
   }
+  if (protection.hasProtectedContent && options.operation !== "hd_redraw") {
+    issues.push("包含项目真实文字、Logo、二维码或联系方式，交付前必须逐项核对。");
+    actions.push("逐项核对项目真实信息");
+  }
 
   const textDetailRisk = Boolean(
     options.operation === "hd_redraw"

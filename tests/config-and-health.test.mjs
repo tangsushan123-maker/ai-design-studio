@@ -1025,7 +1025,7 @@ describe("Workflow canvas performance", () => {
 
 describe("Project stability and task tracing", () => {
   it("keeps local snapshots and explicit task run traces", async () => {
-    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, projectCreationSource, assetLibraryPanelSource, imageUtilsSource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
+    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, projectCreationSource, assetLibraryPanelSource, imageUtilsSource, imageQualitySource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/task-run-ledger.ts", import.meta.url), "utf8"),
@@ -1040,6 +1040,7 @@ describe("Project stability and task tracing", () => {
       readFile(new URL("../components/workbench/project-creation-modal.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/asset-library-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/image-quality.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/image-resource/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/edit-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/redraw-upscale-image/route.ts", import.meta.url), "utf8"),
@@ -1301,6 +1302,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(imageUtilsSource.includes('path.join("projects", safeProjectId, kind)'), true);
     assert.equal(imageResourceRouteSource.includes('formData.get("projectId")'), true);
     assert.equal(imageResourceRouteSource.includes('storageKind: file.name?.startsWith("mask-") ? "masks" : "uploads"'), true);
+    assert.equal(imageQualitySource.includes("包含项目真实文字、Logo、二维码或联系方式"), true);
+    assert.equal(imageQualitySource.includes("逐项核对项目真实信息"), true);
   });
 });
 
