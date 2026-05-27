@@ -188,14 +188,14 @@ export function HistoryPanel({
               type="button"
             >
               <span>{item}</span>
-              <span className={`rounded-full px-1.5 py-0.5 text-[10px] leading-none ${filter === item ? "bg-black/10 text-[#07121f]/62" : "bg-white/10 text-white/46"}`}>
+              <span className={`rounded-full px-1.5 py-0.5 text-[11px] leading-none ${filter === item ? "bg-black/10 text-[#07121f]/62" : "bg-white/10 text-white/46"}`}>
                 {filterCounts[item]}
               </span>
             </button>
           ))}
         </div>
         {visibleCount > resultPageSize ? (
-          <button className="apple-segment mt-2 w-full px-2 py-1.5 text-[10px]" onClick={() => setVisibleCount(resultPageSize)} type="button">
+          <button className="apple-segment mt-2 w-full px-2 py-1.5 text-[11px]" onClick={() => setVisibleCount(resultPageSize)} type="button">
             收起到 16 张
           </button>
         ) : null}
@@ -229,7 +229,7 @@ export function HistoryPanel({
       </div>
 
       {actionMessage ? (
-        <div className={`rounded-[14px] border px-3 py-2 text-[10px] leading-4 ${
+        <div className={`rounded-[14px] border px-3 py-2 text-[11px] leading-5 ${
           actionMessage.tone === "success"
             ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
             : "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
@@ -295,12 +295,12 @@ export function HistoryPanel({
               <button className="block w-full min-w-0 text-left" onClick={() => onPreview(image)} type="button">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1">
-                    <div className="min-w-0 flex-1 truncate text-[10px] font-semibold text-white/64">{historyCardTitle(image)}</div>
+                    <div className="min-w-0 flex-1 truncate text-[11px] font-semibold text-white/64">{historyCardTitle(image)}</div>
                     <DeliveryStatusBadge image={image} fallbackLabel={qualityBadgeLabel(image)} />
                   </div>
-                  <div className="mt-0.5 truncate text-[10px] text-white/38">{historySourceLine(image, nodeOperationLabel)}</div>
+                  <div className="mt-0.5 truncate text-[11px] text-white/38">{historySourceLine(image, nodeOperationLabel)}</div>
                   {image.qualityCheck?.issues?.length ? (
-                    <div className="mt-0.5 truncate text-[10px] text-[#ffe1a0]/76">{image.qualityCheck.issues[0]}</div>
+                    <div className="mt-0.5 truncate text-[11px] text-[#ffe1a0]/76">{image.qualityCheck.issues[0]}</div>
                   ) : null}
                 </div>
               </button>

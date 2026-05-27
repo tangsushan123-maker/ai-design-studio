@@ -1584,8 +1584,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(historyPanelSource.includes("loadMoreResults"), true);
     assert.equal(historyPanelSource.includes("runInlineAction"), true);
     assert.equal(historyPanelSource.includes("historyImageKey"), true);
-    assert.equal(historyPanelSource.includes("truncate text-[10px] text-white/38"), true);
-    assert.equal(historyPanelSource.includes("truncate text-[10px] text-[#ffe1a0]/76"), true);
+    assert.equal(historyPanelSource.includes("truncate text-[11px] text-white/38"), true);
+    assert.equal(historyPanelSource.includes("truncate text-[11px] text-[#ffe1a0]/76"), true);
+    assert.equal(historyPanelSource.includes("rounded-full px-1.5 py-0.5 text-[11px] leading-none"), true);
+    assert.equal(historyPanelSource.includes("rounded-[14px] border px-3 py-2 text-[10px] leading-4"), false);
     assert.equal(imageManagerPanelSource.includes("truncate text-[11px] text-white/40"), true);
     assert.equal(imageManagerPanelSource.includes("truncate text-[11px] text-white/36"), true);
     assert.equal(imageManagerPanelSource.includes("rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[11px]"), true);
