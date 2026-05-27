@@ -373,7 +373,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
 
       <div className="apple-surface-section flex flex-wrap items-center gap-1.5 p-2">
         <button
-          className="apple-button h-8 px-2.5 text-[10px] text-white/66 disabled:opacity-40"
+          className="apple-button h-8 px-2.5 text-[11px] text-white/66 disabled:opacity-40"
           disabled={!selectableRows.length}
           onClick={toggleVisibleSelection}
           type="button"
@@ -381,20 +381,20 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
           {allVisibleSelectableSelected ? "取消本页" : "选择本页"}
         </button>
         <button
-          className="apple-button h-8 px-2.5 text-[10px] text-white/50 disabled:opacity-40"
+          className="apple-button h-8 px-2.5 text-[11px] text-white/50 disabled:opacity-40"
           disabled={!selectedRows.length}
           onClick={clearSelected}
           type="button"
         >
           清空选择
         </button>
-        <span className="apple-caption ml-auto text-[10px]">
+        <span className="apple-caption ml-auto text-[11px]">
           已选 {selectedRows.length} 张
         </span>
         {filter === "回收站" ? (
           <>
             <button
-              className="apple-pill-accent h-8 px-2.5 text-[10px] disabled:opacity-40"
+              className="apple-pill-accent h-8 px-2.5 text-[11px] disabled:opacity-40"
               disabled={!selectedTrashCount || Boolean(batchActionLabel)}
               onClick={() => void runBatchAction("批量恢复", () => onBatchRestore(selectedImages))}
               type="button"
@@ -402,7 +402,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
               {batchActionLabel === "批量恢复" ? "恢复中..." : "批量恢复"}
             </button>
             <button
-              className="apple-button h-8 px-2.5 text-[10px] text-[#ffb4a8] disabled:opacity-40"
+              className="apple-button h-8 px-2.5 text-[11px] text-[#ffb4a8] disabled:opacity-40"
               disabled={!selectedTrashCount || Boolean(batchActionLabel)}
               onClick={() => void runConfirmedBatchAction("批量彻删", () => onBatchPermanentDelete(selectedImages))}
               type="button"
@@ -412,7 +412,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
           </>
         ) : (
           <button
-            className="apple-button h-8 px-2.5 text-[10px] text-[#ffb4a8] disabled:opacity-40"
+            className="apple-button h-8 px-2.5 text-[11px] text-[#ffb4a8] disabled:opacity-40"
             disabled={!selectedCleanableCount || Boolean(batchActionLabel)}
             onClick={() => void runConfirmedBatchAction("批量移到回收站", () => onBatchDelete(selectedImages))}
             type="button"
@@ -423,7 +423,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
       </div>
 
       {actionMessage ? (
-        <div className={`rounded-[14px] border px-3 py-2 text-[10px] leading-4 ${
+        <div className={`rounded-[14px] border px-3 py-2 text-[11px] leading-5 ${
           actionMessage.tone === "success"
             ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
             : "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
@@ -479,8 +479,8 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
               <div className="min-w-0">
                 <button className="block w-full min-w-0 text-left" onClick={() => onPreview(image)} type="button">
                   <div className="truncate text-[11px] font-semibold text-white/76">{imageManagerTitle(image)}</div>
-                  <div className="mt-1 truncate text-[10px] text-white/40">{imageSourceSummary(image, nodeOperationLabel)}</div>
-                  <div className="mt-0.5 truncate text-[10px] text-white/36">
+                  <div className="mt-1 truncate text-[11px] text-white/40">{imageSourceSummary(image, nodeOperationLabel)}</div>
+                  <div className="mt-0.5 truncate text-[11px] text-white/36">
                     {[imageSizeLabel(image), image.fileSizeBytes ? formatFileSize(image.fileSizeBytes) : "", formatGeneratedAt(image.generatedAt)].filter(Boolean).join(" · ")}
                   </div>
                 </button>
@@ -493,12 +493,12 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
             </div>
 
             <div className="mt-2 grid grid-cols-5 gap-1">
-              <button className="apple-button flex h-8 items-center justify-center text-[10px]" onClick={() => onPreview(image)} type="button">
+              <button className="apple-button flex h-8 items-center justify-center text-[11px]" onClick={() => onPreview(image)} type="button">
                 预览
               </button>
               {protection.isTrashed ? (
                 <button
-                  className="apple-button flex h-8 items-center justify-center gap-1 text-[10px] text-[#adf8e5] disabled:opacity-45"
+                  className="apple-button flex h-8 items-center justify-center gap-1 text-[11px] text-[#adf8e5] disabled:opacity-45"
                   disabled={Boolean(rowActionKey)}
                   onClick={() => void runRowAction("恢复图片", image, () => onRestore(image))}
                   type="button"
@@ -507,16 +507,16 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
                   {rowActionKey === `恢复图片:${imageManagerKey(image)}` ? "恢复中" : "恢复"}
                 </button>
               ) : (
-                <button className="apple-button flex h-8 items-center justify-center gap-1 text-[10px]" onClick={() => onAddToCanvas(image)} type="button">
+                <button className="apple-button flex h-8 items-center justify-center gap-1 text-[11px]" onClick={() => onAddToCanvas(image)} type="button">
                   <Plus className="size-3" />
                   画布
                 </button>
               )}
               {protection.isTrashed ? (
-                <span className="apple-button flex h-8 items-center justify-center text-[10px] text-white/28">已删除</span>
+                <span className="apple-button flex h-8 items-center justify-center text-[11px] text-white/28">已删除</span>
               ) : (
                 <button
-                  className={`apple-button flex h-8 items-center justify-center gap-1 text-[10px] disabled:opacity-45 ${image.favorite ? "text-[#ffe1a0]" : ""}`}
+                  className={`apple-button flex h-8 items-center justify-center gap-1 text-[11px] disabled:opacity-45 ${image.favorite ? "text-[#ffe1a0]" : ""}`}
                   disabled={Boolean(favoritingKey)}
                   onClick={() => void toggleFavorite(image)}
                   type="button"
@@ -526,7 +526,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
                 </button>
               )}
               <button
-                className="apple-button flex h-8 items-center justify-center gap-1 text-[10px] disabled:opacity-45"
+                className="apple-button flex h-8 items-center justify-center gap-1 text-[11px] disabled:opacity-45"
                 disabled={Boolean(downloadingKey)}
                 onClick={() => void downloadImage(image)}
                 type="button"
@@ -535,7 +535,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
                 {downloadingKey === imageManagerKey(image) ? "下载中" : "下载"}
               </button>
               <button
-                className="apple-button flex h-8 items-center justify-center gap-1 text-[10px] text-[#ffb4a8] disabled:cursor-not-allowed disabled:text-white/28"
+                className="apple-button flex h-8 items-center justify-center gap-1 text-[11px] text-[#ffb4a8] disabled:cursor-not-allowed disabled:text-white/28"
                 disabled={Boolean(rowActionKey) || (!protection.canDelete && !protection.isTrashed)}
                 onClick={() => void runConfirmedRowAction(protection.isTrashed ? "彻底删除图片" : "删除图片", image, () => protection.isTrashed ? onPermanentDelete(image) : onDelete(image))}
                 title={protection.isTrashed ? "从回收站彻底删除" : protection.canDelete ? "移到回收站" : `受保护：${protection.reasons.join("、")}`}
@@ -594,7 +594,7 @@ function ImageManagerStat({ label, value, tone = "normal" }: { label: string; va
   return (
     <div className="rounded-[14px] border border-white/10 bg-white/[0.035] px-2 py-2 text-center">
       <div className={`truncate text-[11px] font-semibold ${valueTone}`}>{value}</div>
-      <div className="mt-0.5 text-[10px] text-white/38">{label}</div>
+      <div className="mt-0.5 text-[11px] text-white/38">{label}</div>
     </div>
   );
 }
@@ -684,11 +684,11 @@ function imageManagerTags(image: ImageManagerImage, protection: ImageDeletionPro
 }
 
 function imageManagerTagClass(tone: "safe" | "info" | "warning" | "danger" | "muted") {
-  if (tone === "safe") return "rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[10px] text-[#adf8e5]";
-  if (tone === "danger") return "rounded-full border border-[#ff6b5f]/22 bg-[#ff6b5f]/10 px-2 py-0.5 text-[10px] text-[#ffc1b8]";
-  if (tone === "warning") return "rounded-full border border-[#ffd166]/18 bg-[#ffd166]/10 px-2 py-0.5 text-[10px] text-[#ffe1a0]";
-  if (tone === "info") return "rounded-full border border-white/12 bg-white/[0.06] px-2 py-0.5 text-[10px] text-white/58";
-  return "rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[10px] text-white/42";
+  if (tone === "safe") return "rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[11px] text-[#adf8e5]";
+  if (tone === "danger") return "rounded-full border border-[#ff6b5f]/22 bg-[#ff6b5f]/10 px-2 py-0.5 text-[11px] text-[#ffc1b8]";
+  if (tone === "warning") return "rounded-full border border-[#ffd166]/18 bg-[#ffd166]/10 px-2 py-0.5 text-[11px] text-[#ffe1a0]";
+  if (tone === "info") return "rounded-full border border-white/12 bg-white/[0.06] px-2 py-0.5 text-[11px] text-white/58";
+  return "rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[11px] text-white/42";
 }
 
 function imageManagerDownloadName(image: ImageManagerImage) {

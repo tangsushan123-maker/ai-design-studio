@@ -1586,8 +1586,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(historyPanelSource.includes("historyImageKey"), true);
     assert.equal(historyPanelSource.includes("truncate text-[10px] text-white/38"), true);
     assert.equal(historyPanelSource.includes("truncate text-[10px] text-[#ffe1a0]/76"), true);
-    assert.equal(imageManagerPanelSource.includes("truncate text-[10px] text-white/40"), true);
-    assert.equal(imageManagerPanelSource.includes("truncate text-[10px] text-white/36"), true);
+    assert.equal(imageManagerPanelSource.includes("truncate text-[11px] text-white/40"), true);
+    assert.equal(imageManagerPanelSource.includes("truncate text-[11px] text-white/36"), true);
+    assert.equal(imageManagerPanelSource.includes("rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[11px]"), true);
+    assert.equal(imageManagerPanelSource.includes("apple-button h-8 px-2.5 text-[10px]"), false);
     assert.equal(imageManagerPanelSource.includes("text-[9px] text-white/34"), false);
     assert.equal(workbenchUiSource.includes("favoritingKey"), true);
     assert.equal(workbenchUiSource.includes("\"收藏中\""), true);
