@@ -57,6 +57,7 @@ import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualit
 import { historyMatchesFilter, historyMatchesQuery } from "@/lib/workbench-history";
 import { IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST } from "@/lib/prompt";
 import { buildCreativeBriefFallback, type CreativeBrief, type CreativeBriefInput, type CreativeDirection } from "@/lib/creative-brief";
+import { imageSourceDetailLines, imageSourceSummary } from "@/lib/workbench-image-source";
 import {
   createDefaultProjectKnowledge,
   normalizeProjectKnowledge,
@@ -7857,7 +7858,7 @@ function ImageLightbox({
   }, [historyImages, image]);
   const actualSizeLabel = imageSizeLabel(image);
   const expectedSizeLabel = image.expectedOutputSize ? `${image.expectedOutputSize.width} × ${image.expectedOutputSize.height}px` : "";
-  const sourceDetailLines = imageSourceDetailLines(image);
+  const sourceDetailLines = imageSourceDetailLines(image, { formatDuration, formatGeneratedAt, labelForOperation: nodeOperationLabel });
   const lightboxTitle = `${image.branchLabel || `方案 ${image.variant || 1}`} · ${image.mode || image.materialType || "预览"}`;
   const lightboxMeta = [
     actualSizeLabel,
@@ -8453,38 +8454,6 @@ function numericParam(value: unknown, fallback = 0) {
 function StatusDot({ status }: { status: NodeStatus }) {
   const color = status === "failed" ? "bg-[#ff6b5f]" : status === "cancelled" ? "bg-white/32" : status === "completed" ? "bg-[#74e3c5]" : status === "running" || status === "saving" || status === "queued" ? "bg-[#ffd166]" : "bg-white/24";
   return <span className={`size-2 rounded-full ${color}`} />;
-}
-
-function imageSourceSummary(image: ImageAsset, labelForOperation = nodeOperationLabel) {
-  const operationKey = image.sourceNodeKind || image.nodeOperation;
-  const node = image.sourceNodeName || (operationKey ? labelForOperation(operationKey) : "");
-  const trace = image.sourceRequestId
-    ? `请求 ${shortImageTraceId(image.sourceRequestId)}`
-    : image.sourceTaskId
-      ? `任务 ${shortImageTraceId(image.sourceTaskId)}`
-      : "";
-  return [node, trace].filter(Boolean).join(" · ") || image.sourceStrategyTitle || "来源未记录";
-}
-
-function imageSourceDetailLines(image: ImageAsset) {
-  const lines: Array<{ label: string; value: string }> = [];
-  const operationKey = image.sourceNodeKind || image.nodeOperation;
-  const operation = operationKey ? nodeOperationLabel(operationKey) : "";
-  const nodeValue = image.sourceNodeName
-    ? `${image.sourceNodeName}${operation ? ` · ${operation}` : ""}`
-    : operation;
-  if (nodeValue) lines.push({ label: "来源节点", value: nodeValue });
-  if (image.sourceNodeId) lines.push({ label: "节点ID", value: shortImageTraceId(image.sourceNodeId) });
-  if (image.sourceTaskId) lines.push({ label: "任务ID", value: shortImageTraceId(image.sourceTaskId) });
-  if (image.sourceRequestId) lines.push({ label: "请求ID", value: shortImageTraceId(image.sourceRequestId) });
-  if (image.durationMs) lines.push({ label: "耗时", value: formatDuration(image.durationMs) });
-  if (image.generatedAt) lines.push({ label: "生成时间", value: formatGeneratedAt(image.generatedAt) });
-  return lines;
-}
-
-function shortImageTraceId(id: string) {
-  const clean = id.replace(/^req_/, "").replace(/^task_/, "").replace(/^node_/, "");
-  return clean.length <= 10 ? clean : clean.slice(-10);
 }
 
 function DetailLine({ label, value }: { label: string; value: string }) {

@@ -7,6 +7,7 @@ import { parseHealthMode, skippedImageCheck } from "../lib/openai-health.ts";
 import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualityBadgeLabel, qualityDeliveryTone, qualityTone } from "../lib/workbench-delivery.ts";
 import { historyMatchesFilter, historyMatchesQuery, historySearchText } from "../lib/workbench-history.ts";
 import { imageManagerMatchesSearch, imageManagerSearchText } from "../lib/workbench-image-manager.ts";
+import { imageSourceDetailLines, imageSourceSummary, shortImageTraceId } from "../lib/workbench-image-source.ts";
 import { taskMatchesSearch, taskSearchText } from "../lib/workbench-tasks.ts";
 
 describe("OpenAI defaults", () => {
@@ -197,6 +198,55 @@ describe("Workbench image manager search", () => {
     assert.equal(imageManagerMatchesSearch({ id: "layer_pack" }, cleanableProtection, "png三层"), true);
     assert.equal(imageManagerMatchesSearch({ id: "deleted" }, trashedProtection, "回收站"), true);
     assert.equal(imageManagerMatchesSearch({ id: "deleted" }, trashedProtection, "已删除"), true);
+  });
+});
+
+describe("Workbench image source trace", () => {
+  it("builds compact source summaries with request fallback", () => {
+    const image = {
+      nodeOperation: "text_to_image",
+      sourceNodeName: "主视觉节点",
+      sourceRequestId: "req_abcdef123456",
+    };
+    const labelForOperation = (value) => value === "text_to_image" ? "文生图" : value || "";
+
+    assert.equal(imageSourceSummary(image, labelForOperation), "主视觉节点 · 请求 cdef123456");
+    assert.equal(imageSourceSummary({ sourceStrategyTitle: "项目历史结果" }, labelForOperation), "项目历史结果");
+    assert.equal(imageSourceSummary({}, labelForOperation), "来源未记录");
+  });
+
+  it("builds source detail lines for delivery inspection", () => {
+    const lines = imageSourceDetailLines(
+      {
+        durationMs: 125000,
+        generatedAt: "2026-05-28T10:00:00.000Z",
+        sourceNodeId: "node_text_to_image_main",
+        sourceNodeKind: "text_to_image",
+        sourceNodeName: "主视觉节点",
+        sourceRequestId: "req_abcdef123456",
+        sourceTaskId: "task_taskid123456",
+      },
+      {
+        formatDuration: (milliseconds) => `${Math.round(milliseconds / 1000)} 秒`,
+        formatGeneratedAt: (value) => `时间 ${value}`,
+        labelForOperation: (value) => value === "text_to_image" ? "文生图" : value || "",
+      },
+    );
+
+    assert.deepEqual(lines, [
+      { label: "来源节点", value: "主视觉节点 · 文生图" },
+      { label: "节点ID", value: "image_main" },
+      { label: "任务ID", value: "skid123456" },
+      { label: "请求ID", value: "cdef123456" },
+      { label: "耗时", value: "125 秒" },
+      { label: "生成时间", value: "时间 2026-05-28T10:00:00.000Z" },
+    ]);
+  });
+
+  it("shortens trace ids consistently", () => {
+    assert.equal(shortImageTraceId("req_abcdef123456"), "cdef123456");
+    assert.equal(shortImageTraceId("task_short"), "short");
+    assert.equal(shortImageTraceId("node_123456789012345"), "6789012345");
   });
 });
 
@@ -912,7 +962,7 @@ describe("Workflow canvas performance", () => {
 
 describe("Project stability and task tracing", () => {
   it("keeps local snapshots and explicit task run traces", async () => {
-    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, imageUtilsSource, imageResourceRouteSource, editRouteSource, redrawRouteSource] = await Promise.all([
+    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, imageUtilsSource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/task-run-ledger.ts", import.meta.url), "utf8"),
@@ -926,8 +976,9 @@ describe("Project stability and task tracing", () => {
       readFile(new URL("../app/api/image-resource/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/edit-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/redraw-upscale-image/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/workbench-image-source.ts", import.meta.url), "utf8"),
     ]);
-    const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}`;
+    const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}\n${imageSourceSource}`;
 
     assert.equal(workbenchSource.includes("type ProjectSnapshot"), true);
     assert.equal(workbenchSource.includes("const projectSnapshotLimit = 5"), true);
@@ -1038,8 +1089,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("image.sourceNodeId === task.nodeId"), true);
     assert.equal(workbenchSource.includes("imageSourceSummary"), true);
     assert.equal(workbenchSource.includes("imageSourceDetailLines"), true);
-    assert.equal(workbenchSource.includes("来源节点"), true);
-    assert.equal(workbenchSource.includes("请求ID"), true);
+    assert.equal(workbenchUiSource.includes("来源节点"), true);
+    assert.equal(workbenchUiSource.includes("请求ID"), true);
     assert.equal(workbenchSource.includes("服务端确认完成，结果已恢复到画布"), true);
     assert.equal(workbenchSource.includes("appendTaskTrace(formData"), true);
     assert.equal(workbenchSource.includes("taskTracePayload(taskId"), true);
