@@ -1192,6 +1192,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(historyPanelSource.includes('aria-label="改尺寸"'), true);
     assert.equal(historyPanelSource.includes('aria-label="画质增强"'), true);
     assert.equal(historyPanelSource.includes('aria-label="删除图片"'), true);
+    assert.equal(historyPanelSource.includes("actionMessage"), true);
+    assert.equal(historyPanelSource.includes("deletingKey"), true);
+    assert.equal(historyPanelSource.includes("runInlineAction"), true);
+    assert.equal(historyPanelSource.includes("historyImageKey"), true);
     assert.equal(imageUtilsSource.includes("GeneratedStorageKind"), true);
     assert.equal(imageUtilsSource.includes("getGeneratedProjectRelativeDir"), true);
     assert.equal(imageUtilsSource.includes('path.join("projects", safeProjectId, kind)'), true);

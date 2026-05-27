@@ -74,7 +74,7 @@ export function HistoryPanel({
   onAddToCanvas: (image: HistoryPanelImage) => void;
   onDrag: (event: DragEvent<HTMLElement>, image: HistoryPanelImage) => void;
   onLoadMore?: () => void;
-  onDelete?: (image: HistoryPanelImage) => void;
+  onDelete?: (image: HistoryPanelImage) => void | Promise<unknown>;
   onPreview: (image: HistoryPanelImage) => void;
   onResize: (image: HistoryPanelImage) => void;
   onToggleFavorite: (image: HistoryPanelImage) => void;
@@ -85,6 +85,8 @@ export function HistoryPanel({
   const [filter, setFilter] = useState<(typeof resultFilterTabs)[number]>("项目");
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(resultPageSize);
+  const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [deletingKey, setDeletingKey] = useState("");
   const normalizedQuery = query.trim();
 
   const orderedImages = useMemo(() => [...images].sort(compareHistoryImages), [images]);
@@ -97,6 +99,27 @@ export function HistoryPanel({
   const hasMore = hasMoreLocal || hasMoreFromServer;
 
   if (!images.length) return emptyState || null;
+
+  function runInlineAction(label: string, action: () => void) {
+    setActionMessage(null);
+    action();
+    setActionMessage({ tone: "success", text: `${label}已提交。` });
+  }
+
+  async function deleteImage(image: HistoryPanelImage) {
+    if (!onDelete || deletingKey) return;
+    const key = historyImageKey(image);
+    setDeletingKey(key);
+    setActionMessage(null);
+    try {
+      await onDelete(image);
+      setActionMessage({ tone: "success", text: "删除已提交。" });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "删除失败。" });
+    } finally {
+      setDeletingKey("");
+    }
+  }
 
   return (
     <div className="space-y-2.5">
@@ -147,6 +170,16 @@ export function HistoryPanel({
           ) : null}
         </label>
       </div>
+
+      {actionMessage ? (
+        <div className={`rounded-[14px] border px-3 py-2 text-[10px] leading-4 ${
+          actionMessage.tone === "success"
+            ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
+            : "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
+        }`}>
+          {actionMessage.text}
+        </div>
+      ) : null}
 
       {!filteredImages.length ? (
         <div className="rounded-[20px] border border-dashed border-white/12 bg-white/[0.035] p-6 text-center text-[12px] text-white/44">
@@ -216,10 +249,10 @@ export function HistoryPanel({
                 <button
                   aria-label="加入画布"
                   className="apple-button flex h-7 items-center justify-center text-white/62"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onAddToCanvas(image);
-                  }}
+	                  onClick={(event) => {
+	                    event.stopPropagation();
+	                    runInlineAction("加入画布", () => onAddToCanvas(image));
+	                  }}
                   title="加入画布"
                   type="button"
                 >
@@ -228,10 +261,10 @@ export function HistoryPanel({
                 <button
                   aria-label="改尺寸"
                   className="apple-button flex h-7 items-center justify-center text-white/62"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onResize(image);
-                  }}
+	                  onClick={(event) => {
+	                    event.stopPropagation();
+	                    runInlineAction("改尺寸", () => onResize(image));
+	                  }}
                   title="改尺寸"
                   type="button"
                 >
@@ -240,10 +273,10 @@ export function HistoryPanel({
                 <button
                   aria-label="画质增强"
                   className="apple-button flex h-7 items-center justify-center text-white/62"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onUpscale(image);
-                  }}
+	                  onClick={(event) => {
+	                    event.stopPropagation();
+	                    runInlineAction("画质增强", () => onUpscale(image));
+	                  }}
                   title="画质增强"
                   type="button"
                 >
@@ -251,16 +284,17 @@ export function HistoryPanel({
                 </button>
                 {onDelete ? (
                   <button
-                    aria-label="删除图片"
-                    className="apple-button flex h-7 items-center justify-center text-[#ffb4a8]"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDelete(image);
-                    }}
+	                    aria-label="删除图片"
+	                    className="apple-button flex h-7 items-center justify-center text-[#ffb4a8] disabled:opacity-45"
+	                    disabled={Boolean(deletingKey)}
+	                    onClick={(event) => {
+	                      event.stopPropagation();
+	                      void deleteImage(image);
+	                    }}
                     title="删除图片"
                     type="button"
                   >
-                    <Trash2 className="size-3" />
+	                    {deletingKey === historyImageKey(image) ? <X className="size-3 animate-pulse" /> : <Trash2 className="size-3" />}
                   </button>
                 ) : null}
               </div>
@@ -304,6 +338,10 @@ function historySourceLine(image: HistoryPanelImage, nodeOperationLabel: (value?
 function shortTraceId(id: string) {
   const clean = id.replace(/^req_/, "").replace(/^task_/, "");
   return clean.length <= 8 ? clean : clean.slice(-8);
+}
+
+function historyImageKey(image: Pick<HistoryPanelImage, "fileName" | "id" | "url">) {
+  return image.fileName || image.id || image.url;
 }
 
 function compareHistoryImages(a: HistoryPanelImage, b: HistoryPanelImage) {
