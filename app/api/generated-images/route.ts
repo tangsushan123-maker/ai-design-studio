@@ -51,8 +51,7 @@ export async function PATCH(request: Request) {
 
     const dir = getGeneratedDir();
     const metadataPath = path.join(dir, `${fileName}.json`);
-    const raw = await readFile(metadataPath, "utf8").catch(() => "{}");
-    const current = JSON.parse(raw) as Record<string, unknown>;
+    const current = await readGeneratedMetadata(metadataPath);
     const next = {
       ...current,
       ...(body.metadata || {}),
@@ -108,8 +107,7 @@ async function moveGeneratedImageToTrash(fileName: string) {
   await mkdir(path.dirname(trashImagePath), { recursive: true });
   await rename(sourceImagePath, trashImagePath);
 
-  const raw = await readFile(sourceMetadataPath, "utf8").catch(() => "{}");
-  const current = JSON.parse(raw) as Record<string, unknown>;
+  const current = await readGeneratedMetadata(sourceMetadataPath);
   await writeJsonAtomic(trashMetadataPath, {
     ...current,
     trashed: true,
@@ -128,8 +126,7 @@ async function restoreGeneratedImage(fileName: string) {
   const dir = getGeneratedDir();
   const sourceImagePath = path.join(dir, fileName);
   const sourceMetadataPath = path.join(dir, `${fileName}.json`);
-  const raw = await readFile(sourceMetadataPath, "utf8").catch(() => "{}");
-  const current = JSON.parse(raw) as Record<string, unknown>;
+  const current = await readGeneratedMetadata(sourceMetadataPath);
   const originalFileName = typeof current.originalFileName === "string" && current.originalFileName
     ? current.originalFileName
     : fileName.replace(new RegExp(`^${generatedTrashDirName}/`), "");
@@ -169,6 +166,16 @@ async function fileExists(filePath: string) {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function readGeneratedMetadata(metadataPath: string) {
+  const raw = await readFile(metadataPath, "utf8").catch(() => "{}");
+  try {
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
   }
 }
 

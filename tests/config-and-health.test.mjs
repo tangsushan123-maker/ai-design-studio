@@ -1478,6 +1478,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(taskCenterSource.includes("taskHasQualityConcern"), true);
     assert.equal(taskCenterSource.includes("结果已在画布，但质检提示未完全通过"), true);
     assert.equal(generatedImagesRouteSource.includes("requestIds"), true);
+    assert.equal(generatedImagesRouteSource.includes("readGeneratedMetadata"), true);
+    assert.equal(generatedImagesRouteSource.includes("return {};"), true);
     assert.equal(generatedHistorySource.includes("requestIds?: string[]"), true);
     assert.equal(generatedHistorySource.includes("sourceRequestId && requestIdSet.has(sourceRequestId)"), true);
     assert.equal(historyPanelSource.includes("historySourceLine"), true);
