@@ -845,6 +845,9 @@ describe("PNG three-layer export", () => {
     assert.equal(routeSource.includes("createAiTextVisualTransparentLayer"), true);
     assert.equal(routeSource.includes("renderLayerWithFallback"), true);
     assert.equal(routeSource.includes("recordTaskRunFinished"), true);
+    assert.equal(routeSource.includes("parsePngLayerExportPayload"), true);
+    assert.equal(routeSource.includes("InvalidPngLayerExportPayloadError"), true);
+    assert.equal(routeSource.includes("PNG 分层 JSON 无法解析"), true);
     assert.equal(routeSource.includes("已使用兜底层"), true);
     assert.equal(routeSource.includes("warnings"), true);
     assert.equal(routeSource.includes("keyOutCornerBackground"), true);

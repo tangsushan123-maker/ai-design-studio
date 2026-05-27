@@ -74,15 +74,7 @@ export async function POST(request: Request) {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
   try {
-    const body = await request.json() as {
-      imageUrl?: string;
-      imageData?: string;
-      fileName?: string;
-      mode?: ExportMode;
-      imageModel?: string;
-      model?: string;
-      layers?: InputLayer[];
-    };
+    const body = await parsePngLayerExportPayload(request);
     taskTrace = taskTraceFromJson(body as Record<string, unknown>, "png_layers", "/api/export-png-layers");
     await recordTaskRunStarted(taskTrace);
     if (!body.imageUrl && !body.imageData) {
@@ -196,9 +188,43 @@ export async function POST(request: Request) {
       ...layerResult,
     });
   } catch (error) {
+    if (error instanceof InvalidPngLayerExportPayloadError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     const apiError = toApiError(error, "PNG 分层导出失败。");
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
+  }
+}
+
+class InvalidPngLayerExportPayloadError extends Error {}
+
+async function parsePngLayerExportPayload(request: Request): Promise<{
+  imageUrl?: string;
+  imageData?: string;
+  fileName?: string;
+  mode?: ExportMode;
+  imageModel?: string;
+  model?: string;
+  layers?: InputLayer[];
+}> {
+  try {
+    const body = await request.json() as unknown;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new InvalidPngLayerExportPayloadError("PNG 分层请求格式不正确。");
+    }
+    return body as {
+      imageUrl?: string;
+      imageData?: string;
+      fileName?: string;
+      mode?: ExportMode;
+      imageModel?: string;
+      model?: string;
+      layers?: InputLayer[];
+    };
+  } catch (error) {
+    if (error instanceof InvalidPngLayerExportPayloadError) throw error;
+    throw new InvalidPngLayerExportPayloadError("PNG 分层 JSON 无法解析，请检查请求内容后重试。");
   }
 }
 
