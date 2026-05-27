@@ -1,14 +1,66 @@
-node_modules
-.next
-out
-dist
-build
-.DS_Store
-.cleanup-reports/
-.codex-backups/
-docs_副本/
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data and reports
+pids
+*.pid
+*.seed
+*.pid.lock
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Dependency directories
+node_modules/
+jspm_packages/
+bower_components/
+web_modules/
+
+# Build and framework output
+.next/
+out/
+dist/
+build/
+build/Release/
+.nuxt/
+.output/
+.svelte-kit/
+.docusaurus/
+.serverless/
+
+# Tool caches
+.cache/
+.parcel-cache/
+.vite/
+.grunt/
+.nyc_output/
+coverage/
+*.lcov
+lib-cov/
+.npm/
+.eslintcache
+.stylelintcache
+.node_repl_history
+.pnpm-store/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+**/.vitepress/dist
+**/.vitepress/cache
+
+# Environment and local secrets
 .env
-.env*.local
+.env.*
+!.env.example
 config.local.json
 config.local.json.bak
 workflow-templates.local.json
@@ -19,13 +71,23 @@ projects.local.json.bak
 projects.local.json.*.tmp
 task-runs.local.json
 task-runs.local.json.bak
-*.codex-backup-*
 strategies.local.json
 style-libraries.local.json
+
+# Local generated artifacts and backups
+.DS_Store
+.cleanup-reports/
+.codex-backups/
+docs_副本/
+*.codex-backup-*
 public/generated/*
 !public/generated/.gitkeep
 *.tsbuildinfo
 *.bak
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+*.tgz
+
+# Misc local tooling
+.dynamodb/
+.firebase/
+.tern-port
+.vscode-test/
