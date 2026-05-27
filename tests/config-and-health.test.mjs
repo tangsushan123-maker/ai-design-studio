@@ -398,8 +398,9 @@ describe("API error hygiene", () => {
 
 describe("Settings model management", () => {
   it("guards model row actions with busy and delete confirmation states", async () => {
-    const [settingsSource, modelsManageSource] = await Promise.all([
+    const [settingsSource, settingsRouteSource, modelsManageSource] = await Promise.all([
       readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/settings/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/models/manage/route.ts", import.meta.url), "utf8"),
     ]);
 
@@ -419,6 +420,7 @@ describe("Settings model management", () => {
     assert.equal(settingsSource.includes("保存中"), true);
     assert.equal(settingsSource.includes("删除中"), true);
     assert.equal(settingsSource.includes("确认删"), true);
+    assert.equal(settingsRouteSource.includes("settingsErrorMessage"), true);
     assert.equal(modelsManageSource.includes("modelManageErrorMessage"), true);
     assert.equal(modelsManageSource.includes('modelManageErrorMessage("模型保存失败", error)'), true);
     assert.equal(modelsManageSource.includes('modelManageErrorMessage("模型删除失败", error)'), true);
@@ -1310,7 +1312,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("favorite: nextFavorite"), true);
     assert.equal(workbenchSource.includes("metadata: { favorite: nextFavorite }"), true);
     assert.equal(workbenchSource.includes("throw new Error(\"收藏状态保存失败。\")"), true);
-    assert.equal(workbenchSource.includes("throw new Error(\"删除项目失败。\")"), true);
+    assert.equal(workbenchSource.includes("data.error || `删除项目失败（HTTP ${response.status}）。`"), true);
+    assert.equal(workbenchSource.includes("data.error || `打开项目失败（HTTP ${response.status}）。`"), true);
     assert.equal(workbenchSource.includes("projectListLoadingRef"), true);
     assert.equal(workbenchSource.includes("projectListLoading"), true);
     assert.equal(workbenchSource.includes("projectListError"), true);

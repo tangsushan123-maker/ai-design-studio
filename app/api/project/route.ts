@@ -145,9 +145,14 @@ export async function DELETE(request: Request) {
     };
     await writeStore(nextStore);
     return NextResponse.json({ ok: true, activeProjectId: nextStore.activeProjectId, projects: summarizeProjects(nextStore.projects) });
-  } catch {
-    return NextResponse.json({ error: "删除项目失败。" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ error: projectErrorMessage("删除项目失败", error) }, { status: 500 });
   }
+}
+
+function projectErrorMessage(action: string, error: unknown) {
+  const detail = error instanceof Error ? error.message.trim() : "";
+  return detail ? `${action}：${detail}` : `${action}。`;
 }
 
 function createBlankProject(): StoredProject {

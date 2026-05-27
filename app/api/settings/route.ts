@@ -108,7 +108,12 @@ export async function POST(request: Request) {
       isDefault: saved.isDefault,
       message: "API 配置已保存。",
     });
-  } catch {
-    return NextResponse.json({ ok: false, error: "保存配置失败，请检查项目目录写入权限。" }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ ok: false, error: settingsErrorMessage("保存配置失败", error) }, { status: 500 });
   }
+}
+
+function settingsErrorMessage(action: string, error: unknown) {
+  const detail = error instanceof Error ? error.message.trim() : "";
+  return detail ? `${action}：${detail}` : `${action}，请检查项目目录写入权限。`;
 }

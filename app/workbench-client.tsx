@@ -4800,7 +4800,8 @@ function NodeWorkflowWorkbench({
   async function loadProject(id: string) {
     const response = await fetch(`/api/project?id=${encodeURIComponent(id)}`);
     if (!response.ok) {
-      setStatus("打开项目失败。");
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      setStatus(data.error || `打开项目失败（HTTP ${response.status}）。`);
       return false;
     }
     const project = (await response.json()) as ProjectPayload;
@@ -4861,8 +4862,10 @@ function NodeWorkflowWorkbench({
       body: JSON.stringify({ id }),
     });
     if (!response.ok) {
-      setStatus("删除项目失败。");
-      throw new Error("删除项目失败。");
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      const message = data.error || `删除项目失败（HTTP ${response.status}）。`;
+      setStatus(message);
+      throw new Error(message);
     }
     const data = (await response.json()) as { activeProjectId?: string; projects?: ProjectSummary[] };
     setProjectList(data.projects || []);

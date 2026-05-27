@@ -25,8 +25,8 @@ export async function GET(request: Request) {
       candidates,
       sources: results.slice(0, 5),
     });
-  } catch {
-    return NextResponse.json({ error: "联网补全失败，请稍后重试。" }, { status: 502 });
+  } catch (error) {
+    return NextResponse.json({ error: publicInfoErrorMessage("联网补全失败", error) }, { status: 502 });
   }
 }
 
@@ -40,9 +40,14 @@ async function searchPublicPages(organization: string): Promise<SearchResult[]> 
     },
     ...(dispatcher ? { dispatcher } : {}),
   });
-  if (!response.ok) throw new Error("search failed");
+  if (!response.ok) throw new Error(`公开搜索服务返回 HTTP ${response.status}`);
   const html = await response.text();
   return parseDuckDuckGoResults(html).slice(0, 8);
+}
+
+function publicInfoErrorMessage(action: string, error: unknown) {
+  const detail = error instanceof Error ? error.message.trim() : "";
+  return detail ? `${action}：${detail}` : `${action}，请稍后重试。`;
 }
 
 function parseDuckDuckGoResults(html: string): SearchResult[] {
