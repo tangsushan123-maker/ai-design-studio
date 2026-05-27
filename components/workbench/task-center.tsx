@@ -128,6 +128,7 @@ export function TaskCenter({
     const machinePhase = taskMachinePhase(task, stuck, visibleResult);
     const statusText = taskStatusText(task, stuck, stageLabel, visibleResult, machinePhase);
     const progressText = taskProgressText(task, stuck, outputsCount, stageLabel, visibleResult, machinePhase);
+    const recoveryHint = taskRecoveryHint(task, stuck, visibleResult);
     const showDetailedTiming = task.status === "running" || task.status === "saving" || stuck;
 
     return (
@@ -191,6 +192,11 @@ export function TaskCenter({
               {task.backendRunState ? <span className="text-right">进程 {taskRunStateLabel(task.backendRunState)}</span> : null}
             </div>
             {task.error ? <div className="apple-caption mt-1 truncate text-[#ffb4a8]">{task.error}</div> : null}
+            {recoveryHint ? (
+              <div className={`mt-2 rounded-[12px] border px-2.5 py-2 text-[10px] leading-4 ${recoveryHint.tone === "danger" ? "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]" : "border-[#ffd166]/18 bg-[#ffd166]/10 text-[#ffe1a3]"}`}>
+                {recoveryHint.text}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -386,6 +392,33 @@ function taskProgressText(task: TaskCenterTask, stuck: boolean, outputsCount: nu
   if (stuck) return "运行较久，仍在等服务端结果；可继续等待、停止或稍后核验";
   if (phase === "verifying") return task.progressLabel || "正在核验任务记录、结果库和画布节点";
   return task.progressLabel || stageLabel;
+}
+
+function taskRecoveryHint(task: TaskCenterTask, stuck: boolean, visibleResult = taskHasVisibleResult(task)): { text: string; tone: "warning" | "danger" } | null {
+  if (visibleResult) return null;
+  if (taskIsPartialSuccess(task)) {
+    return { text: "已有部分图片结果。先预览可用图；如果缺图或质量不稳，再点“重试”补生成。", tone: "warning" };
+  }
+  if (task.status === "failed") {
+    const message = task.error || task.progressLabel || "";
+    if (/API|key|401|403|quota|余额|billing|permission/i.test(message)) {
+      return { text: "失败多半与 API Key、额度或模型权限有关。先到设置页测试模型，再回来重试。", tone: "danger" };
+    }
+    if (/timeout|超时|network|fetch|ECONN|socket/i.test(message)) {
+      return { text: "像是网络或服务端超时。可以直接重试；如果连续失败，降低质量或减少参考图后再生成。", tone: "warning" };
+    }
+    return { text: "任务失败。建议先重试一次；仍失败时，缩短提示词、降低质量或换一个图片模型。", tone: "danger" };
+  }
+  if (stuck) {
+    return { text: "任务运行时间偏长。可继续等后台返回；如果超过预期，停止后用相同节点重试。", tone: "warning" };
+  }
+  if (task.status === "completed" && taskHasAnyResult(task) && !task.resultOnCanvas) {
+    return { text: "结果已生成但没有落到画布。先在任务缩略图预览，必要时刷新项目或重新运行节点。", tone: "warning" };
+  }
+  if (task.status === "completed" && !taskHasAnyResult(task)) {
+    return { text: "任务完成但没有拿到图片结果。建议重试，并检查模型是否支持当前操作。", tone: "warning" };
+  }
+  return null;
 }
 
 function taskMachinePhase(task: TaskCenterTask, stuck: boolean, visibleResult = taskHasVisibleResult(task)): TaskMachinePhase {
