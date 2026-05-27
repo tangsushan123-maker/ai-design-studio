@@ -143,6 +143,10 @@ export default function SettingsPage() {
     image: modelsFor("image", modelsCache),
     video: modelsFor("video", modelsCache),
   }), [modelsCache]);
+  const primaryImageModel = useMemo(
+    () => groupedModels.image.find((model) => model.id === imageModel) || groupedModels.image[0] || null,
+    [groupedModels.image, imageModel],
+  );
   const normalizedProviderId = useMemo(() => inferProviderId(providerId, providerSiteUrl, apiBaseUrl), [apiBaseUrl, providerId, providerSiteUrl]);
   const effectiveProvider = useMemo(() => findProviderPreset(normalizedProviderId), [normalizedProviderId]);
   const generatedBaseUrl = useMemo(() => inferApiUrl(providerSiteUrl || apiBaseUrl, effectiveProvider), [apiBaseUrl, effectiveProvider, providerSiteUrl]);
@@ -427,6 +431,14 @@ export default function SettingsPage() {
     }
   }
 
+  async function testPrimaryImageModel() {
+    if (!primaryImageModel) {
+      setStatus({ type: "error", message: "还没有图片模型，请先自动检测或手动添加图片模型" });
+      return;
+    }
+    await testModel("image", primaryImageModel.id);
+  }
+
   async function useAsDefault(model: ModelCatalogItem) {
     const next = {
       textModel: model.capabilities.includes("text") ? model.id : textModel,
@@ -657,6 +669,17 @@ export default function SettingsPage() {
           </div>
 
           <aside className="space-y-4">
+            <SetupChecklist
+              hasKey={Boolean(maskedApiKey || apiKey.trim())}
+              hasProvider={Boolean(displayedApiBaseUrl)}
+              isBusy={isBusy}
+              imageModel={primaryImageModel}
+              passedImageCount={passedImageModels.length}
+              supportsImageGeneration={supportsImageGeneration}
+              onDetectAndSave={() => detectProvider({ save: true })}
+              onTestImageModel={testPrimaryImageModel}
+            />
+
             <Panel title="状态">
               <div className="space-y-3">
                 <StatusRow detail={effectiveProvider.label} label="供应商" state="success" />
@@ -718,6 +741,74 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
       <h2 className="mb-3 text-sm font-semibold text-white/88">{title}</h2>
       {children}
     </section>
+  );
+}
+
+function SetupChecklist({
+  hasKey,
+  hasProvider,
+  imageModel,
+  isBusy,
+  onDetectAndSave,
+  onTestImageModel,
+  passedImageCount,
+  supportsImageGeneration,
+}: {
+  hasKey: boolean;
+  hasProvider: boolean;
+  imageModel: ModelCatalogItem | null;
+  isBusy: boolean;
+  onDetectAndSave: () => void;
+  onTestImageModel: () => void;
+  passedImageCount: number;
+  supportsImageGeneration: boolean;
+}) {
+  const imageReady = passedImageCount > 0;
+  return (
+    <Panel title="接入流程">
+      <div className="space-y-2">
+        <ChecklistRow done={hasProvider} label="填写中转站地址" detail={hasProvider ? "已填写请求地址" : "先填官网或 API 地址"} />
+        <ChecklistRow done={hasKey} label="配置 API Key" detail={hasKey ? "Key 已保存或本次已输入" : "Key 不会显示明文"} />
+        <ChecklistRow done={supportsImageGeneration || imageReady} label="检测并保存配置" detail={supportsImageGeneration ? "图片接口已通过检测" : "自动识别接口和推荐模型"} />
+        <ChecklistRow done={imageReady} label="测试图片模型" detail={imageReady ? `${passedImageCount} 个图片模型可用于工作台` : imageModel ? `待测试：${imageModel.label || imageModel.id}` : "还没有图片模型"} />
+      </div>
+      <div className="mt-3 grid gap-2">
+        <button
+          className="apple-button-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          disabled={isBusy || !hasKey || !hasProvider}
+          onClick={onDetectAndSave}
+          type="button"
+        >
+          {isBusy ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+          检测并保存
+        </button>
+        <button
+          className="apple-button inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white/74 disabled:opacity-50"
+          disabled={isBusy || !imageModel}
+          onClick={onTestImageModel}
+          type="button"
+        >
+          <ImageIcon className="size-4" />
+          测试图片模型
+        </button>
+        <Link className={`apple-button inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold ${imageReady ? "text-[#adf8e5]" : "text-white/52"}`} href="/">
+          <ArrowLeft className="size-4" />
+          返回工作台
+        </Link>
+      </div>
+    </Panel>
+  );
+}
+
+function ChecklistRow({ detail, done, label }: { detail: string; done: boolean; label: string }) {
+  return (
+    <div className="flex items-start gap-2 rounded-[12px] border border-white/10 bg-white/[0.045] px-3 py-2">
+      <StatusIcon state={done ? "success" : "idle"} />
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-white/78">{label}</div>
+        <div className="mt-0.5 truncate text-xs text-white/42">{detail}</div>
+      </div>
+    </div>
   );
 }
 
