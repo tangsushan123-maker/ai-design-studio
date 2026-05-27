@@ -7,6 +7,18 @@ export type ImageManagerSearchImage = {
   mode?: string;
   nodeOperation?: string;
   prompt?: string;
+  qualityCheck?: {
+    actions?: string[];
+    clarityCheckLabel?: string;
+    deliverability?: string;
+    deliverabilityLabel?: string;
+    fourKCheckItems?: Array<{ detail?: string; label?: string; passed?: boolean }>;
+    importantContentLabel?: string;
+    issues?: string[];
+    label?: string;
+    status?: string;
+    textDetailLabel?: string;
+  };
   source?: string;
   sourceNodeKind?: string;
   sourceNodeName?: string;
@@ -62,6 +74,17 @@ export function imageManagerSearchText(
     image.sourceTaskId,
     image.url,
     operation,
+    image.qualityCheck?.label,
+    image.qualityCheck?.deliverabilityLabel,
+    image.qualityCheck?.status,
+    image.qualityCheck?.deliverability,
+    image.qualityCheck?.clarityCheckLabel,
+    image.qualityCheck?.textDetailLabel,
+    image.qualityCheck?.importantContentLabel,
+    ...(image.qualityCheck?.issues || []),
+    ...(image.qualityCheck?.actions || []),
+    ...(image.qualityCheck?.fourKCheckItems || []).flatMap((item) => [item.label, item.detail, item.passed ? "通过" : "复查"]),
+    ...imageManagerQualityAliases(image),
     ...protection.reasons,
     ...protection.usedByNodeNames,
     ...imageManagerProtectionAliases(protection),
@@ -69,6 +92,19 @@ export function imageManagerSearchText(
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+function imageManagerQualityAliases(image: ImageManagerSearchImage) {
+  const status = image.qualityCheck?.status;
+  const deliverability = image.qualityCheck?.deliverability;
+  return [
+    status === "passed" || deliverability === "ready" ? "可交付 合格" : "",
+    deliverability === "needs_review" ? "需复查 建议复查" : "",
+    deliverability === "not_ready" ? "不可交付 未达标" : "",
+    status === "white_border" ? "白边 有白边" : "",
+    status === "ratio_mismatch" ? "比例异常 比例不对" : "",
+    status === "size_insufficient" ? "尺寸不足 未达尺寸" : "",
+  ];
 }
 
 function imageManagerProtectionAliases(protection: ImageManagerSearchProtection) {

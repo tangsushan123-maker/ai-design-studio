@@ -198,6 +198,16 @@ describe("Workbench image manager search", () => {
       mode: "文生图",
       nodeOperation: "text_to_image",
       prompt: "高端活动海报",
+      qualityCheck: {
+        actions: ["重新生成：增加安全边距"],
+        clarityCheckLabel: "细节密度偏低",
+        deliverability: "not_ready",
+        fourKCheckItems: [{ label: "4K 尺寸", detail: "长边不足 3840", passed: false }],
+        importantContentLabel: "重要信息待核对",
+        issues: ["Logo 边缘偏软"],
+        status: "white_border",
+        textDetailLabel: "小字和二维码需放大复查",
+      },
       sourceNodeName: "主视觉节点",
       sourceRequestId: "req_search_123456",
     };
@@ -219,6 +229,11 @@ describe("Workbench image manager search", () => {
     assert.equal(imageManagerMatchesSearch(image, protection, "项目素材", operationLabel), true);
     assert.equal(imageManagerMatchesSearch(image, protection, "节点引用", operationLabel), true);
     assert.equal(imageManagerMatchesSearch(image, protection, "受保护", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch(image, protection, "不可交付", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch(image, protection, "白边", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch(image, protection, "安全边距", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch(image, protection, "二维码需放大复查", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch(image, protection, "4K 尺寸", operationLabel), true);
     assert.equal(imageManagerSearchText(image, protection, operationLabel).includes("req_search_123456"), true);
   });
 
