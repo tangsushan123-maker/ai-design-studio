@@ -1,6 +1,11 @@
 export type DeliveryReviewImage = {
   fileName?: string;
   id?: string;
+  fileSizeBytes?: number;
+  materialType?: string;
+  mode?: string;
+  model?: string;
+  prompt?: string;
   qualityCheck?: {
     actions?: string[];
     clarityCheckLabel?: string;
@@ -19,6 +24,24 @@ export type DeliveryReviewOptions = {
   expectedSizeLabel: string;
   qualityLabel: string;
 };
+
+export function buildDeliverySummary(
+  image: DeliveryReviewImage,
+  options: DeliveryReviewOptions & { formatFileSize?: (bytes: number) => string },
+) {
+  const lines = [
+    `文件：${image.fileName || image.id || "未命名图片"}`,
+    `尺寸：${options.actualSizeLabel || "未知"}`,
+    options.expectedSizeLabel && options.expectedSizeLabel !== options.actualSizeLabel ? `目标：${options.expectedSizeLabel}` : "",
+    image.fileSizeBytes ? `大小：${options.formatFileSize ? options.formatFileSize(image.fileSizeBytes) : `${image.fileSizeBytes} bytes`}` : "",
+    `交付状态：${options.qualityLabel || "待检查"}`,
+    image.model ? `模型：${image.model}` : "",
+    image.mode || image.materialType ? `类型：${image.mode || image.materialType}` : "",
+    image.qualityCheck?.issues?.length ? `复查项：${image.qualityCheck.issues.slice(0, 3).join("；")}` : "",
+    image.prompt ? `Prompt：${image.prompt}` : "",
+  ];
+  return lines.filter(Boolean).join("\n");
+}
 
 export function buildQualityReviewSummary(image: DeliveryReviewImage, options: DeliveryReviewOptions) {
   const checkItems = image.qualityCheck?.fourKCheckItems

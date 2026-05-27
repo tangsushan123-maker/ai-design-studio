@@ -4,7 +4,7 @@ import { access, readFile } from "node:fs/promises";
 import { toApiError } from "../lib/api-errors.ts";
 import { defaultOpenAIConfig, providerPresets } from "../lib/openai-defaults.ts";
 import { parseHealthMode, skippedImageCheck } from "../lib/openai-health.ts";
-import { buildQualityReviewSummary } from "../lib/workbench-delivery.ts";
+import { buildDeliverySummary, buildQualityReviewSummary } from "../lib/workbench-delivery.ts";
 
 describe("OpenAI defaults", () => {
   it("keeps the official provider aligned with shared defaults", () => {
@@ -18,6 +18,37 @@ describe("OpenAI defaults", () => {
 });
 
 describe("Workbench delivery helpers", () => {
+  it("builds a delivery summary with file, size, status, issues, and prompt", () => {
+    const summary = buildDeliverySummary(
+      {
+        fileName: "poster.png",
+        fileSizeBytes: 2048,
+        mode: "文生图",
+        model: "gpt-image-2",
+        prompt: "高端商业海报",
+        qualityCheck: {
+          issues: ["小字需复查", "二维码需放大确认", "Logo 边缘偏软", "背景略亮"],
+        },
+      },
+      {
+        actualSizeLabel: "1536 × 864px",
+        expectedSizeLabel: "3840 × 2160px",
+        formatFileSize: (bytes) => `${bytes / 1024} KB`,
+        qualityLabel: "需复查",
+      },
+    );
+
+    assert.equal(summary.includes("文件：poster.png"), true);
+    assert.equal(summary.includes("尺寸：1536 × 864px"), true);
+    assert.equal(summary.includes("目标：3840 × 2160px"), true);
+    assert.equal(summary.includes("大小：2 KB"), true);
+    assert.equal(summary.includes("模型：gpt-image-2"), true);
+    assert.equal(summary.includes("类型：文生图"), true);
+    assert.equal(summary.includes("复查项：小字需复查；二维码需放大确认；Logo 边缘偏软"), true);
+    assert.equal(summary.includes("背景略亮"), false);
+    assert.equal(summary.includes("Prompt：高端商业海报"), true);
+  });
+
   it("builds a concise quality review summary for handoff", () => {
     const summary = buildQualityReviewSummary(
       {
