@@ -97,10 +97,12 @@ export function imageManagerSearchText(
 function imageManagerQualityAliases(image: ImageManagerSearchImage) {
   const status = image.qualityCheck?.status;
   const deliverability = image.qualityCheck?.deliverability;
+  const failedQuality = Boolean(status && status !== "passed");
   return [
     status === "passed" || deliverability === "ready" ? "可交付 合格" : "",
     deliverability === "needs_review" ? "需复查 建议复查" : "",
     deliverability === "not_ready" ? "不可交付 未达标" : "",
+    failedQuality ? "质检未过 未通过 质量异常" : "",
     status === "white_border" ? "白边 有白边" : "",
     status === "ratio_mismatch" ? "比例异常 比例不对" : "",
     status === "size_insufficient" ? "尺寸不足 未达尺寸" : "",

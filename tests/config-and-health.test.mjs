@@ -168,6 +168,8 @@ describe("Workbench history search", () => {
     assert.equal(historyMatchesQuery(image, "主视觉节点"), true);
     assert.equal(historyMatchesQuery(image, "Logo 边缘"), true);
     assert.equal(historyMatchesQuery(image, "不可交付"), true);
+    assert.equal(historyMatchesQuery(image, "质检未过"), true);
+    assert.equal(historyMatchesQuery(image, "质量异常"), true);
     assert.equal(historyMatchesQuery(image, "白边"), true);
     assert.equal(historyMatchesQuery(image, "安全边距"), true);
     assert.equal(historyMatchesQuery(image, "细节密度"), true);
@@ -230,6 +232,8 @@ describe("Workbench image manager search", () => {
     assert.equal(imageManagerMatchesSearch(image, protection, "节点引用", operationLabel), true);
     assert.equal(imageManagerMatchesSearch(image, protection, "受保护", operationLabel), true);
     assert.equal(imageManagerMatchesSearch(image, protection, "不可交付", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch(image, protection, "质检未过", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch(image, protection, "未通过", operationLabel), true);
     assert.equal(imageManagerMatchesSearch(image, protection, "白边", operationLabel), true);
     assert.equal(imageManagerMatchesSearch(image, protection, "安全边距", operationLabel), true);
     assert.equal(imageManagerMatchesSearch(image, protection, "二维码需放大复查", operationLabel), true);
@@ -366,6 +370,8 @@ describe("Workbench task search", () => {
     assert.equal(taskMatchesSearch(task, "可重试"), true);
     assert.equal(taskMatchesSearch(task, "poster.png"), true);
     assert.equal(taskMatchesSearch(task, "不可交付"), true);
+    assert.equal(taskMatchesSearch(task, "质检未过"), true);
+    assert.equal(taskMatchesSearch(task, "未通过"), true);
     assert.equal(taskMatchesSearch(task, "白边"), true);
     assert.equal(taskMatchesSearch(task, "安全边距"), true);
     assert.equal(taskMatchesSearch(task, "二维码需放大复查"), true);
