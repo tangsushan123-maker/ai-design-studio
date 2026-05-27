@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, Star, X } from "lucide-react";
+import { Maximize2, Plus, Search, Sparkles, Star, Trash2, X } from "lucide-react";
 import { useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { DeliveryStatusBadge } from "@/components/workbench/delivery-status-badge";
 import { ImageFrame } from "@/components/workbench/image-frame";
@@ -51,10 +51,14 @@ export function HistoryPanel({
   historyMatchesFilter,
   historyMatchesQuery,
   nodeOperationLabel,
+  onAddToCanvas,
+  onDelete,
   onDrag,
   onLoadMore,
   onPreview,
+  onResize,
   onToggleFavorite,
+  onUpscale,
   qualityBadgeLabel,
   qualityTone,
 }: {
@@ -208,6 +212,58 @@ export function HistoryPanel({
                   ) : null}
                 </div>
               </button>
+              <div className="mt-1.5 grid grid-cols-4 gap-1">
+                <button
+                  aria-label="加入画布"
+                  className="apple-button flex h-7 items-center justify-center text-white/62"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onAddToCanvas(image);
+                  }}
+                  title="加入画布"
+                  type="button"
+                >
+                  <Plus className="size-3" />
+                </button>
+                <button
+                  aria-label="改尺寸"
+                  className="apple-button flex h-7 items-center justify-center text-white/62"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onResize(image);
+                  }}
+                  title="改尺寸"
+                  type="button"
+                >
+                  <Maximize2 className="size-3" />
+                </button>
+                <button
+                  aria-label="画质增强"
+                  className="apple-button flex h-7 items-center justify-center text-white/62"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onUpscale(image);
+                  }}
+                  title="画质增强"
+                  type="button"
+                >
+                  <Sparkles className="size-3" />
+                </button>
+                {onDelete ? (
+                  <button
+                    aria-label="删除图片"
+                    className="apple-button flex h-7 items-center justify-center text-[#ffb4a8]"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDelete(image);
+                    }}
+                    title="删除图片"
+                    type="button"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                ) : null}
+              </div>
             </div>
           </article>
         ))}
