@@ -5201,7 +5201,7 @@ function NodeWorkflowWorkbench({
         <ProjectCreationModal
           draft={emptyProjectCreationDraft}
           onClose={() => setProjectCreateOpen(false)}
-          onCreate={(draft) => void createNewProject(draft)}
+          onCreate={createNewProject}
         />
       ) : null}
 
@@ -5747,10 +5747,25 @@ function ProjectCreationModal({
 }: {
   draft: ProjectCreationDraft;
   onClose: () => void;
-  onCreate: (draft: ProjectCreationDraft) => void;
+  onCreate: (draft: ProjectCreationDraft) => void | Promise<unknown>;
 }) {
   const [form, setForm] = useState<ProjectCreationDraft>(draft);
+  const [creating, setCreating] = useState(false);
+  const [message, setMessage] = useState<{ tone: "error"; text: string } | null>(null);
   const canCreateProject = Boolean(form.projectName.trim());
+
+  async function createProject() {
+    if (!canCreateProject || creating) return;
+    setCreating(true);
+    setMessage(null);
+    try {
+      await onCreate(form);
+    } catch (error) {
+      setMessage({ tone: "error", text: error instanceof Error ? error.message : "创建项目失败。" });
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
     <section className="fixed inset-0 z-[80] flex items-center justify-center bg-[rgba(9,14,23,0.56)] px-4 backdrop-blur-xl">
@@ -5760,7 +5775,7 @@ function ProjectCreationModal({
             <div className="text-[18px] font-semibold text-white/92">新建项目</div>
             <div className="mt-1 text-[12px] text-white/42">先建项目和素材库，其他资料后面再补。</div>
           </div>
-          <button aria-label="关闭新建项目" className="apple-button flex size-9 items-center justify-center text-white/56" onClick={onClose} type="button">
+          <button aria-label="关闭新建项目" className="apple-button flex size-9 items-center justify-center text-white/56 disabled:opacity-45" disabled={creating} onClick={onClose} type="button">
             <X className="size-4" />
           </button>
         </div>
@@ -5781,15 +5796,20 @@ function ProjectCreationModal({
             </label>
           </div>
         </div>
+        {message ? (
+          <div className="mx-5 rounded-[14px] border border-[#ff6b5f]/18 bg-[#ff6b5f]/10 px-3 py-2 text-[10px] leading-4 text-[#ffc1b8]">
+            {message.text}
+          </div>
+        ) : null}
         <div className="flex items-center justify-end gap-2 border-t border-white/10 px-5 py-4">
-          <button className="apple-button h-10 rounded-full px-4 text-[12px] text-white/70" onClick={onClose} type="button">取消</button>
+          <button className="apple-button h-10 rounded-full px-4 text-[12px] text-white/70 disabled:opacity-45" disabled={creating} onClick={onClose} type="button">取消</button>
           <button
             className="apple-button-primary h-10 rounded-full px-4 text-[12px] font-semibold disabled:opacity-45"
-            disabled={!canCreateProject}
-            onClick={() => onCreate(form)}
+            disabled={!canCreateProject || creating}
+            onClick={() => void createProject()}
             type="button"
           >
-            创建项目
+            {creating ? "创建中" : "创建项目"}
           </button>
         </div>
       </div>
