@@ -8032,9 +8032,9 @@ function ImageLightbox({
                       <Wand2 className="size-3.5" />
                       复制 Prompt
                     </button>
-                    <button className="apple-button-danger flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={onDelete} type="button">
+                    <button className="apple-button-danger flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("删除当前图", onDelete)} type="button">
                       <Trash2 className="size-3.5" />
-                      删除当前图
+                      {activeActionLabel === "删除当前图" ? "删除中..." : "删除当前图"}
                     </button>
                   </div>
                 ) : null}
