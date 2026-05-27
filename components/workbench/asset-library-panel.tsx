@@ -119,13 +119,13 @@ type AssetLibraryPanelProps = {
   knowledge: ProjectKnowledgeBase;
   mergeProjectLibraryAssets: (items: ProjectAssetRecord[], assets: AssetPanelImage[], currentProjectId: string) => AssetPanelImage[];
   onClose: () => void;
-  onApplyPendingFact: (candidateId: string) => void;
-  onDismissPendingFact: (candidateId: string) => void;
+  onApplyPendingFact: (candidateId: string) => void | Promise<unknown>;
+  onDismissPendingFact: (candidateId: string) => void | Promise<unknown>;
   onKnowledgeChange: (value: ProjectKnowledgeBase) => void;
   onProjectNameChange: (value: string) => void;
   onProfileChange: (value: ProjectProfile) => void;
-  onRefreshLibraries: () => void;
-  onSearchPublicInfo: () => void;
+  onRefreshLibraries: () => void | Promise<unknown>;
+  onSearchPublicInfo: () => void | Promise<unknown>;
   onTextChange: (value: string) => void;
   onTextProtectionChange: (value: boolean) => void;
   onUpload: (files: FileList, type: UploadCategoryKey) => void;
@@ -176,6 +176,8 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
   const [moreExpanded, setMoreExpanded] = useState(false);
   const [activeCategory, setActiveCategory] = useState<AssetCategoryKey>("logo");
   const [uploadCategory, setUploadCategory] = useState<UploadCategoryKey>("logo");
+  const [activePanelAction, setActivePanelAction] = useState("");
+  const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const uploadRef = useRef<HTMLInputElement | null>(null);
 
   const mergedAssets = useMemo(
@@ -329,6 +331,21 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
     });
   }
 
+  async function runPanelAction(label: string, key: string, action: () => void | Promise<unknown>) {
+    const actionKey = `${label}:${key}`;
+    if (activePanelAction) return;
+    setActivePanelAction(actionKey);
+    setActionMessage(null);
+    try {
+      await action();
+      setActionMessage({ tone: "success", text: `${label}已提交。` });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : `${label}失败。` });
+    } finally {
+      setActivePanelAction("");
+    }
+  }
+
   return (
     <section className="apple-panel-strong apple-drawer fixed bottom-4 left-[52px] top-4 z-50 flex w-[min(340px,calc(100vw-68px))] flex-col overflow-hidden sm:left-[96px] sm:w-[348px]">
       <div className="border-b border-white/8 px-4 py-4">
@@ -396,11 +413,12 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
-                  className="apple-button px-3 py-1.5 text-[11px]"
-                  onClick={onSearchPublicInfo}
+                  className="apple-button px-3 py-1.5 text-[11px] disabled:opacity-45"
+                  disabled={publicInfoSearchState === "loading" || Boolean(activePanelAction)}
+                  onClick={() => void runPanelAction("联网补全", "public-info", onSearchPublicInfo)}
                   type="button"
                 >
-                  {publicInfoSearchState === "loading" ? "补全中" : "联网补全"}
+                  {publicInfoSearchState === "loading" || activePanelAction === "联网补全:public-info" ? "补全中" : "联网补全"}
                 </button>
                 {knowledge.archive.pendingFacts.length ? (
                   <span className="apple-status-warning rounded-full border px-3 py-1.5 text-[11px]">
@@ -427,10 +445,11 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
                   <div className="space-y-2">
                     {knowledge.archive.pendingFacts.slice(0, 6).map((candidate) => (
                       <PendingFactRow
+                        activeAction={activePanelAction}
                         candidate={candidate}
                         key={candidate.id}
-                        onApply={() => onApplyPendingFact(candidate.id)}
-                        onDismiss={() => onDismissPendingFact(candidate.id)}
+                        onApply={() => runPanelAction("应用公开资料", candidate.id, () => onApplyPendingFact(candidate.id))}
+                        onDismiss={() => runPanelAction("忽略公开资料", candidate.id, () => onDismissPendingFact(candidate.id))}
                       />
                     ))}
                   </div>
@@ -595,12 +614,22 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
                   <Upload className="mr-1 inline size-3.5" />
                   上传{categoryLabel(uploadCategory)}
                 </button>
-                <button className="apple-button px-3 py-2.5 text-[11px]" onClick={onRefreshLibraries} type="button">
-                  <RefreshCcw className="mr-1 inline size-3.5" />
-                  刷新
+                <button className="apple-button px-3 py-2.5 text-[11px] disabled:opacity-45" disabled={Boolean(activePanelAction)} onClick={() => void runPanelAction("刷新素材库", "libraries", onRefreshLibraries)} type="button">
+                  <RefreshCcw className={`mr-1 inline size-3.5 ${activePanelAction === "刷新素材库:libraries" ? "animate-spin" : ""}`} />
+                  {activePanelAction === "刷新素材库:libraries" ? "刷新中" : "刷新"}
                 </button>
               </div>
             </section>
+
+            {actionMessage ? (
+              <div className={`rounded-[14px] border px-3 py-2 text-[10px] leading-4 ${
+                actionMessage.tone === "success"
+                  ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
+                  : "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
+              }`}>
+                {actionMessage.text}
+              </div>
+            ) : null}
 
             <section className="apple-panel p-4">
               <div className="grid grid-cols-2 gap-2">
@@ -739,14 +768,19 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 function PendingFactRow({
+  activeAction,
   candidate,
   onApply,
   onDismiss,
 }: {
+  activeAction: string;
   candidate: ProjectFactCandidate;
-  onApply: () => void;
-  onDismiss: () => void;
+  onApply: () => void | Promise<unknown>;
+  onDismiss: () => void | Promise<unknown>;
 }) {
+  const applying = activeAction === `应用公开资料:${candidate.id}`;
+  const dismissing = activeAction === `忽略公开资料:${candidate.id}`;
+  const busy = Boolean(activeAction);
   return (
     <div className="apple-surface-section p-3">
       <div className="flex items-start justify-between gap-2">
@@ -758,11 +792,11 @@ function PendingFactRow({
           </div>
         </div>
         <div className="flex shrink-0 flex-col gap-1.5">
-          <button className="apple-button-primary rounded-full px-2.5 py-1 text-[11px] font-semibold" onClick={onApply} type="button">
-            应用
+          <button className="apple-button-primary rounded-full px-2.5 py-1 text-[11px] font-semibold disabled:opacity-45" disabled={busy} onClick={() => void onApply()} type="button">
+            {applying ? "应用中" : "应用"}
           </button>
-          <button className="apple-button rounded-full px-2.5 py-1 text-[11px]" onClick={onDismiss} type="button">
-            忽略
+          <button className="apple-button rounded-full px-2.5 py-1 text-[11px] disabled:opacity-45" disabled={busy} onClick={() => void onDismiss()} type="button">
+            {dismissing ? "忽略中" : "忽略"}
           </button>
         </div>
       </div>

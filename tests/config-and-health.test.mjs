@@ -1020,7 +1020,7 @@ describe("Workflow canvas performance", () => {
 
 describe("Project stability and task tracing", () => {
   it("keeps local snapshots and explicit task run traces", async () => {
-    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, imageUtilsSource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
+    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, assetLibraryPanelSource, imageUtilsSource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/task-run-ledger.ts", import.meta.url), "utf8"),
@@ -1031,13 +1031,14 @@ describe("Project stability and task tracing", () => {
       readFile(new URL("../components/workbench/history-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/image-manager-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/project-library-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/asset-library-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/image-resource/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/edit-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/redraw-upscale-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/workbench-image-source.ts", import.meta.url), "utf8"),
     ]);
-    const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}\n${projectLibraryPanelSource}\n${imageSourceSource}`;
+    const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}\n${projectLibraryPanelSource}\n${assetLibraryPanelSource}\n${imageSourceSource}`;
 
     assert.equal(workbenchSource.includes("type ProjectSnapshot"), true);
     assert.equal(workbenchSource.includes("const projectSnapshotLimit = 5"), true);
@@ -1223,6 +1224,12 @@ describe("Project stability and task tracing", () => {
     assert.equal(projectLibraryPanelSource.includes("刷新中"), true);
     assert.equal(projectLibraryPanelSource.includes("打开中..."), true);
     assert.equal(projectLibraryPanelSource.includes("window.confirm"), false);
+    assert.equal(assetLibraryPanelSource.includes("activePanelAction"), true);
+    assert.equal(assetLibraryPanelSource.includes("runPanelAction"), true);
+    assert.equal(assetLibraryPanelSource.includes("补全中"), true);
+    assert.equal(assetLibraryPanelSource.includes("刷新中"), true);
+    assert.equal(assetLibraryPanelSource.includes("应用中"), true);
+    assert.equal(assetLibraryPanelSource.includes("忽略中"), true);
     assert.equal(workbenchSource.includes("window.confirm"), false);
     assert.equal(workbenchSource.includes("skipConfirm"), false);
     assert.equal(workbenchSource.includes("这张图已受保护"), true);
