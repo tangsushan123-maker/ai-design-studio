@@ -72,7 +72,7 @@ export function ProjectCreationModal({
           </div>
         </div>
         {message ? (
-          <div className="mx-5 rounded-[14px] border border-[#ff6b5f]/18 bg-[#ff6b5f]/10 px-3 py-2 text-[10px] leading-4 text-[#ffc1b8]">
+          <div className="mx-5 rounded-[14px] border border-[#ff6b5f]/18 bg-[#ff6b5f]/10 px-3 py-2 text-[11px] leading-5 text-[#ffc1b8]">
             {message.text}
           </div>
         ) : null}

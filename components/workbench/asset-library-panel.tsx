@@ -637,7 +637,7 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
             </section>
 
             {actionMessage ? (
-              <div className={`rounded-[14px] border px-3 py-2 text-[10px] leading-4 ${
+              <div className={`rounded-[14px] border px-3 py-2 text-[11px] leading-5 ${
                 actionMessage.tone === "success"
                   ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
                   : "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
@@ -865,7 +865,7 @@ function ColorSwatches({ colors, className = "" }: { colors: string[]; className
     <div className={`flex flex-wrap gap-1.5 ${className}`}>
       {colors.slice(0, 12).map((color) => (
         <span
-          className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] py-1 pl-1 pr-2 text-[10px] text-white/62"
+          className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] py-1 pl-1 pr-2 text-[11px] text-white/62"
           key={color}
           title={color}
         >

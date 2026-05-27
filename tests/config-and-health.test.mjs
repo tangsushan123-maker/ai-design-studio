@@ -1660,6 +1660,20 @@ describe("Reference remake", () => {
   });
 });
 
+describe("Workbench compact typography", () => {
+  it("keeps project and material panel status text above the tiny label floor", async () => {
+    const panelSources = await Promise.all([
+      readFile(new URL("../components/workbench/project-creation-modal.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/project-home-screen.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/project-library-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/asset-library-panel.tsx", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(panelSources.some((source) => source.includes("text-[9px]") || source.includes("text-[10px]")), false);
+    assert.equal(panelSources.some((source) => source.includes("leading-4")), false);
+  });
+});
+
 describe("Design optimization", () => {
   it("adds a standalone design optimization node and modular industry-aware API route", async () => {
     const [routeSource, workbenchSource] = await Promise.all([

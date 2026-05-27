@@ -76,7 +76,7 @@ export function ProjectHomeScreen({
                 {projectListLoading ? "正在刷新项目列表" : `项目列表 · ${projects.length}`}
               </div>
               <button
-                className="apple-button flex h-8 items-center gap-1.5 px-2.5 text-[10px] text-white/62 disabled:opacity-45"
+                className="apple-button flex h-8 items-center gap-1.5 px-2.5 text-[11px] text-white/62 disabled:opacity-45"
                 disabled={projectActionsDisabled}
                 onClick={onRefreshProjects}
                 type="button"
@@ -86,7 +86,7 @@ export function ProjectHomeScreen({
               </button>
             </div>
             {projectListError ? (
-              <div className="mb-2 rounded-[14px] border border-[#ff6b5f]/18 bg-[#ff6b5f]/10 px-3 py-2 text-[10px] leading-4 text-[#ffc1b8]">
+              <div className="mb-2 rounded-[14px] border border-[#ff6b5f]/18 bg-[#ff6b5f]/10 px-3 py-2 text-[11px] leading-5 text-[#ffc1b8]">
                 {projectListError}
               </div>
             ) : null}

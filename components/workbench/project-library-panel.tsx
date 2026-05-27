@@ -118,7 +118,7 @@ export function ProjectLibraryPanel({
           </button>
         </div>
         {actionMessage ? (
-          <div className={`mb-3 rounded-[14px] border px-3 py-2 text-[10px] leading-4 ${
+          <div className={`mb-3 rounded-[14px] border px-3 py-2 text-[11px] leading-5 ${
             actionMessage.tone === "success"
               ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
               : "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
