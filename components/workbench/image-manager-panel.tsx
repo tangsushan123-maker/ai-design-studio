@@ -147,14 +147,16 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
     () => managedRows.filter((row) => imageManagerMatchesFilter(row.protection, filter) && imageManagerMatchesSearch(row.image, row.protection, normalizedQuery, nodeOperationLabel)),
     [filter, managedRows, nodeOperationLabel, normalizedQuery],
   );
-  const selectedRows = useMemo(
-    () => managedRows.filter((row) => selectedKeys.has(imageManagerKey(row.image))),
-    [managedRows, selectedKeys],
-  );
   const selectableRows = useMemo(
     () => filteredRows.filter((row) => imageManagerRowSelectable(row.protection)),
     [filteredRows],
   );
+  const activeKeys = useMemo(() => new Set(managedRows.map((row) => imageManagerKey(row.image))), [managedRows]);
+  const selectedRows = useMemo(
+    () => managedRows.filter((row) => activeKeys.has(imageManagerKey(row.image)) && selectedKeys.has(imageManagerKey(row.image))),
+    [activeKeys, managedRows, selectedKeys],
+  );
+
   const selectedImages = selectedRows.map((row) => row.image);
   const selectedTrashCount = selectedRows.filter((row) => row.protection.isTrashed).length;
   const selectedCleanableCount = selectedRows.filter((row) => row.protection.canDelete && !row.protection.isTrashed).length;
@@ -209,7 +211,9 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
         <div className="flex items-center justify-between gap-2">
           <div>
             <div className="text-[13px] font-semibold text-white/84">图片管理</div>
-            <div className="apple-caption mt-1">先保护收藏、项目素材和节点引用；只清理未保护图片。</div>
+            <div className="apple-caption mt-1">
+              先保护收藏、项目素材和节点引用；当前显示 {filteredRows.length}/{managedRows.length} 张。
+            </div>
           </div>
           <ShieldCheck className="size-4 shrink-0 text-[#74e3c5]" />
         </div>
