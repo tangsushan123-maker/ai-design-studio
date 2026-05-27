@@ -52,6 +52,11 @@ export async function POST(request: Request) {
       imageModel?: string;
       analysisModel?: string;
       videoModel?: string;
+      modelsCache?: unknown;
+      supportsModelsList?: boolean;
+      supportsResponses?: boolean;
+      supportsChatCompletions?: boolean;
+      supportsImageGeneration?: boolean;
     };
     const currentLocal = readLocalConfig();
     const nextApiKey = body.apiKey?.trim() || currentLocal.openaiApiKey || "";
@@ -71,12 +76,12 @@ export async function POST(request: Request) {
       imageModel: body.imageModel,
       analysisModel: body.analysisModel,
       videoModel: body.videoModel,
-      modelsCache: currentLocal.modelsCache,
+      modelsCache: Array.isArray(body.modelsCache) ? body.modelsCache : currentLocal.modelsCache,
       modelsUpdatedAt: currentLocal.modelsUpdatedAt,
-      supportsModelsList: currentLocal.supportsModelsList,
-      supportsResponses: currentLocal.supportsResponses,
-      supportsChatCompletions: currentLocal.supportsChatCompletions,
-      supportsImageGeneration: currentLocal.supportsImageGeneration,
+      supportsModelsList: body.supportsModelsList ?? currentLocal.supportsModelsList,
+      supportsResponses: body.supportsResponses ?? currentLocal.supportsResponses,
+      supportsChatCompletions: body.supportsChatCompletions ?? currentLocal.supportsChatCompletions,
+      supportsImageGeneration: body.supportsImageGeneration ?? currentLocal.supportsImageGeneration,
       lastTestedAt: currentLocal.lastTestedAt,
       isDefault: currentLocal.isDefault,
     });

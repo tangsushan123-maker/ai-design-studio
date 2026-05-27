@@ -453,6 +453,9 @@ describe("Settings model management", () => {
     assert.equal(settingsSource.includes("删除中"), true);
     assert.equal(settingsSource.includes("确认删"), true);
     assert.equal(settingsRouteSource.includes("settingsErrorMessage"), true);
+    assert.equal(settingsRouteSource.includes("Array.isArray(body.modelsCache) ? body.modelsCache : currentLocal.modelsCache"), true);
+    assert.equal(settingsSource.includes("modelsCache: overrides?.modelsCache ?? modelsCache"), true);
+    assert.equal(settingsSource.includes("supportsImageGeneration"), true);
     assert.equal(modelsManageSource.includes("modelManageErrorMessage"), true);
     assert.equal(modelsManageSource.includes('modelManageErrorMessage("模型保存失败", error)'), true);
     assert.equal(modelsManageSource.includes('modelManageErrorMessage("模型删除失败", error)'), true);

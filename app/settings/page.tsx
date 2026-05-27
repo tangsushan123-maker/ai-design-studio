@@ -252,9 +252,14 @@ export default function SettingsPage() {
           textModel: overrides?.textModel ?? textModel,
           imageModel: overrides?.imageModel ?? imageModel,
           videoModel: overrides?.videoModel ?? videoModel,
+          modelsCache: overrides?.modelsCache ?? modelsCache,
+          supportsModelsList,
+          supportsResponses,
+          supportsChatCompletions,
+          supportsImageGeneration,
         }),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({})) as SettingsResponse & { error?: string };
       if (!response.ok) {
         setStatus({ type: "error", message: data.error || "保存失败" });
         return false;
