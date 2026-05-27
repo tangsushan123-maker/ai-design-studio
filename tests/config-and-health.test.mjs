@@ -4,6 +4,7 @@ import { access, readFile } from "node:fs/promises";
 import { toApiError } from "../lib/api-errors.ts";
 import { defaultOpenAIConfig, providerPresets } from "../lib/openai-defaults.ts";
 import { parseHealthMode, skippedImageCheck } from "../lib/openai-health.ts";
+import { buildQualityReviewSummary } from "../lib/workbench-delivery.ts";
 
 describe("OpenAI defaults", () => {
   it("keeps the official provider aligned with shared defaults", () => {
@@ -13,6 +14,38 @@ describe("OpenAI defaults", () => {
     assert.equal(officialProvider?.imageModel, defaultOpenAIConfig.imageModel);
     assert.equal(officialProvider?.textModel, defaultOpenAIConfig.textModel);
     assert.equal(officialProvider?.videoModel, defaultOpenAIConfig.videoModel);
+  });
+});
+
+describe("Workbench delivery helpers", () => {
+  it("builds a concise quality review summary for handoff", () => {
+    const summary = buildQualityReviewSummary(
+      {
+        fileName: "poster.png",
+        qualityCheck: {
+          actions: ["先做画质增强", "放大检查二维码"],
+          clarityCheckLabel: "文字边缘需要复查",
+          fourKCheckItems: [
+            { label: "尺寸", passed: true, detail: "已达到目标长边" },
+            { label: "文字", passed: false, detail: "小字略糊" },
+          ],
+          issues: ["Logo 边缘偏软"],
+          textDetailLabel: "主标题可读，小字需复查",
+        },
+      },
+      {
+        actualSizeLabel: "1536 × 864px",
+        expectedSizeLabel: "3840 × 2160px",
+        qualityLabel: "需复查",
+      },
+    );
+
+    assert.equal(summary.includes("质检对象：poster.png"), true);
+    assert.equal(summary.includes("目标尺寸：3840 × 2160px"), true);
+    assert.equal(summary.includes("通过：尺寸（已达到目标长边）"), true);
+    assert.equal(summary.includes("复查：文字（小字略糊）"), true);
+    assert.equal(summary.includes("复查：Logo 边缘偏软"), true);
+    assert.equal(summary.includes("建议：先做画质增强"), true);
   });
 });
 
@@ -370,7 +403,7 @@ describe("PNG three-layer export", () => {
     assert.equal(workbenchSource.includes("PNG 分层导出节点"), true);
     assert.equal(workbenchSource.includes("AI三层精准"), true);
     assert.equal(workbenchSource.includes("快速三层"), true);
-    assert.equal(workbenchSource.includes("只拆背景、文字、人物三层"), true);
+    assert.equal(workbenchSource.includes('InspectorSection title="PNG 三层"'), true);
     assert.equal(workbenchSource.includes("PNG 三层结果"), true);
     assert.equal(workbenchSource.includes("按需单独下载"), true);
     assert.equal(workbenchSource.includes("pngLayerDisplayName"), true);
@@ -906,7 +939,7 @@ describe("Reference remake", () => {
     assert.equal(routeSource.includes("不是高清修复任务"), true);
     assert.equal(routeSource.includes("不要保留原图里的透视变形"), false);
     assert.equal(routeSource.includes("perspective distortion, glare, stains"), true);
-    assert.equal(workbenchSource.includes("文字由 AI 自动识别。需要指定文字时，直接写在底部输入框"), true);
+    assert.equal(workbenchSource.includes("在底部输入框写需求"), true);
     assert.equal(workbenchSource.includes("confirmedTextLayers"), false);
     assert.equal(routeSource.includes("textOverride"), true);
     assert.equal(routeSource.includes("compositeDetectedText"), true);
@@ -921,7 +954,7 @@ describe("Reference remake", () => {
     assert.equal(routeSource.includes("wooden door"), true);
     assert.equal(routeSource.includes("fitImageOnCleanWhiteCanvas"), true);
     assert.equal(routeSource.includes('background: "#ffffff"'), true);
-    assert.equal(workbenchSource.includes("自动去除木门、桌面、手和拍摄环境"), true);
+    assert.equal(workbenchSource.includes('InspectorSection title="参考图重制"'), true);
     assert.equal(routeSource.includes("nodeOperation: \"reference_remake\""), true);
   });
 });
