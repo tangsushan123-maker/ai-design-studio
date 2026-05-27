@@ -131,6 +131,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
 }) {
   const [filter, setFilter] = useState<ImageManagerFilter>("全部");
   const [query, setQuery] = useState("");
+  const [downloadingKey, setDownloadingKey] = useState("");
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const normalizedQuery = query.trim();
   const managedImages = useMemo(() => {
@@ -191,6 +192,17 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
       return;
     }
     selectVisible();
+  }
+
+  async function downloadImage(image: TImage) {
+    const key = imageManagerKey(image);
+    if (downloadingKey) return;
+    setDownloadingKey(key);
+    try {
+      await downloadRemoteFile(image.url, imageManagerDownloadName(image));
+    } finally {
+      setDownloadingKey("");
+    }
   }
 
   if (!managedImages.length) {
@@ -415,12 +427,13 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
                 </button>
               )}
               <button
-                className="apple-button flex h-8 items-center justify-center gap-1 text-[10px]"
-                onClick={() => void downloadRemoteFile(image.url, imageManagerDownloadName(image))}
+                className="apple-button flex h-8 items-center justify-center gap-1 text-[10px] disabled:opacity-45"
+                disabled={Boolean(downloadingKey)}
+                onClick={() => void downloadImage(image)}
                 type="button"
               >
-                <ArrowDownToLine className="size-3" />
-                下载
+                {downloadingKey === imageManagerKey(image) ? <RefreshCcw className="size-3 animate-spin" /> : <ArrowDownToLine className="size-3" />}
+                {downloadingKey === imageManagerKey(image) ? "下载中" : "下载"}
               </button>
               <button
                 className="apple-button flex h-8 items-center justify-center gap-1 text-[10px] text-[#ffb4a8] disabled:cursor-not-allowed disabled:text-white/28"

@@ -1152,6 +1152,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("imageDeletionProtection"), true);
     assert.equal(workbenchUiSource.includes("activeKeys"), true);
     assert.equal(workbenchUiSource.includes("当前显示 {filteredRows.length}/{managedRows.length} 张"), true);
+    assert.equal(workbenchUiSource.includes("downloadingKey"), true);
+    assert.equal(workbenchUiSource.includes("disabled={Boolean(downloadingKey)}"), true);
+    assert.equal(workbenchUiSource.includes("\"下载中\""), true);
     assert.equal(workbenchSource.includes("loadImageManagerHistory"), true);
     assert.equal(workbenchSource.includes("loadImageManagerTrash"), true);
     assert.equal(workbenchSource.includes('new URLSearchParams({ limit: "60", offset: String(offset) })'), true);
