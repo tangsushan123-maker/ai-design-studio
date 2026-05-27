@@ -914,6 +914,29 @@ function initialImageModelFor(modelInfo: WorkbenchModelInfo) {
   return preferredAutoImageModelId(passedImages, modelInfo.imageModel);
 }
 
+function imageModelReadiness(modelInfo: WorkbenchModelInfo, passedImageModels: ModelCatalogItem[], effectiveImageModel: string) {
+  if (!modelInfo.hasKey) {
+    return {
+      label: "API 未配置",
+      helper: "先到设置页填入 API Key。",
+      toneClass: "text-[#ffb4a8]",
+    };
+  }
+  if (!passedImageModels.length || !effectiveImageModel) {
+    return {
+      label: "Key 已配置 · 图片模型未验证",
+      helper: "到 API 设置页测试图片模型，通过后即可生成。",
+      toneClass: "text-[#ffe2a3]",
+    };
+  }
+  const active = passedImageModels.find((item) => item.id === effectiveImageModel);
+  return {
+    label: active?.label ? `图片模型可用 · ${active.label}` : "图片模型可用",
+    helper: "图片生成、改图和增强可直接运行。",
+    toneClass: "text-[#adf8e5]",
+  };
+}
+
 function preferredAutoImageModelId(models: ModelCatalogItem[], configuredModel?: string) {
   const passed = models.filter((item) => item.capabilities.includes("image") && item.testStatus === "passed");
   const byId = (pattern: RegExp) => passed.find((item) => pattern.test(item.id))?.id;
@@ -1124,6 +1147,10 @@ function NodeWorkflowWorkbench({
     || autoImageModel
     || passedImageModelOptions.find((item) => item.id === modelInfo.imageModel)?.id
     || "";
+  const imageModelStatus = useMemo(
+    () => imageModelReadiness(modelInfo, passedImageModelOptions, effectiveImageModel),
+    [effectiveImageModel, modelInfo, passedImageModelOptions],
+  );
   const selectedNode = selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) ?? null : null;
   const isLowZoom = viewportZoom < 0.58;
   const isLargeWorkflow = nodes.length > 50;
@@ -5226,8 +5253,8 @@ function NodeWorkflowWorkbench({
               <span className={`apple-pill px-2 py-1 text-[11px] ${projectSaveState === "error" ? "text-[#ffb4a8]" : ""}`}>
                 {projectSaveState === "saving" ? "保存中" : projectSaveState === "error" ? "保存失败" : "已保存"}
               </span>
-              <span className={`apple-pill px-2 py-1 text-[11px] ${modelInfo.hasKey ? "text-[#adf8e5]" : "text-[#ffb4a8]"}`}>
-                {modelInfo.hasKey ? "API 正常" : "API 未配置"}
+              <span className={`apple-pill px-2 py-1 text-[11px] ${imageModelStatus.toneClass}`} title={imageModelStatus.helper}>
+                {imageModelStatus.label}
               </span>
               <span className={`apple-pill px-2 py-1 text-[11px] ${projectCapacity.tone === "critical" ? "text-[#ffb4a8]" : projectCapacity.tone === "warning" ? "text-[#ffe2a3]" : ""}`}>
                 节点 {nodes.length}
@@ -6524,7 +6551,7 @@ function ChatComposer({
             value={displayPrompt}
           />
           {hasKey && !effectiveModel ? (
-            <div className="apple-caption mt-1 text-[#ffe1a0]">图片模型需先在 API 页测试通过。</div>
+            <div className="apple-caption mt-1 text-[#ffe1a0]">Key 已配置，但还没有通过测试的图片模型；到 API 设置页点“测试模型”后再生成。</div>
           ) : null}
         </div>
 
@@ -7795,6 +7822,11 @@ function ImageLightbox({
   const compareBefore = image.compareBefore?.url ? image.compareBefore : null;
   const qualityEnhanceTargets = useMemo(() => qualityEnhanceTargetOptionsForImage(image, imageModel), [image, imageModel]);
   const activeUpscaleSize = qualityEnhanceTargets.includes(upscaleSize) ? upscaleSize : qualityEnhanceTargets[0] || upscaleSize;
+  const deliveryIssues = image.qualityCheck?.issues || [];
+  const deliveryActions = image.qualityCheck?.actions || [];
+  const isDeliveryReady = image.qualityCheck?.deliverability === "ready" || image.qualityCheck?.status === "passed";
+  const primaryDeliverySuggestion = deliveryActions[0]
+    || (isDeliveryReady ? "可下载交付，也可以继续做 PNG 分层或局部精修。" : "建议先做画质增强并放大检查文字、Logo、二维码。");
   const showQualityComparison = Boolean(
     compareBefore
     && (image.nodeOperation === "hd_redraw" || image.nodeOperation === "upscale_4k" || image.nodeOperation === "mask_edit" || image.nodeOperation === "design_optimize" || image.mode?.includes("画质增强") || image.mode?.includes("局部") || image.mode?.includes("设计优化")),
@@ -7954,9 +7986,56 @@ function ImageLightbox({
 
               {sidebarTab === "actions" ? (
                 <>
+                  <section className={`apple-surface-section border p-3 ${isDeliveryReady ? "border-[#74e3c5]/18 bg-[#74e3c5]/[0.06]" : "border-[#ffd166]/18 bg-[#ffd166]/[0.07]"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="apple-section-title">下一步建议</div>
+                        <div className="apple-caption mt-1 line-clamp-2">
+                          {primaryDeliverySuggestion}
+                        </div>
+                      </div>
+                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${qualityDeliveryTone(image.qualityCheck?.deliverability)}`}>
+                        {image.qualityCheck?.deliverabilityLabel || qualityBadgeLabel(image)}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        className="apple-button-primary flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-semibold"
+                        onClick={() => setActiveEditTool("upscale")}
+                        type="button"
+                      >
+                        <Sparkles className="size-3.5" />
+                        画质增强
+                      </button>
+                      <button
+                        className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]"
+                        onClick={() => setActiveEditTool("mask")}
+                        type="button"
+                      >
+                        <Brush className="size-3.5" />
+                        局部修改
+                      </button>
+                      <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("下载 PNG", () => downloadImageFile(image, "png"))} type="button">
+                        <ArrowDownToLine className="size-3.5" />
+                        下载成品
+                      </button>
+                      <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => setSidebarTab("info")} type="button">
+                        <ShieldCheck className="size-3.5" />
+                        看质检
+                      </button>
+                    </div>
+                    {deliveryIssues.length ? (
+                      <div className="mt-2 rounded-[12px] border border-white/10 bg-black/15 px-2.5 py-2 text-[10px] leading-4 text-white/54">
+                        {deliveryIssues.slice(0, 2).map((issue) => (
+                          <div className="line-clamp-1" key={issue}>{issue}</div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </section>
+
                   <section className="apple-surface-section p-3">
                     <div className="apple-section-title">编辑当前方案</div>
-                    <div className="apple-caption mt-1">先选操作，再确认参数。</div>
+                    <div className="apple-caption mt-1">按交付问题选择增强、局部改、改尺寸或二次优化。</div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       {[
                         ["optimize", "二次优化"],
