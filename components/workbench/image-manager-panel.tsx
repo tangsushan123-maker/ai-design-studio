@@ -135,6 +135,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   const [downloadingKey, setDownloadingKey] = useState("");
   const [favoritingKey, setFavoritingKey] = useState("");
   const [rowActionKey, setRowActionKey] = useState("");
+  const [confirmActionKey, setConfirmActionKey] = useState("");
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const normalizedQuery = query.trim();
@@ -228,6 +229,17 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
     }
   }
 
+  async function runConfirmedBatchAction(label: string, action: () => void | Promise<unknown>) {
+    const key = `${label}:${selectedKeysKey(selectedKeys)}`;
+    if (confirmActionKey !== key) {
+      setConfirmActionKey(key);
+      setActionMessage({ tone: "success", text: `再点一次确认${label}。` });
+      return;
+    }
+    setConfirmActionKey("");
+    await runBatchAction(label, action);
+  }
+
   async function runRowAction(label: string, image: TImage, action: () => void | Promise<unknown>) {
     const key = `${label}:${imageManagerKey(image)}`;
     if (rowActionKey) return;
@@ -241,6 +253,17 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
     } finally {
       setRowActionKey("");
     }
+  }
+
+  async function runConfirmedRowAction(label: string, image: TImage, action: () => void | Promise<unknown>) {
+    const key = `${label}:${imageManagerKey(image)}`;
+    if (confirmActionKey !== key) {
+      setConfirmActionKey(key);
+      setActionMessage({ tone: "success", text: `再点一次确认${label}。` });
+      return;
+    }
+    setConfirmActionKey("");
+    await runRowAction(label, image, action);
   }
 
   async function toggleFavorite(image: TImage) {
@@ -365,20 +388,20 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
             <button
               className="apple-button h-8 px-2.5 text-[10px] text-[#ffb4a8] disabled:opacity-40"
               disabled={!selectedTrashCount || Boolean(batchActionLabel)}
-              onClick={() => void runBatchAction("批量彻删", () => onBatchPermanentDelete(selectedImages))}
+              onClick={() => void runConfirmedBatchAction("批量彻删", () => onBatchPermanentDelete(selectedImages))}
               type="button"
             >
-              {batchActionLabel === "批量彻删" ? "删除中..." : "批量彻删"}
+              {batchActionLabel === "批量彻删" ? "删除中..." : confirmActionKey === `批量彻删:${selectedKeysKey(selectedKeys)}` ? "确认彻删" : "批量彻删"}
             </button>
           </>
         ) : (
           <button
             className="apple-button h-8 px-2.5 text-[10px] text-[#ffb4a8] disabled:opacity-40"
             disabled={!selectedCleanableCount || Boolean(batchActionLabel)}
-            onClick={() => void runBatchAction("批量移到回收站", () => onBatchDelete(selectedImages))}
+            onClick={() => void runConfirmedBatchAction("批量移到回收站", () => onBatchDelete(selectedImages))}
             type="button"
           >
-            {batchActionLabel === "批量移到回收站" ? "移动中..." : "批量移到回收站"}
+            {batchActionLabel === "批量移到回收站" ? "移动中..." : confirmActionKey === `批量移到回收站:${selectedKeysKey(selectedKeys)}` ? "确认移入回收站" : "批量移到回收站"}
           </button>
         )}
       </div>
@@ -498,12 +521,16 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
               <button
                 className="apple-button flex h-8 items-center justify-center gap-1 text-[10px] text-[#ffb4a8] disabled:cursor-not-allowed disabled:text-white/28"
                 disabled={Boolean(rowActionKey) || (!protection.canDelete && !protection.isTrashed)}
-                onClick={() => void runRowAction(protection.isTrashed ? "彻底删除图片" : "删除图片", image, () => protection.isTrashed ? onPermanentDelete(image) : onDelete(image))}
+                onClick={() => void runConfirmedRowAction(protection.isTrashed ? "彻底删除图片" : "删除图片", image, () => protection.isTrashed ? onPermanentDelete(image) : onDelete(image))}
                 title={protection.isTrashed ? "从回收站彻底删除" : protection.canDelete ? "移到回收站" : `受保护：${protection.reasons.join("、")}`}
                 type="button"
               >
                 {rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}` ? <RefreshCcw className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
-                {rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}` ? "处理中" : protection.isTrashed ? "彻删" : "删除"}
+                {rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}`
+                  ? "处理中"
+                  : confirmActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}`
+                    ? "确认"
+                    : protection.isTrashed ? "彻删" : "删除"}
               </button>
             </div>
           </article>
@@ -558,6 +585,10 @@ function ImageManagerStat({ label, value, tone = "normal" }: { label: string; va
 
 function imageManagerKey(image: Pick<ImageManagerImage, "fileName" | "id" | "url">) {
   return image.fileName || image.id || image.url;
+}
+
+function selectedKeysKey(keys: Set<string>) {
+  return Array.from(keys).sort().join("|");
 }
 
 function imageManagerRowSelectable(protection: ImageDeletionProtection) {

@@ -1169,6 +1169,11 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("\"移动中...\""), true);
     assert.equal(workbenchUiSource.includes("rowActionKey"), true);
     assert.equal(workbenchUiSource.includes("runRowAction"), true);
+    assert.equal(workbenchUiSource.includes("confirmActionKey"), true);
+    assert.equal(workbenchUiSource.includes("runConfirmedBatchAction"), true);
+    assert.equal(workbenchUiSource.includes("runConfirmedRowAction"), true);
+    assert.equal(workbenchUiSource.includes("确认彻删"), true);
+    assert.equal(workbenchUiSource.includes("确认移入回收站"), true);
     assert.equal(workbenchUiSource.includes("\"恢复中\""), true);
     assert.equal(workbenchUiSource.includes("\"处理中\""), true);
     assert.equal(workbenchSource.includes("onDeleteHistory={deleteHistoryImage}"), true);
@@ -1200,6 +1205,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(projectLibraryPanelSource.includes("刷新中"), true);
     assert.equal(projectLibraryPanelSource.includes("打开中..."), true);
     assert.equal(projectLibraryPanelSource.includes("window.confirm"), false);
+    assert.equal(workbenchSource.includes("window.confirm"), false);
+    assert.equal(workbenchSource.includes("skipConfirm"), false);
     assert.equal(workbenchSource.includes("这张图已受保护"), true);
     assert.equal(workbenchUiSource.includes("可清理"), true);
     assert.equal(generatedImagesRouteSource.includes("requestIds"), true);

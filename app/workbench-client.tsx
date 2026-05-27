@@ -4817,7 +4817,7 @@ function NodeWorkflowWorkbench({
 
   async function deleteHistoryImage(
     image: ImageAsset,
-    options: { permanent?: boolean; quiet?: boolean; skipConfirm?: boolean; skipTrashRefresh?: boolean } = {},
+    options: { permanent?: boolean; quiet?: boolean; skipTrashRefresh?: boolean } = {},
   ) {
     const protection = imageDeletionProtection(image, nodes, projectAssets);
     if (!options.permanent && protection.protected) {
@@ -4827,10 +4827,6 @@ function NodeWorkflowWorkbench({
     const fileName = generatedFileNameForImage(image);
     if (!fileName) return false;
     const permanent = Boolean(options.permanent || image.trashed || fileName.startsWith("_trash/"));
-    const confirmText = permanent
-      ? "确定彻底删除这张图片？彻底删除后无法从回收站恢复。"
-      : "确定删除这张未受保护的图片？图片会先移到回收站，可以在图片管理里恢复。";
-    if (!options.skipConfirm && typeof window !== "undefined" && !window.confirm(confirmText)) return false;
     const response = await fetch("/api/generated-images", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -4890,13 +4886,9 @@ function NodeWorkflowWorkbench({
       setStatus(permanent ? "没有可彻底删除的回收站图片。" : "没有可批量清理的未保护图片。");
       return;
     }
-    const confirmText = permanent
-      ? `确定彻底删除选中的 ${candidates.length} 张图片？彻底删除后无法恢复。`
-      : `确定将选中的 ${candidates.length} 张图片移到回收站？收藏、项目素材和节点引用不会被批量清理。`;
-    if (typeof window !== "undefined" && !window.confirm(confirmText)) return;
     let success = 0;
     for (const image of candidates) {
-      if (await deleteHistoryImage(image, { permanent, quiet: true, skipConfirm: true, skipTrashRefresh: true })) success += 1;
+      if (await deleteHistoryImage(image, { permanent, quiet: true, skipTrashRefresh: true })) success += 1;
     }
     if (!permanent) void loadImageManagerTrash(true);
     setStatus(permanent ? `已彻底删除 ${success} 张图片。` : `已将 ${success} 张图片移到回收站。`);
