@@ -188,11 +188,16 @@ export async function POST(request: Request) {
     await recordTaskRunFinished(taskTrace, { outputs: [payload], model: imageModel, message: "画质增强完成，服务端已保存高清结果。" });
     return NextResponse.json({ ...payload, ...taskRunResponseMeta(taskTrace, startedAt, [payload]), image: payload, images: [payload] });
   } catch (error) {
+    if (error instanceof InvalidRedrawUpscalePayloadError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     const apiError = toApiError(error, "画质增强失败。");
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
   }
 }
+
+class InvalidRedrawUpscalePayloadError extends Error {}
 
 async function parseMultipartInput(request: Request): Promise<RedrawInput> {
   const formData = await request.formData();
@@ -241,28 +246,7 @@ function mimeTypeFromFileName(fileName: string) {
 }
 
 async function parseJsonInput(request: Request): Promise<RedrawInput> {
-  const body = (await request.json()) as {
-    imageUrl?: string;
-    aspectRatio: AspectRatioValue;
-    customWidth?: number;
-    customHeight?: number;
-    quality?: QualityValue;
-    format?: "png" | "jpg" | "webp";
-    keepOriginalRatio?: boolean;
-    exactSize?: boolean;
-    prompt?: string;
-    imageModel?: string;
-    model?: string;
-    enhancementMode?: string;
-    sourceCompareUrl?: string;
-    protectionContext?: ProtectionContext;
-    requestId?: string;
-    taskId?: string;
-    projectId?: string;
-    nodeId?: string;
-    nodeName?: string;
-    nodeKind?: string;
-  };
+  const body = await parseRedrawUpscaleJsonPayload(request);
 
   if (!body.imageUrl) {
     throw new Error("请提供要 AI 重绘的图片。");
@@ -287,6 +271,61 @@ async function parseJsonInput(request: Request): Promise<RedrawInput> {
     protectionContext: body.protectionContext,
     taskTrace: taskTraceFromJson(body as Record<string, unknown>, "hd_redraw", "/api/redraw-upscale-image"),
   };
+}
+
+async function parseRedrawUpscaleJsonPayload(request: Request): Promise<{
+    imageUrl?: string;
+    aspectRatio: AspectRatioValue;
+    customWidth?: number;
+    customHeight?: number;
+    quality?: QualityValue;
+    format?: "png" | "jpg" | "webp";
+    keepOriginalRatio?: boolean;
+    exactSize?: boolean;
+    prompt?: string;
+    imageModel?: string;
+    model?: string;
+    enhancementMode?: string;
+    sourceCompareUrl?: string;
+    protectionContext?: ProtectionContext;
+    requestId?: string;
+    taskId?: string;
+    projectId?: string;
+    nodeId?: string;
+    nodeName?: string;
+    nodeKind?: string;
+  }> {
+  try {
+    const body = await request.json() as unknown;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new InvalidRedrawUpscalePayloadError("画质增强请求格式不正确。");
+    }
+    return body as {
+      imageUrl?: string;
+      aspectRatio: AspectRatioValue;
+      customWidth?: number;
+      customHeight?: number;
+      quality?: QualityValue;
+      format?: "png" | "jpg" | "webp";
+      keepOriginalRatio?: boolean;
+      exactSize?: boolean;
+      prompt?: string;
+      imageModel?: string;
+      model?: string;
+      enhancementMode?: string;
+      sourceCompareUrl?: string;
+      protectionContext?: ProtectionContext;
+      requestId?: string;
+      taskId?: string;
+      projectId?: string;
+      nodeId?: string;
+      nodeName?: string;
+      nodeKind?: string;
+    };
+  } catch (error) {
+    if (error instanceof InvalidRedrawUpscalePayloadError) throw error;
+    throw new InvalidRedrawUpscalePayloadError("画质增强 JSON 无法解析，请检查请求内容后重试。");
+  }
 }
 
 function isLocalGeneratedUrl(value: string | undefined) {

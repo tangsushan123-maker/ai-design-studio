@@ -588,6 +588,9 @@ describe("Quality enhance mode", () => {
     assert.equal(promptSource.includes("本地超分、锐化或补边"), true);
     assert.equal(routeSource.includes("enhancementMode"), true);
     assert.equal(routeSource.includes("sourceCompareUrl"), true);
+    assert.equal(routeSource.includes("parseRedrawUpscaleJsonPayload"), true);
+    assert.equal(routeSource.includes("InvalidRedrawUpscalePayloadError"), true);
+    assert.equal(routeSource.includes("画质增强 JSON 无法解析"), true);
     assert.equal(routeSource.includes("isLocalGeneratedUrl(sourceUrl)"), true);
     assert.equal(routeSource.includes('formData.get("sourceUrl")'), true);
     assert.equal(routeSource.includes("readPublicImageUrl(sourceUrl)"), true);
@@ -1032,6 +1035,9 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("index <= 5"), true);
     assert.equal(routeSource.includes('variantDirection: index === 0 ? "stable" : "creative"'), true);
     assert.equal(routeSource.includes("文生图/图片参考编辑"), true);
+    assert.equal(routeSource.includes("parseTextToImageJsonPayload"), true);
+    assert.equal(routeSource.includes("InvalidTextToImagePayloadError"), true);
+    assert.equal(routeSource.includes("文生图 JSON 无法解析"), true);
     assert.equal(routeSource.includes("image: referenceFiles.length > 1 ? (referenceFiles as never) : referenceFiles[0]"), true);
     assert.equal(routeSource.includes("input_fidelity: strongReferenceMode ? \"high\" : \"low\""), true);
     assert.equal(routeSource.includes("bodyWithReferenceAnalysis"), true);

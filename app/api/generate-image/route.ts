@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const contentType = request.headers.get("content-type") || "";
     const multipart = contentType.includes("multipart/form-data");
     const formData = multipart ? await request.formData() : null;
-    const rawBody = multipart ? designRequestFromFormData(formData as FormData) : ((await request.json()) as DesignRequest);
+    const rawBody = multipart ? designRequestFromFormData(formData as FormData) : await parseTextToImageJsonPayload(request);
     taskTrace = formData
       ? taskTraceFromFormData(formData, "text_to_image", "/api/generate-image")
       : taskTraceFromJson(rawBody as Record<string, unknown>, "text_to_image", "/api/generate-image");
@@ -442,9 +442,27 @@ export async function POST(request: Request) {
     await recordTaskRunFinished(taskTrace, { outputs: images, model: imageModel, message: `文生图完成，生成 ${images.length} 张。` });
     return NextResponse.json({ ...taskRunResponseMeta(taskTrace, startedAt, images), images, prompt: prompts.join("\n\n---\n\n"), designBrief, generationProfile: { ...generationProfile, targetCanvasFirst }, size, model: imageModel, imageModel });
   } catch (error) {
+    if (error instanceof InvalidTextToImagePayloadError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     const apiError = toApiError(error, "生成失败。");
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
+  }
+}
+
+class InvalidTextToImagePayloadError extends Error {}
+
+async function parseTextToImageJsonPayload(request: Request): Promise<DesignRequest> {
+  try {
+    const body = await request.json() as unknown;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new InvalidTextToImagePayloadError("文生图请求格式不正确。");
+    }
+    return body as DesignRequest;
+  } catch (error) {
+    if (error instanceof InvalidTextToImagePayloadError) throw error;
+    throw new InvalidTextToImagePayloadError("文生图 JSON 无法解析，请检查请求内容后重试。");
   }
 }
 
