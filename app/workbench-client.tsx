@@ -5522,9 +5522,9 @@ function NodeWorkflowWorkbench({
             tabHint={rightPanelTabHint}
             tabHintTick={rightPanelTabTick}
             onDeleteHistory={(image) => void deleteHistoryImage(image)}
-            onBatchDeleteHistory={(images) => void deleteHistoryImagesBatch(images)}
-            onBatchPermanentDeleteHistory={(images) => void deleteHistoryImagesBatch(images, { permanent: true })}
-            onBatchRestoreHistory={(images) => void restoreHistoryImagesBatch(images)}
+            onBatchDeleteHistory={deleteHistoryImagesBatch}
+            onBatchPermanentDeleteHistory={(images) => deleteHistoryImagesBatch(images, { permanent: true })}
+            onBatchRestoreHistory={restoreHistoryImagesBatch}
             onDragHistory={(event, image) => {
               event.dataTransfer.setData("application/x-ai-history-image", JSON.stringify(stripImageFile(image)));
               event.dataTransfer.effectAllowed = "copy";
@@ -6935,9 +6935,9 @@ function RightPanel({
   tabHint: RightPanelTab;
   tabHintTick: number;
   onDeleteHistory: (image: ImageAsset) => void;
-  onBatchDeleteHistory: (images: ImageAsset[]) => void;
-  onBatchPermanentDeleteHistory: (images: ImageAsset[]) => void;
-  onBatchRestoreHistory: (images: ImageAsset[]) => void;
+  onBatchDeleteHistory: (images: ImageAsset[]) => void | Promise<void>;
+  onBatchPermanentDeleteHistory: (images: ImageAsset[]) => void | Promise<void>;
+  onBatchRestoreHistory: (images: ImageAsset[]) => void | Promise<void>;
   onAddHistoryToCanvas: (image: ImageAsset) => void;
   onToggleFavorite: (image: ImageAsset) => void;
   onEnsureImageManager: () => void;

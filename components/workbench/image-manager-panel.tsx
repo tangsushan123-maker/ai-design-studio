@@ -118,9 +118,9 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   nodeOperationLabel: (value?: string) => string;
   shouldShowCheckerboard: (image: TImage | null | undefined) => boolean;
   onAddToCanvas: (image: TImage) => void;
-  onBatchDelete: (images: TImage[]) => void;
-  onBatchPermanentDelete: (images: TImage[]) => void;
-  onBatchRestore: (images: TImage[]) => void;
+  onBatchDelete: (images: TImage[]) => void | Promise<void>;
+  onBatchPermanentDelete: (images: TImage[]) => void | Promise<void>;
+  onBatchRestore: (images: TImage[]) => void | Promise<void>;
   onDelete: (image: TImage) => void;
   onLoadMore: () => void;
   onLoadMoreTrash: () => void;
@@ -131,7 +131,9 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
 }) {
   const [filter, setFilter] = useState<ImageManagerFilter>("全部");
   const [query, setQuery] = useState("");
+  const [batchActionLabel, setBatchActionLabel] = useState("");
   const [downloadingKey, setDownloadingKey] = useState("");
+  const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const normalizedQuery = query.trim();
   const managedImages = useMemo(() => {
@@ -198,10 +200,29 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
     const key = imageManagerKey(image);
     if (downloadingKey) return;
     setDownloadingKey(key);
+    setActionMessage(null);
     try {
       await downloadRemoteFile(image.url, imageManagerDownloadName(image));
+      setActionMessage({ tone: "success", text: `已开始下载 ${imageManagerDownloadName(image)}。` });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "下载失败。" });
     } finally {
       setDownloadingKey("");
+    }
+  }
+
+  async function runBatchAction(label: string, action: () => void | Promise<void>) {
+    if (batchActionLabel) return;
+    setBatchActionLabel(label);
+    setActionMessage(null);
+    try {
+      await action();
+      clearSelected();
+      setActionMessage({ tone: "success", text: `${label}已提交。` });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : `${label}失败。` });
+    } finally {
+      setBatchActionLabel("");
     }
   }
 
@@ -303,41 +324,42 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
           <>
             <button
               className="apple-pill-accent h-8 px-2.5 text-[10px] disabled:opacity-40"
-              disabled={!selectedTrashCount}
-              onClick={() => {
-                onBatchRestore(selectedImages);
-                clearSelected();
-              }}
+              disabled={!selectedTrashCount || Boolean(batchActionLabel)}
+              onClick={() => void runBatchAction("批量恢复", () => onBatchRestore(selectedImages))}
               type="button"
             >
-              批量恢复
+              {batchActionLabel === "批量恢复" ? "恢复中..." : "批量恢复"}
             </button>
             <button
               className="apple-button h-8 px-2.5 text-[10px] text-[#ffb4a8] disabled:opacity-40"
-              disabled={!selectedTrashCount}
-              onClick={() => {
-                onBatchPermanentDelete(selectedImages);
-                clearSelected();
-              }}
+              disabled={!selectedTrashCount || Boolean(batchActionLabel)}
+              onClick={() => void runBatchAction("批量彻删", () => onBatchPermanentDelete(selectedImages))}
               type="button"
             >
-              批量彻删
+              {batchActionLabel === "批量彻删" ? "删除中..." : "批量彻删"}
             </button>
           </>
         ) : (
           <button
             className="apple-button h-8 px-2.5 text-[10px] text-[#ffb4a8] disabled:opacity-40"
-            disabled={!selectedCleanableCount}
-            onClick={() => {
-              onBatchDelete(selectedImages);
-              clearSelected();
-            }}
+            disabled={!selectedCleanableCount || Boolean(batchActionLabel)}
+            onClick={() => void runBatchAction("批量移到回收站", () => onBatchDelete(selectedImages))}
             type="button"
           >
-            批量移到回收站
+            {batchActionLabel === "批量移到回收站" ? "移动中..." : "批量移到回收站"}
           </button>
         )}
       </div>
+
+      {actionMessage ? (
+        <div className={`rounded-[14px] border px-3 py-2 text-[10px] leading-4 ${
+          actionMessage.tone === "success"
+            ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
+            : "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
+        }`}>
+          {actionMessage.text}
+        </div>
+      ) : null}
 
       {!filteredRows.length ? (
         <div className="rounded-[20px] border border-dashed border-white/12 bg-white/[0.035] p-6 text-center text-[12px] text-white/44">

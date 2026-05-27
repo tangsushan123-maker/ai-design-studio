@@ -1155,6 +1155,11 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("downloadingKey"), true);
     assert.equal(workbenchUiSource.includes("disabled={Boolean(downloadingKey)}"), true);
     assert.equal(workbenchUiSource.includes("\"下载中\""), true);
+    assert.equal(workbenchUiSource.includes("batchActionLabel"), true);
+    assert.equal(workbenchUiSource.includes("runBatchAction"), true);
+    assert.equal(workbenchUiSource.includes("actionMessage"), true);
+    assert.equal(workbenchUiSource.includes("\"移动中...\""), true);
+    assert.equal(workbenchSource.includes("onBatchDeleteHistory={deleteHistoryImagesBatch}"), true);
     assert.equal(workbenchSource.includes("loadImageManagerHistory"), true);
     assert.equal(workbenchSource.includes("loadImageManagerTrash"), true);
     assert.equal(workbenchSource.includes('new URLSearchParams({ limit: "60", offset: String(offset) })'), true);
