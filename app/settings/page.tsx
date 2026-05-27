@@ -67,6 +67,18 @@ type Status = {
   message: string;
 };
 
+type HealthResponse = {
+  ok?: boolean;
+  hasKey?: boolean;
+  diagnostics?: {
+    nodeVersion?: string;
+    platform?: string;
+    runtime?: string;
+    serverTime?: string;
+  };
+  message?: string;
+};
+
 type DetectionIssue = {
   step: string;
   requestUrl: string;
@@ -143,6 +155,7 @@ export default function SettingsPage() {
   const [detectionResult, setDetectionResult] = useState<DetectionResult | null>(null);
   const [status, setStatus] = useState<Status>({ type: "idle", message: "待配置" });
   const [lastModelTest, setLastModelTest] = useState<ModelTestResponse | null>(null);
+  const [serverHealth, setServerHealth] = useState<HealthResponse | null>(null);
   const [savedAt, setSavedAt] = useState("");
   const isBusy = status.type === "loading";
   const passedModels = useMemo(() => modelsCache.filter((model) => model.testStatus === "passed"), [modelsCache]);
@@ -178,7 +191,21 @@ export default function SettingsPage() {
       .then((response) => readSettingsJson<SettingsResponse>(response))
       .then((data: SettingsResponse) => applySettings(data))
       .catch((error) => setStatus({ type: "error", message: settingsRequestFailure("读取配置失败", error) }));
+    void reloadServerHealth();
   }, []);
+
+  async function reloadServerHealth() {
+    try {
+      const response = await fetch("/api/health-openai");
+      const data = await readSettingsJson<HealthResponse>(response);
+      setServerHealth(data);
+    } catch {
+      setServerHealth({
+        ok: false,
+        message: "服务诊断读取失败",
+      });
+    }
+  }
 
   function markConfigDirty(message = "已修改，需重新检测") {
     setDetectionResult(null);
@@ -273,6 +300,7 @@ export default function SettingsPage() {
       if (overrides?.modelsCache) setModelsCache(overrides.modelsCache);
       setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
       setStatus({ type: "success", message: "已保存" });
+      void reloadServerHealth();
       return true;
     } catch (error) {
       setStatus({ type: "error", message: settingsRequestFailure("保存配置失败", error) });
@@ -449,6 +477,7 @@ export default function SettingsPage() {
       const data = await readSettingsJson<ModelTestResponse>(response);
       setLastModelTest(data);
       await reloadSettings();
+      void reloadServerHealth();
       setStatus({ type: data.ok ? "success" : "error", message: data.message || "测试完成" });
     } catch (error) {
       setStatus({ type: "error", message: settingsRequestFailure("测试失败", error) });
@@ -747,12 +776,26 @@ export default function SettingsPage() {
               <div className="space-y-3">
                 <StatusRow detail={effectiveProvider.label} label="供应商" state="success" />
                 <StatusRow detail={displayedApiBaseUrl || "未填写"} label="请求地址" state={displayedApiBaseUrl ? "success" : "idle"} />
-                <StatusRow detail={maskedApiKey || "未配置"} label="Key" state={maskedApiKey ? "success" : "idle"} />
+                <StatusRow detail={healthKeyLabel(serverHealth, maskedApiKey)} label="Key" state={serverHealth?.hasKey || maskedApiKey ? "success" : "idle"} />
                 <StatusRow detail={supportsModelsList ? "支持" : "未确认"} label="模型列表" state={supportsModelsList ? "success" : "idle"} />
                 <StatusRow detail={[supportsResponses ? "Responses" : "", supportsChatCompletions ? "Chat" : ""].filter(Boolean).join(" / ") || "未确认"} label="文本接口" state={supportsResponses || supportsChatCompletions ? "success" : "idle"} />
                 <StatusRow detail={supportsImageGeneration ? "支持" : "未通过 / 未开通"} label="图片生成" state={supportsImageGeneration ? "success" : "error"} />
                 <StatusRow detail={`${passedImageModels.length} 个`} label="首页图片模型" state={passedImageModels.length ? "success" : "idle"} />
               </div>
+            </Panel>
+
+            <Panel title="服务器">
+              <div className="space-y-3">
+                <StatusRow detail={serverHealth?.diagnostics?.nodeVersion ? `v${serverHealth.diagnostics.nodeVersion}` : "未读取"} label="Node" state={serverHealth?.diagnostics?.nodeVersion ? "success" : "idle"} />
+                <StatusRow detail={serverHealth?.diagnostics?.runtime || "未读取"} label="运行时" state={serverHealth?.diagnostics?.runtime ? "success" : "idle"} />
+                <StatusRow detail={serverHealth?.diagnostics?.platform || "未读取"} label="平台" state={serverHealth?.diagnostics?.platform ? "success" : "idle"} />
+                <StatusRow detail={formatServerTime(serverHealth?.diagnostics?.serverTime)} label="服务时间" state={serverHealth?.diagnostics?.serverTime ? "success" : "idle"} />
+              </div>
+              {serverHealth?.message ? <div className="apple-caption mt-3 rounded-[12px] border border-white/10 bg-white/[0.045] px-3 py-2 text-white/44">{serverHealth.message}</div> : null}
+              <button className="apple-button mt-3 inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-xs text-white/70" disabled={isBusy} onClick={reloadServerHealth} type="button">
+                <RefreshCw className="size-3.5" />
+                刷新服务器诊断
+              </button>
             </Panel>
 
             <Panel title="默认">
@@ -1066,6 +1109,19 @@ function ModelStatus({ model }: { model: ModelCatalogItem }) {
   if (model.testStatus === "passed") return <span className="apple-status-success rounded-full border px-2 py-0.5 text-[10px]">可用</span>;
   if (model.testStatus === "failed") return <span className="apple-status-danger rounded-full border px-2 py-0.5 text-[10px]">失败</span>;
   return <span className="apple-status-neutral rounded-full border px-2 py-0.5 text-[10px]">未测</span>;
+}
+
+function healthKeyLabel(health: HealthResponse | null, maskedApiKey: string) {
+  if (health?.hasKey) return maskedApiKey || "服务端已配置";
+  if (health && health.hasKey === false) return "服务端未检测到 Key";
+  return maskedApiKey || "未读取";
+}
+
+function formatServerTime(value?: string) {
+  if (!value) return "未读取";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  return date.toLocaleString("zh-CN");
 }
 
 function StatusRow({ detail, label, state }: { detail: string; label: string; state: "idle" | "success" | "error" }) {

@@ -498,6 +498,11 @@ describe("Settings model management", () => {
     assert.equal(settingsSource.includes("保存中"), true);
     assert.equal(settingsSource.includes("删除中"), true);
     assert.equal(settingsSource.includes("确认删"), true);
+    assert.equal(settingsSource.includes("serverHealth"), true);
+    assert.equal(settingsSource.includes("reloadServerHealth"), true);
+    assert.equal(settingsSource.includes("刷新服务器诊断"), true);
+    assert.equal(settingsSource.includes("healthKeyLabel"), true);
+    assert.equal(settingsSource.includes("formatServerTime"), true);
     assert.equal(settingsRouteSource.includes("settingsErrorMessage"), true);
     assert.equal(settingsRouteSource.includes("Array.isArray(body.modelsCache) ? body.modelsCache : currentLocal.modelsCache"), true);
     assert.equal(settingsSource.includes("modelsCache: overrides?.modelsCache ?? modelsCache"), true);
