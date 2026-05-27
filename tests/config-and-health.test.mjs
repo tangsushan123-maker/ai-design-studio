@@ -1425,6 +1425,8 @@ describe("Reference remake", () => {
     assert.equal(routeSource.includes("normalizeFlatAssetOutput"), true);
     assert.equal(routeSource.includes("Flat sign/label asset policy"), true);
     assert.equal(routeSource.includes("Flat artwork asset policy"), true);
+    assert.equal(routeSource.includes("buildReferenceRemakeProtectionContext"), true);
+    assert.equal(routeSource.includes("protectionContext: buildReferenceRemakeProtectionContext(effectiveAnalysis)"), true);
     assert.equal(routeSource.includes("wooden door"), true);
     assert.equal(routeSource.includes("fitImageOnCleanWhiteCanvas"), true);
     assert.equal(routeSource.includes('background: "#ffffff"'), true);
@@ -1460,6 +1462,8 @@ describe("Design optimization", () => {
     assert.equal(routeSource.includes("scenePromptFor"), true);
     assert.equal(routeSource.includes("buildSafetyRules"), true);
     assert.equal(routeSource.includes("buildComparisonPrompt"), true);
+    assert.equal(routeSource.includes("buildDesignOptimizationProtectionContext"), true);
+    assert.equal(routeSource.includes("protectionContext: buildDesignOptimizationProtectionContext(analysis)"), true);
     assert.equal(routeSource.includes("medical/health"), true);
     assert.equal(routeSource.includes("beauty/cosmetics"), true);
     assert.equal(routeSource.includes("beer/beverage"), true);

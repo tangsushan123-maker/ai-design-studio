@@ -4,6 +4,7 @@ import { stat } from "node:fs/promises";
 import sharp from "sharp";
 import { toApiError } from "@/lib/api-errors";
 import type { QualityValue } from "@/lib/design-options";
+import type { ProtectionContext } from "@/lib/design-production";
 import { imageRequestOptions, runQueuedImageModelRequestWithRetry } from "@/lib/image-request-queue";
 import {
   getOpenAIRequestedSize,
@@ -118,6 +119,7 @@ export async function POST(request: Request) {
       fileSizeBytes: savedStat.size,
       aspectRatio: outputRatioLabel,
       operation: "design_optimize",
+      protectionContext: buildDesignOptimizationProtectionContext(analysis),
     });
     const payload = {
       id: saved.fileName,
@@ -484,6 +486,30 @@ function buildSafetyRules() {
     "Do not change product structure, packaging shape, brand marks, QR codes, or product proportions.",
     "Do not add unrelated elements. Do not crop important content. Do not create fake before/after labels in the image.",
   ].join("\n");
+}
+
+function buildDesignOptimizationProtectionContext(analysis: DesignOptimizationAnalysis): ProtectionContext {
+  const protectedTexts = analysis.text_hierarchy
+    .map((text) => text.trim())
+    .filter((text) => text && !/不确定|看不清|无|none/i.test(text))
+    .slice(0, 12)
+    .map((text, index) => ({
+      id: `design_text_${index + 1}`,
+      text,
+      kind: "title" as const,
+      importance: index < 3 ? "high" as const : "normal" as const,
+      reason: "设计优化分析识别到的原稿文字层级，交付前需要核对。",
+    }));
+  const protectedAssets = analysis.logo_area && !/不确定|看不清|无|none/i.test(analysis.logo_area)
+    ? [{
+        id: "design_logo_area",
+        type: "logo" as const,
+        label: analysis.logo_area,
+        importance: "high" as const,
+        instruction: "保持原稿 Logo/品牌区域识别度，不要编造新标志。",
+      }]
+    : [];
+  return { protectedTexts, protectedAssets };
 }
 
 function buildComparisonPrompt(mode: DesignComparisonMode) {

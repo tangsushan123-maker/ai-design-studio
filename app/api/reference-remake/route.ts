@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { stat } from "node:fs/promises";
 import { toApiError } from "@/lib/api-errors";
 import type { QualityValue } from "@/lib/design-options";
+import type { ProtectionContext } from "@/lib/design-production";
 import { imageRequestOptions, runQueuedImageModelRequestWithRetry } from "@/lib/image-request-queue";
 import {
   getOpenAIConstrainedTargetPixels,
@@ -157,6 +158,7 @@ export async function POST(request: Request) {
       fileSizeBytes: savedStat.size,
       aspectRatio: outputRatioLabel,
       operation: "reference_remake",
+      protectionContext: buildReferenceRemakeProtectionContext(effectiveAnalysis),
     });
     const payload = {
       id: saved.fileName,
@@ -917,6 +919,31 @@ async function imageResultToBuffer(base64?: string | null, url?: string | null) 
 
 function referenceRemakeModeLabel(mode: ReferenceRemakeMode) {
   return mode === "precise" ? "精准重制" : "快速复刻";
+}
+
+function buildReferenceRemakeProtectionContext(analysis: ReferenceRemakeAnalysis): ProtectionContext {
+  const protectedTexts = analysis.text_layers
+    .map((layer, index) => ({ layer, index }))
+    .filter(({ layer }) => layer.content && layer.content !== "待确认")
+    .slice(0, 16)
+    .map(({ layer, index }) => ({
+      id: `reference_text_${index + 1}`,
+      text: layer.content,
+      kind: /电话|地址|价格|日期|编号|姓名|部门/.test(`${layer.name} ${layer.content}`) ? "other" as const : "title" as const,
+      importance: index < 4 ? "high" as const : "normal" as const,
+      reason: `${layer.name || "参考图文字"}需要按原图核对。`,
+    }));
+  const protectedAssets = analysis.image_layers
+    .filter((layer) => /logo|Logo|LOGO|二维码|QR|qr|标志|品牌/.test(layer))
+    .slice(0, 8)
+    .map((layer, index) => ({
+      id: `reference_asset_${index + 1}`,
+      type: /二维码|QR|qr/.test(layer) ? "qr" as const : "logo" as const,
+      label: layer,
+      importance: "high" as const,
+      instruction: "保持参考图资产识别关系；不清晰时交付前人工核对，不要编造新资产。",
+    }));
+  return { protectedTexts, protectedAssets };
 }
 
 function normalizeReferenceRemakeMode(value: unknown): ReferenceRemakeMode {
