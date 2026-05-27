@@ -128,7 +128,7 @@ type AssetLibraryPanelProps = {
   onSearchPublicInfo: () => void | Promise<unknown>;
   onTextChange: (value: string) => void;
   onTextProtectionChange: (value: boolean) => void;
-  onUpload: (files: FileList, type: UploadCategoryKey) => void;
+  onUpload: (files: FileList, type: UploadCategoryKey) => void | Promise<unknown>;
   onPreview: (image: AssetPanelImage) => void;
   initialTab?: (typeof TAB_ITEMS)[number]["id"];
   profile: ProjectProfile;
@@ -177,6 +177,7 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
   const [activeCategory, setActiveCategory] = useState<AssetCategoryKey>("logo");
   const [uploadCategory, setUploadCategory] = useState<UploadCategoryKey>("logo");
   const [activePanelAction, setActivePanelAction] = useState("");
+  const [uploadingCategory, setUploadingCategory] = useState<UploadCategoryKey | "">("");
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const uploadRef = useRef<HTMLInputElement | null>(null);
 
@@ -346,6 +347,20 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
     }
   }
 
+  async function uploadAssets(files: FileList, type: UploadCategoryKey) {
+    if (uploadingCategory || activePanelAction) return;
+    setUploadingCategory(type);
+    setActionMessage(null);
+    try {
+      await onUpload(files, type);
+      setActionMessage({ tone: "success", text: `${categoryLabel(type)}上传已提交。` });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : `${categoryLabel(type)}上传失败。` });
+    } finally {
+      setUploadingCategory("");
+    }
+  }
+
   return (
     <section className="apple-panel-strong apple-drawer fixed bottom-4 left-[52px] top-4 z-50 flex w-[min(340px,calc(100vw-68px))] flex-col overflow-hidden sm:left-[96px] sm:w-[348px]">
       <div className="border-b border-white/8 px-4 py-4">
@@ -392,7 +407,7 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
         multiple
         type="file"
         onChange={(event) => {
-          if (event.target.files?.length) onUpload(event.target.files, uploadCategory);
+          if (event.target.files?.length) void uploadAssets(event.target.files, uploadCategory);
           event.currentTarget.value = "";
         }}
       />
@@ -610,9 +625,9 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button className="apple-button-primary flex-1 px-3 py-2.5 text-[11px] font-semibold" onClick={() => uploadRef.current?.click()} type="button">
+                <button className="apple-button-primary flex-1 px-3 py-2.5 text-[11px] font-semibold disabled:opacity-45" disabled={Boolean(uploadingCategory || activePanelAction)} onClick={() => uploadRef.current?.click()} type="button">
                   <Upload className="mr-1 inline size-3.5" />
-                  上传{categoryLabel(uploadCategory)}
+                  {uploadingCategory === uploadCategory ? "上传中" : `上传${categoryLabel(uploadCategory)}`}
                 </button>
                 <button className="apple-button px-3 py-2.5 text-[11px] disabled:opacity-45" disabled={Boolean(activePanelAction)} onClick={() => void runPanelAction("刷新素材库", "libraries", onRefreshLibraries)} type="button">
                   <RefreshCcw className={`mr-1 inline size-3.5 ${activePanelAction === "刷新素材库:libraries" ? "animate-spin" : ""}`} />

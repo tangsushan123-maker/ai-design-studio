@@ -1226,8 +1226,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(projectLibraryPanelSource.includes("window.confirm"), false);
     assert.equal(assetLibraryPanelSource.includes("activePanelAction"), true);
     assert.equal(assetLibraryPanelSource.includes("runPanelAction"), true);
+    assert.equal(assetLibraryPanelSource.includes("uploadingCategory"), true);
     assert.equal(assetLibraryPanelSource.includes("补全中"), true);
     assert.equal(assetLibraryPanelSource.includes("刷新中"), true);
+    assert.equal(assetLibraryPanelSource.includes("上传中"), true);
     assert.equal(assetLibraryPanelSource.includes("应用中"), true);
     assert.equal(assetLibraryPanelSource.includes("忽略中"), true);
     assert.equal(workbenchSource.includes("window.confirm"), false);

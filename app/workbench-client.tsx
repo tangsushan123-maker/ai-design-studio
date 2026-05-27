@@ -5224,7 +5224,7 @@ function NodeWorkflowWorkbench({
           onSearchPublicInfo={() => void fetchProjectPublicInfo(projectProfile.organizationName || projectKnowledge.archive.organizationName)}
           onTextChange={setProjectAssetText}
           onTextProtectionChange={setTextProtectionMode}
-          onUpload={(files, type) => void uploadProjectAssets(files, type)}
+          onUpload={uploadProjectAssets}
           publicInfoSearchState={projectMemorySearchState}
           publicStyleLibraries={publicStyleLibraries}
           profile={projectProfile}
