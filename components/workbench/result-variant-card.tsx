@@ -41,6 +41,7 @@ export function ResultVariantCard({
   title: string;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const secondaryActions = [
     onResize ? { label: "改尺寸", onClick: onResize } : null,
     onDownload ? { label: "下载", onClick: onDownload } : null,
@@ -54,9 +55,13 @@ export function ResultVariantCard({
       const target = event.target;
       if (target instanceof Element && target.closest("[data-result-menu-root='true']")) return;
       setMenuOpen(false);
+      setConfirmDelete(false);
     }
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        setConfirmDelete(false);
+      }
     }
     document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("keydown", onKeyDown, true);
@@ -92,7 +97,10 @@ export function ResultVariantCard({
       </div>
       {description ? <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-white/46">{description}</p> : null}
       {secondaryActions.length ? (
-        <button className="apple-button mt-2 flex w-full items-center justify-center gap-1.5 px-3 py-2 text-[11px]" data-result-menu-root="true" onClick={() => setMenuOpen((value) => !value)} title="更多操作" type="button">
+        <button className="apple-button mt-2 flex w-full items-center justify-center gap-1.5 px-3 py-2 text-[11px]" data-result-menu-root="true" onClick={() => {
+          setMenuOpen((value) => !value);
+          setConfirmDelete(false);
+        }} title="更多操作" type="button">
           <MoreHorizontal className="size-3.5" />
           更多
         </button>
@@ -106,12 +114,17 @@ export function ResultVariantCard({
               }`}
               key={action.label}
               onClick={() => {
+                if (action.danger && !confirmDelete) {
+                  setConfirmDelete(true);
+                  return;
+                }
                 setMenuOpen(false);
+                setConfirmDelete(false);
                 action.onClick();
               }}
               type="button"
             >
-              {action.label}
+              {action.danger && confirmDelete ? "确认删除" : action.label}
             </button>
           ))}
         </div>

@@ -292,6 +292,8 @@ describe("Workbench result cards", () => {
     assert.equal(resultCardSource.includes("{badgeLabel}"), true);
     assert.equal(resultCardSource.includes("{meta}"), true);
     assert.equal(resultCardSource.includes("{description}"), true);
+    assert.equal(resultCardSource.includes("confirmDelete"), true);
+    assert.equal(resultCardSource.includes("确认删除"), true);
   });
 });
 
