@@ -975,6 +975,7 @@ function NodeWorkflowWorkbench({
   const saveQueuedRef = useRef<{ manual: boolean } | null>(null);
   const projectListLoadingRef = useRef(false);
   const materialLibrariesLoadingRef = useRef(false);
+  const imageImportInFlightRef = useRef(false);
   const pageLifecycleSaveRef = useRef<{ fingerprint: string; at: number }>({ fingerprint: "", at: 0 });
   const edgeDeleteTimerRef = useRef<number | null>(null);
   const taskProgressTimersRef = useRef<Record<string, number>>({});
@@ -1880,7 +1881,7 @@ function NodeWorkflowWorkbench({
 
   async function attachFileToImageNode(nodeId: string, file: File) {
     const image = await createProjectImageAsset(file);
-    if (!image) return;
+    if (!image) return null;
 
     setNodes((current) =>
       current.map((node) =>
@@ -1900,6 +1901,7 @@ function NodeWorkflowWorkbench({
       ),
     );
     setStatus(`已载入图片：${image.outputSize?.width || image.width || 1}×${image.outputSize?.height || image.height || 1}`);
+    return image;
   }
 
   async function createProjectImageAsset(file: File, source: "upload" | "asset" = "upload", assetKind?: ProjectAssetUploadKind) {
@@ -2043,11 +2045,25 @@ function NodeWorkflowWorkbench({
   }
 
   async function createImageNodeFromFile(file: File, position: XYPosition, source: "upload" | "paste") {
+    if (imageImportInFlightRef.current) {
+      setStatus("正在导入上一张图片，请稍候。");
+      return null;
+    }
+    imageImportInFlightRef.current = true;
     const node = addNode("image_input", position, undefined, false);
-    await attachFileToImageNode(node.id, file);
-    setSelectedNodeId(node.id);
-    setStatus(source === "paste" ? "已从剪贴板创建图片节点。" : "已从拖拽创建图片节点。");
-    return node;
+    try {
+      const image = await attachFileToImageNode(node.id, file);
+      if (!image) {
+        setNodes((current) => current.filter((item) => item.id !== node.id));
+        setSelectedNodeId((current) => (current === node.id ? null : current));
+        return null;
+      }
+      setSelectedNodeId(node.id);
+      setStatus(source === "paste" ? "已从剪贴板创建图片节点。" : "已从拖拽创建图片节点。");
+      return node;
+    } finally {
+      imageImportInFlightRef.current = false;
+    }
   }
 
   async function addComposerImage(file: File) {

@@ -1256,6 +1256,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("materialLibrariesLoadingRef"), true);
     assert.equal(workbenchSource.includes("素材库刷新失败。"), true);
     assert.equal(workbenchSource.includes("refreshMaterialLibraries({ quiet: true })"), true);
+    assert.equal(workbenchSource.includes("imageImportInFlightRef"), true);
+    assert.equal(workbenchSource.includes("正在导入上一张图片，请稍候。"), true);
+    assert.equal(workbenchSource.includes("current.filter((item) => item.id !== node.id)"), true);
     assert.equal(workbenchSource.includes("onRefreshProjects"), true);
     assert.equal(workbenchSource.includes("项目列表刷新失败。"), true);
     assert.equal(workbenchSource.includes("ProjectHomeScreen"), true);
