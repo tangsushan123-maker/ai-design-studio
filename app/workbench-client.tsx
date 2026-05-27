@@ -2322,7 +2322,9 @@ function NodeWorkflowWorkbench({
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "delete", requestIds, projectId }),
-        }).catch(() => {});
+        }).catch(() => {
+          setStatus("任务已在本地隐藏，但服务端任务记录同步删除失败；刷新任务中心后可重试清理。");
+        });
       }
     }
   }
@@ -3137,7 +3139,9 @@ function NodeWorkflowWorkbench({
         nodeName: task.nodeName,
         model: task.model,
       }),
-    }).catch(() => {});
+    }).catch(() => {
+      setStatus("任务已在本地标记停止，但服务端停止同步失败；如任务仍在运行，请稍后重试停止。");
+    });
   }
 
   async function appendBrandReferenceAssets(formData: FormData, options: { requireExplicitProjectContext?: boolean; visibleRequestText?: string } = {}) {
@@ -4236,7 +4240,9 @@ function NodeWorkflowWorkbench({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "clear_finished", projectId }),
-    }).catch(() => {});
+    }).catch(() => {
+      setStatus("已结束任务已在本地清理，但服务端任务记录同步清理失败；稍后可再次清理。");
+    });
     finished.forEach((taskId) => {
       cancelledTaskIdsRef.current.delete(taskId);
       stopTaskProgress(taskId);

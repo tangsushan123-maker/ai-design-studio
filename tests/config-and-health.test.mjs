@@ -1151,6 +1151,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("imageSourceDismissedForProject"), true);
     assert.equal(workbenchSource.includes('body: JSON.stringify({ action: "delete", requestIds, projectId })'), true);
     assert.equal(workbenchSource.includes('body: JSON.stringify({ action: "clear_finished", projectId })'), true);
+    assert.equal(workbenchSource.includes("服务端任务记录同步删除失败"), true);
+    assert.equal(workbenchSource.includes("服务端停止同步失败"), true);
+    assert.equal(workbenchSource.includes("服务端任务记录同步清理失败"), true);
     assert.equal(workbenchSource.includes("new URLSearchParams({ requestIds: backendTaskSyncKey, projectId })"), true);
     assert.equal(workbenchSource.includes("serverTaskRunOutputs"), true);
     assert.equal(workbenchSource.includes("activeProjectIdRef.current === taskProjectId"), true);
