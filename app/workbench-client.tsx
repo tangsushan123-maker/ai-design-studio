@@ -4915,8 +4915,11 @@ function NodeWorkflowWorkbench({
     for (const image of candidates) {
       if (await deleteHistoryImage(image, { permanent, quiet: true, skipTrashRefresh: true })) success += 1;
     }
+    const failed = candidates.length - success;
+    const skipped = uniqueImages.length - candidates.length;
     if (!permanent) void loadImageManagerTrash(true);
-    setStatus(permanent ? `已彻底删除 ${success} 张图片。` : `已将 ${success} 张图片移到回收站。`);
+    const summary = batchImageActionSummary({ success, failed, skipped });
+    setStatus(permanent ? `已彻底删除 ${summary}。` : `已将 ${summary} 移到回收站。`);
   }
 
   async function restoreHistoryImage(image: ImageAsset, options: { quiet?: boolean; skipReload?: boolean } = {}) {
@@ -4938,7 +4941,8 @@ function NodeWorkflowWorkbench({
   }
 
   async function restoreHistoryImagesBatch(images: ImageAsset[]) {
-    const candidates = uniqueImagesByKey(images).filter((image) => imageDeletionProtection(image, nodes, projectAssets).isTrashed);
+    const uniqueImages = uniqueImagesByKey(images);
+    const candidates = uniqueImages.filter((image) => imageDeletionProtection(image, nodes, projectAssets).isTrashed);
     if (!candidates.length) {
       setStatus("没有可恢复的回收站图片。");
       return;
@@ -4947,8 +4951,10 @@ function NodeWorkflowWorkbench({
     for (const image of candidates) {
       if (await restoreHistoryImage(image, { quiet: true, skipReload: true })) success += 1;
     }
+    const failed = candidates.length - success;
+    const skipped = uniqueImages.length - candidates.length;
     void loadImageManagerHistory(true);
-    setStatus(`已从回收站恢复 ${success} 张图片。`);
+    setStatus(`已从回收站恢复 ${batchImageActionSummary({ success, failed, skipped })}。`);
   }
 
   function appendNextImageIds(image: ImageAsset, nextIds: string[]) {
@@ -9870,6 +9876,14 @@ function uniqueImagesByKey(images: ImageAsset[]) {
     unique.push(image);
   }
   return unique;
+}
+
+function batchImageActionSummary({ failed, skipped, success }: { success: number; failed: number; skipped: number }) {
+  return [
+    `${success} 张图片`,
+    failed ? `${failed} 张失败` : "",
+    skipped ? `${skipped} 张跳过` : "",
+  ].filter(Boolean).join("，");
 }
 
 function taskStageLabel(kind: NodeKind, stage: NonNullable<TaskRecord["stage"]>) {

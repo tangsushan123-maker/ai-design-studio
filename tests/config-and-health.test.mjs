@@ -1230,6 +1230,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("onDeleteHistory={deleteHistoryImage}"), true);
     assert.equal(workbenchSource.includes("onRestoreHistory={restoreHistoryImage}"), true);
     assert.equal(workbenchSource.includes("onBatchDeleteHistory={deleteHistoryImagesBatch}"), true);
+    assert.equal(workbenchSource.includes("batchImageActionSummary"), true);
+    assert.equal(workbenchSource.includes("张失败"), true);
+    assert.equal(workbenchSource.includes("张跳过"), true);
     assert.equal(workbenchSource.includes("loadImageManagerHistory"), true);
     assert.equal(workbenchSource.includes("loadImageManagerTrash"), true);
     assert.equal(workbenchSource.includes('new URLSearchParams({ limit: "60", offset: String(offset) })'), true);
