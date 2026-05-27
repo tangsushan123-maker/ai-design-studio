@@ -339,7 +339,19 @@ describe("Workbench task search", () => {
       id: "task_001",
       model: "gpt-image-2",
       nodeName: "主视觉节点",
-      outputs: [{ fileName: "result/poster.png", mode: "文生图", url: "/generated/poster.png" }],
+      outputs: [{
+        fileName: "result/poster.png",
+        mode: "文生图",
+        qualityCheck: {
+          actions: ["重新生成：增加安全边距"],
+          deliverability: "not_ready",
+          fourKCheckItems: [{ label: "4K 尺寸", detail: "长边不足 3840", passed: false }],
+          issues: ["Logo 边缘偏软"],
+          status: "white_border",
+          textDetailLabel: "小字和二维码需放大复查",
+        },
+        url: "/generated/poster.png",
+      }],
       progressLabel: "模型仍在生成",
       projectName: "活动项目",
       requestId: "req_task_search_123456",
@@ -353,6 +365,11 @@ describe("Workbench task search", () => {
     assert.equal(taskMatchesSearch(task, "timeout"), true);
     assert.equal(taskMatchesSearch(task, "可重试"), true);
     assert.equal(taskMatchesSearch(task, "poster.png"), true);
+    assert.equal(taskMatchesSearch(task, "不可交付"), true);
+    assert.equal(taskMatchesSearch(task, "白边"), true);
+    assert.equal(taskMatchesSearch(task, "安全边距"), true);
+    assert.equal(taskMatchesSearch(task, "二维码需放大复查"), true);
+    assert.equal(taskMatchesSearch(task, "4K 尺寸"), true);
     assert.equal(taskSearchText(task).includes("req_task_search_123456"), true);
   });
 

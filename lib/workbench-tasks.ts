@@ -3,6 +3,18 @@ export type TaskSearchImage = {
   id?: string;
   materialType?: string;
   mode?: string;
+  qualityCheck?: {
+    actions?: string[];
+    clarityCheckLabel?: string;
+    deliverability?: string;
+    deliverabilityLabel?: string;
+    fourKCheckItems?: Array<{ detail?: string; label?: string; passed?: boolean }>;
+    importantContentLabel?: string;
+    issues?: string[];
+    label?: string;
+    status?: string;
+    textDetailLabel?: string;
+  };
   url?: string;
 };
 
@@ -60,7 +72,37 @@ export function taskSearchText(task: TaskSearchRecord) {
 
 function taskImageSearchFields(image?: TaskSearchImage) {
   if (!image) return [];
-  return [image.fileName, image.id, image.materialType, image.mode, image.url];
+  return [
+    image.fileName,
+    image.id,
+    image.materialType,
+    image.mode,
+    image.url,
+    image.qualityCheck?.label,
+    image.qualityCheck?.deliverabilityLabel,
+    image.qualityCheck?.status,
+    image.qualityCheck?.deliverability,
+    image.qualityCheck?.clarityCheckLabel,
+    image.qualityCheck?.textDetailLabel,
+    image.qualityCheck?.importantContentLabel,
+    ...(image.qualityCheck?.issues || []),
+    ...(image.qualityCheck?.actions || []),
+    ...(image.qualityCheck?.fourKCheckItems || []).flatMap((item) => [item.label, item.detail, item.passed ? "通过" : "复查"]),
+    ...taskImageQualityAliases(image),
+  ];
+}
+
+function taskImageQualityAliases(image: TaskSearchImage) {
+  const status = image.qualityCheck?.status;
+  const deliverability = image.qualityCheck?.deliverability;
+  return [
+    status === "passed" || deliverability === "ready" ? "可交付 合格" : "",
+    deliverability === "needs_review" ? "需复查 建议复查" : "",
+    deliverability === "not_ready" ? "不可交付 未达标" : "",
+    status === "white_border" ? "白边 有白边" : "",
+    status === "ratio_mismatch" ? "比例异常 比例不对" : "",
+    status === "size_insufficient" ? "尺寸不足 未达尺寸" : "",
+  ];
 }
 
 function taskStatusAliases(task: TaskSearchRecord) {
