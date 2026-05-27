@@ -1020,7 +1020,7 @@ describe("Workflow canvas performance", () => {
 
 describe("Project stability and task tracing", () => {
   it("keeps local snapshots and explicit task run traces", async () => {
-    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, assetLibraryPanelSource, imageUtilsSource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
+    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, projectCreationSource, assetLibraryPanelSource, imageUtilsSource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/task-run-ledger.ts", import.meta.url), "utf8"),
@@ -1032,6 +1032,7 @@ describe("Project stability and task tracing", () => {
       readFile(new URL("../components/workbench/image-manager-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/project-library-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/project-home-screen.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/project-creation-modal.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/asset-library-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/image-resource/route.ts", import.meta.url), "utf8"),
@@ -1039,7 +1040,7 @@ describe("Project stability and task tracing", () => {
       readFile(new URL("../app/api/redraw-upscale-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/workbench-image-source.ts", import.meta.url), "utf8"),
     ]);
-    const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}\n${projectLibraryPanelSource}\n${projectHomeSource}\n${assetLibraryPanelSource}\n${imageSourceSource}`;
+    const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}\n${projectLibraryPanelSource}\n${projectHomeSource}\n${projectCreationSource}\n${assetLibraryPanelSource}\n${imageSourceSource}`;
 
     assert.equal(workbenchSource.includes("type ProjectSnapshot"), true);
     assert.equal(workbenchSource.includes("const projectSnapshotLimit = 5"), true);
@@ -1166,8 +1167,13 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("activeActionLabel"), true);
     assert.equal(workbenchSource.includes("if (activeActionLabel) return"), true);
     assert.equal(workbenchSource.includes("disabled={actionBusy}"), true);
-    assert.equal(workbenchSource.includes("const [creating, setCreating]"), true);
-    assert.equal(workbenchSource.includes("创建中"), true);
+    assert.equal(workbenchSource.includes("ProjectCreationModal"), true);
+    assert.equal(projectCreationSource.includes("export function ProjectCreationModal"), true);
+    assert.equal(projectCreationSource.includes("const [creating, setCreating]"), true);
+    assert.equal(projectCreationSource.includes("onSubmit={submitProject}"), true);
+    assert.equal(projectCreationSource.includes('type="submit"'), true);
+    assert.equal(projectCreationSource.includes("disabled={creating}"), true);
+    assert.equal(projectCreationSource.includes("创建中"), true);
     assert.equal(workbenchSource.includes("activeInspectorAction"), true);
     assert.equal(workbenchSource.includes("runInspectorAction"), true);
     assert.equal(workbenchSource.includes("打开中"), true);
