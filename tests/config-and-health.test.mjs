@@ -5,6 +5,7 @@ import { toApiError } from "../lib/api-errors.ts";
 import { defaultOpenAIConfig, providerPresets } from "../lib/openai-defaults.ts";
 import { parseHealthMode, skippedImageCheck } from "../lib/openai-health.ts";
 import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualityBadgeLabel, qualityDeliveryTone, qualityTone } from "../lib/workbench-delivery.ts";
+import { deliveryFileNameForFormat } from "../lib/workbench-downloads.ts";
 import { formatDuration, formatFileSize, formatGeneratedAt } from "../lib/workbench-format.ts";
 import { historyMatchesFilter, historyMatchesQuery, historySearchText } from "../lib/workbench-history.ts";
 import { imageManagerMatchesSearch, imageManagerSearchText } from "../lib/workbench-image-manager.ts";
@@ -113,6 +114,13 @@ describe("Workbench delivery helpers", () => {
     assert.equal(summary.includes("复查：文字（小字略糊）"), true);
     assert.equal(summary.includes("复查：Logo 边缘偏软"), true);
     assert.equal(summary.includes("建议：先做画质增强"), true);
+  });
+
+  it("normalizes delivery download file names by requested format", () => {
+    assert.equal(deliveryFileNameForFormat("generated/poster.png", "jpg"), "poster.jpg");
+    assert.equal(deliveryFileNameForFormat("poster.final.webp?cache=1", "png"), "poster.final.png");
+    assert.equal(deliveryFileNameForFormat("image_without_extension", "webp"), "image_without_extension.webp");
+    assert.equal(deliveryFileNameForFormat(undefined, "png"), "design.png");
   });
 });
 

@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import { type AspectRatioValue, type QualityValue, type TextReferenceImage, type TextReferenceRole, type TextReferenceWeight } from "@/lib/design-options";
 import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualityBadgeLabel, qualityDeliveryTone, qualityTone } from "@/lib/workbench-delivery";
+import { deliveryFileNameForFormat } from "@/lib/workbench-downloads";
 import { formatDuration, formatFileSize, formatGeneratedAt } from "@/lib/workbench-format";
 import { historyMatchesFilter, historyMatchesQuery } from "@/lib/workbench-history";
 import { IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST } from "@/lib/prompt";
@@ -11530,7 +11531,7 @@ async function downloadImageFile(image: ImageAsset, format: "png" | "jpg" | "web
   const link = document.createElement("a");
   link.href = objectUrl;
   const baseName = fileNameOverride || image.fileName || "design.png";
-  link.download = format === "png" ? baseName : baseName.replace(/\.[^.]+$/, `.${format}`);
+  link.download = deliveryFileNameForFormat(baseName, format);
   document.body.appendChild(link);
   link.click();
   link.remove();
