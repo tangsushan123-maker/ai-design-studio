@@ -63,9 +63,13 @@ await check("Git is not tracking secrets, local data, generated images, or build
   if (forbidden.length) throw new Error(`tracked forbidden files: ${forbidden.slice(0, 8).join(", ")}`);
 });
 
-await check(".env.local exists and does not expose empty OPENAI_API_KEY", async () => {
+await check(".env.local exists and OPENAI_API_KEY is set", async () => {
   const envPath = join(root, ".env.local");
-  await access(envPath, constants.R_OK);
+  try {
+    await access(envPath, constants.R_OK);
+  } catch {
+    throw new Error("missing .env.local; run cp .env.example .env.local and fill OPENAI_API_KEY");
+  }
   const env = await readFile(envPath, "utf8");
   const keyLine = env.split(/\r?\n/).find((line) => line.trim().startsWith("OPENAI_API_KEY="));
   if (!keyLine) throw new Error("OPENAI_API_KEY is not set");

@@ -32,6 +32,8 @@ describe("OpenAI defaults", () => {
 
     assert.equal(packageSource.includes('"preflight": "node scripts/preflight.mjs"'), true);
     assert.equal(preflightSource.includes("Node.js is >=20.9.0"), true);
+    assert.equal(preflightSource.includes(".env.local exists and OPENAI_API_KEY is set"), true);
+    assert.equal(preflightSource.includes("missing .env.local; run cp .env.example .env.local and fill OPENAI_API_KEY"), true);
     assert.equal(preflightSource.includes("OPENAI_API_KEY is empty"), true);
     assert.equal(preflightSource.includes("public/generated is writable"), true);
     assert.equal(preflightSource.includes("Git is not tracking secrets, local data, generated images, or build info"), true);
