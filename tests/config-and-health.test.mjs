@@ -5,6 +5,7 @@ import { toApiError } from "../lib/api-errors.ts";
 import { defaultOpenAIConfig, providerPresets } from "../lib/openai-defaults.ts";
 import { parseHealthMode, skippedImageCheck } from "../lib/openai-health.ts";
 import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualityBadgeLabel, qualityDeliveryTone, qualityTone } from "../lib/workbench-delivery.ts";
+import { historyMatchesFilter, historyMatchesQuery, historySearchText } from "../lib/workbench-history.ts";
 
 describe("OpenAI defaults", () => {
   it("keeps the official provider aligned with shared defaults", () => {
@@ -94,6 +95,53 @@ describe("Workbench delivery helpers", () => {
     assert.equal(summary.includes("复查：文字（小字略糊）"), true);
     assert.equal(summary.includes("复查：Logo 边缘偏软"), true);
     assert.equal(summary.includes("建议：先做画质增强"), true);
+  });
+});
+
+describe("Workbench history search", () => {
+  it("filters project history by date and favorite state", () => {
+    const image = {
+      favorite: true,
+      generatedAt: "2026-05-27T08:00:00.000Z",
+      projectId: "project-a",
+    };
+    const now = new Date("2026-05-27T12:00:00.000Z");
+
+    assert.equal(historyMatchesFilter(image, "项目", "project-a", now), true);
+    assert.equal(historyMatchesFilter(image, "收藏", "project-a", now), true);
+    assert.equal(historyMatchesFilter(image, "今日", "project-a", now), true);
+    assert.equal(historyMatchesFilter(image, "项目", "project-b", now), false);
+  });
+
+  it("searches delivery state, source trace, model, prompt, and quality issues", () => {
+    const image = {
+      aspectRatio: "16:9",
+      fileName: "campaign/poster.png",
+      id: "img_001",
+      materialCopy: "暑期活动主视觉",
+      mode: "文生图",
+      model: "gpt-image-2",
+      outputSize: { width: 1536, height: 864 },
+      projectId: "project-a",
+      prompt: "高端商业海报",
+      quality: "4k",
+      qualityCheck: {
+        deliverability: "not_ready",
+        issues: ["Logo 边缘偏软"],
+        status: "white_border",
+      },
+      sourceNodeName: "主视觉节点",
+      sourceRequestId: "req_abcdef123456",
+      targetSize: "长边3840",
+    };
+
+    assert.equal(historyMatchesQuery(image, "gpt-image-2"), true);
+    assert.equal(historyMatchesQuery(image, "主视觉节点"), true);
+    assert.equal(historyMatchesQuery(image, "Logo 边缘"), true);
+    assert.equal(historyMatchesQuery(image, "不可交付"), true);
+    assert.equal(historyMatchesQuery(image, "白边"), true);
+    assert.equal(historyMatchesQuery(image, "1536 × 864px"), true);
+    assert.equal(historySearchText(image).includes("abcdef123456"), true);
   });
 });
 

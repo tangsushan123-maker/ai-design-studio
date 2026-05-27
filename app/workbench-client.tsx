@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import { type AspectRatioValue, type QualityValue, type TextReferenceImage, type TextReferenceRole, type TextReferenceWeight } from "@/lib/design-options";
 import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualityBadgeLabel, qualityDeliveryTone, qualityTone } from "@/lib/workbench-delivery";
+import { historyMatchesFilter, historyMatchesQuery } from "@/lib/workbench-history";
 import { IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST } from "@/lib/prompt";
 import { buildCreativeBriefFallback, type CreativeBrief, type CreativeBriefInput, type CreativeDirection } from "@/lib/creative-brief";
 import {
@@ -11087,37 +11088,6 @@ function imageNodePreviewMetrics(image: ImageAsset | null) {
     nodeWidth,
     estimatedNodeHeight: previewHeight + 52,
   };
-}
-
-function historyMatchesFilter(image: ImageAsset, filter: string, projectId: string) {
-  if (!imageBelongsToProject(image, projectId)) return false;
-  if (filter === "全部") return true;
-  const date = image.generatedAt ? new Date(image.generatedAt) : null;
-  if (filter === "今日") return Boolean(date && date.toDateString() === new Date().toDateString());
-  if (filter === "项目") return true;
-  if (filter === "收藏") return Boolean(image.favorite);
-  return true;
-}
-
-function historyMatchesQuery(image: ImageAsset, query: string) {
-  const keyword = query.trim().toLowerCase();
-  if (!keyword) return true;
-  return [
-    image.fileName,
-    image.id,
-    image.model,
-    image.mode,
-    image.nodeOperation,
-    image.aspectRatio,
-    image.prompt,
-    image.projectId,
-    imageSizeLabel(image),
-    image.qualityCheck?.label,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .includes(keyword);
 }
 
 function imageDeletionProtection(image: ImageAsset, nodes: FlowNode[], projectAssets: ImageAsset[]): ImageDeletionProtection {

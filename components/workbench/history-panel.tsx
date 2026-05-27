@@ -1,6 +1,6 @@
 "use client";
 
-import { Star } from "lucide-react";
+import { Search, Star, X } from "lucide-react";
 import { useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { DeliveryStatusBadge } from "@/components/workbench/delivery-status-badge";
 import { ImageFrame } from "@/components/workbench/image-frame";
@@ -79,12 +79,14 @@ export function HistoryPanel({
   qualityTone: (image: HistoryPanelImage) => string;
 }) {
   const [filter, setFilter] = useState<(typeof resultFilterTabs)[number]>("项目");
+  const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(resultPageSize);
+  const normalizedQuery = query.trim();
 
   const orderedImages = useMemo(() => [...images].sort(compareHistoryImages), [images]);
   const filteredImages = useMemo(
-    () => orderedImages.filter((image) => historyMatchesFilter(image, filter, projectId) && historyMatchesQuery(image, "")),
-    [filter, historyMatchesFilter, historyMatchesQuery, orderedImages, projectId],
+    () => orderedImages.filter((image) => historyMatchesFilter(image, filter, projectId) && historyMatchesQuery(image, normalizedQuery)),
+    [filter, historyMatchesFilter, historyMatchesQuery, normalizedQuery, orderedImages, projectId],
   );
   const visibleImages = useMemo(() => filteredImages.slice(0, visibleCount), [filteredImages, visibleCount]);
   const hasMoreLocal = filteredImages.length > visibleImages.length;
@@ -115,14 +117,46 @@ export function HistoryPanel({
             收起到 16 张
           </button>
         ) : null}
+        <label className="mt-2 flex h-8 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.05] px-2.5 text-[11px] text-white/58 focus-within:border-[#8fa7ff]/40 focus-within:bg-white/[0.075]">
+          <Search className="size-3.5 shrink-0 text-white/38" />
+          <input
+            className="min-w-0 flex-1 bg-transparent text-white/72 outline-none placeholder:text-white/30"
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setVisibleCount(resultPageSize);
+            }}
+            placeholder="搜索模型、来源、质检、Prompt"
+            value={query}
+          />
+          {query ? (
+            <button
+              aria-label="清空搜索"
+              className="flex size-5 shrink-0 items-center justify-center rounded-full text-white/42 transition hover:bg-white/10 hover:text-white/72"
+              onClick={() => {
+                setQuery("");
+                setVisibleCount(resultPageSize);
+              }}
+              type="button"
+            >
+              <X className="size-3" />
+            </button>
+          ) : null}
+        </label>
       </div>
 
       {!filteredImages.length ? (
         <div className="rounded-[20px] border border-dashed border-white/12 bg-white/[0.035] p-6 text-center text-[12px] text-white/44">
           <div>没有匹配的结果。</div>
-          {filter !== "全部" ? (
-            <button className="apple-button mt-3 px-3 py-1.5 text-[11px]" onClick={() => setFilter("全部")} type="button">
-              查看全部
+          {filter !== "全部" || normalizedQuery ? (
+            <button
+              className="apple-button mt-3 px-3 py-1.5 text-[11px]"
+              onClick={() => {
+                setFilter("全部");
+                setQuery("");
+              }}
+              type="button"
+            >
+              清空筛选
             </button>
           ) : null}
         </div>
