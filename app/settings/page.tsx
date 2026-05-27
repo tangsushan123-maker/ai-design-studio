@@ -967,11 +967,34 @@ function ModelGroup({
   icon: React.ReactNode;
   label: string;
   models: ModelCatalogItem[];
-  onDelete: (modelId: string) => void;
+  onDelete: (modelId: string) => void | Promise<unknown>;
   onEdit: (model: ModelCatalogItem) => void;
-  onTest: (model: ModelCatalogItem) => void;
-  onUse: (model: ModelCatalogItem) => void;
+  onTest: (model: ModelCatalogItem) => void | Promise<unknown>;
+  onUse: (model: ModelCatalogItem) => void | Promise<unknown>;
 }) {
+  const [activeModelAction, setActiveModelAction] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState("");
+
+  async function runModelAction(label: string, model: ModelCatalogItem, action: () => void | Promise<unknown>) {
+    const key = `${label}:${model.id}`;
+    if (activeModelAction) return;
+    setActiveModelAction(key);
+    try {
+      await action();
+    } finally {
+      setActiveModelAction("");
+    }
+  }
+
+  async function deleteModel(model: ModelCatalogItem) {
+    if (confirmDeleteId !== model.id) {
+      setConfirmDeleteId(model.id);
+      return;
+    }
+    setConfirmDeleteId("");
+    await runModelAction("删除", model, () => onDelete(model.id));
+  }
+
   return (
     <section className="apple-surface-section p-3">
       <div className="mb-3 flex items-center gap-2">
@@ -997,12 +1020,16 @@ function ModelGroup({
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                <button className="apple-button px-2.5 py-1.5 text-[11px]" onClick={() => onTest(model)} type="button">测试</button>
-                <button className="apple-button px-2.5 py-1.5 text-[11px]" onClick={() => onUse(model)} type="button">使用</button>
-                <button className="apple-button px-2.5 py-1.5 text-[11px]" onClick={() => onEdit(model)} type="button">编辑</button>
-                <button className="apple-button-danger flex items-center gap-1 px-2.5 py-1.5 text-[11px]" onClick={() => onDelete(model.id)} type="button">
+                <button className="apple-button px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeModelAction)} onClick={() => void runModelAction("测试", model, () => onTest(model))} type="button">
+                  {activeModelAction === `测试:${model.id}` ? "测试中" : "测试"}
+                </button>
+                <button className="apple-button px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeModelAction)} onClick={() => void runModelAction("使用", model, () => onUse(model))} type="button">
+                  {activeModelAction === `使用:${model.id}` ? "保存中" : "使用"}
+                </button>
+                <button className="apple-button px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeModelAction)} onClick={() => onEdit(model)} type="button">编辑</button>
+                <button className="apple-button-danger flex items-center gap-1 px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeModelAction)} onClick={() => void deleteModel(model)} type="button">
                   <Trash2 className="size-3" />
-                  删
+                  {activeModelAction === `删除:${model.id}` ? "删除中" : confirmDeleteId === model.id ? "确认删" : "删"}
                 </button>
               </div>
             </div>

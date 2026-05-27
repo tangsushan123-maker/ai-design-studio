@@ -373,6 +373,20 @@ describe("API error hygiene", () => {
   });
 });
 
+describe("Settings model management", () => {
+  it("guards model row actions with busy and delete confirmation states", async () => {
+    const settingsSource = await readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8");
+
+    assert.equal(settingsSource.includes("activeModelAction"), true);
+    assert.equal(settingsSource.includes("confirmDeleteId"), true);
+    assert.equal(settingsSource.includes("runModelAction"), true);
+    assert.equal(settingsSource.includes("测试中"), true);
+    assert.equal(settingsSource.includes("保存中"), true);
+    assert.equal(settingsSource.includes("删除中"), true);
+    assert.equal(settingsSource.includes("确认删"), true);
+  });
+});
+
 describe("Image size requests", () => {
   it("requests native gpt-image-2 standard sizes for common ratios", async () => {
     const imageUtilsSource = await readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8");
