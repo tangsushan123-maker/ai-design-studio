@@ -1,6 +1,6 @@
 # Known Issues
 
-Date: 2026-05-20
+Date: 2026-05-28
 
 ## Strategy Workbench
 
@@ -35,15 +35,15 @@ Date: 2026-05-20
 
 ## Project Archive And Material Libraries
 
-- Auto-search for public organization facts is still a placeholder; it records the structure and `待确认` state, but it does not yet fetch live public sources in this round.
+- Auto-search for public organization facts now fetches public search results and records `待确认` candidates before writing them into project memory. It is still best treated as an assistive lookup, not an authoritative data source.
 - Uploads currently focus on image assets. Document, video, and screenshot ingestion data structures are reserved, but the UI flow is still intentionally simple.
 - Cross-project reference is now intentionally compact, but copy-into-project is still a light helper action rather than a full audit-tracked asset import workflow.
 - The project archive/material library panel is now intentionally positioned as `项目记忆与素材调用`, not as a full enterprise DAM. More advanced bulk management is still intentionally out of scope for this version.
 
 ## Validation Notes
 
-- Lint may still report existing warnings about hook dependencies in the large workbench component and `<img>` performance suggestions.
-- There is no `npm test` script in the project.
+- `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build` are the current verification chain for code changes.
+- The large workbench component is still intentionally centralized; keep changes narrow and covered by focused source-level assertions when possible.
 - Live image generation can still be slow depending on the configured upstream gateway. A slow response should not be confused with the local white-border post-processing path failing.
 
 ## Safety Notes
