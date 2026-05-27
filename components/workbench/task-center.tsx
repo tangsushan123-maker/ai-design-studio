@@ -80,6 +80,7 @@ export function TaskCenter({
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(12);
   const [activeTaskAction, setActiveTaskAction] = useState("");
+  const [confirmActionKey, setConfirmActionKey] = useState("");
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const normalizedQuery = query.trim();
 
@@ -122,6 +123,7 @@ export function TaskCenter({
   async function runTaskAction(label: string, key: string, action: () => void | Promise<unknown>) {
     const actionKey = `${label}:${key}`;
     if (activeTaskAction) return;
+    setConfirmActionKey("");
     setActiveTaskAction(actionKey);
     setActionMessage(null);
     try {
@@ -132,6 +134,17 @@ export function TaskCenter({
     } finally {
       setActiveTaskAction("");
     }
+  }
+
+  async function runConfirmedTaskAction(label: string, key: string, action: () => void | Promise<unknown>) {
+    const actionKey = `${label}:${key}`;
+    if (activeTaskAction) return;
+    if (confirmActionKey !== actionKey) {
+      setConfirmActionKey(actionKey);
+      setActionMessage({ tone: "success", text: `再点一次确认${label}。` });
+      return;
+    }
+    await runTaskAction(label, key, action);
   }
 
   function renderTask(task: TaskCenterTask) {
@@ -239,9 +252,9 @@ export function TaskCenter({
           {canStop ? (
             <span className="apple-caption px-2 text-white/38">停止后可删除</span>
           ) : (
-            <button className="apple-button flex items-center gap-1 px-3 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeTaskAction)} onClick={() => void runTaskAction("删除记录", task.id, () => onDelete(task.id))} type="button">
+            <button className="apple-button flex items-center gap-1 px-3 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeTaskAction)} onClick={() => void runConfirmedTaskAction("删除记录", task.id, () => onDelete(task.id))} type="button">
               <Trash2 className="size-3" />
-              {activeTaskAction === deleteActionKey ? "删除中" : "删除记录"}
+              {activeTaskAction === deleteActionKey ? "删除中" : confirmActionKey === deleteActionKey ? "确认删除" : "删除记录"}
             </button>
           )}
         </div>
@@ -268,11 +281,11 @@ export function TaskCenter({
           <button
             className="apple-button flex shrink-0 items-center gap-1 px-3 py-1.5 text-[11px] disabled:opacity-45"
             disabled={Boolean(activeTaskAction)}
-            onClick={() => void runTaskAction(normalizedQuery ? "清理匹配已结束" : "清理已结束", "finished", () => onDeleteFinished(finishedTasks.map((task) => task.id)))}
+            onClick={() => void runConfirmedTaskAction(normalizedQuery ? "清理匹配已结束" : "清理已结束", "finished", () => onDeleteFinished(finishedTasks.map((task) => task.id)))}
             type="button"
           >
             <Trash2 className="size-3" />
-            {activeTaskAction.endsWith(":finished") ? "清理中" : normalizedQuery ? "清理匹配已结束" : "清理已结束"}
+            {activeTaskAction.endsWith(":finished") ? "清理中" : confirmActionKey.endsWith(":finished") ? "确认清理" : normalizedQuery ? "清理匹配已结束" : "清理已结束"}
           </button>
         ) : null}
       </div>
@@ -291,6 +304,7 @@ export function TaskCenter({
           className="min-w-0 flex-1 bg-transparent text-white/72 outline-none placeholder:text-white/30"
           onChange={(event) => {
             setQuery(event.target.value);
+            setConfirmActionKey("");
             setVisibleCount(12);
           }}
           placeholder="搜索节点、模型、请求、错误、状态"
@@ -302,6 +316,7 @@ export function TaskCenter({
             className="flex size-5 shrink-0 items-center justify-center rounded-full text-white/42 transition hover:bg-white/10 hover:text-white/72"
             onClick={() => {
               setQuery("");
+              setConfirmActionKey("");
               setVisibleCount(12);
             }}
             type="button"
@@ -318,6 +333,7 @@ export function TaskCenter({
               className="apple-button mt-3 px-3 py-1.5 text-[11px]"
               onClick={() => {
                 setQuery("");
+                setConfirmActionKey("");
                 setVisibleCount(12);
               }}
               type="button"
