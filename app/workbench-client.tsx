@@ -5761,7 +5761,7 @@ const ImageInputNode = memo(function ImageInputNode({ id, data, selected }: Node
         <Handle id="image" position={Position.Right} type="source" className="!size-2.5 !border-[#74e3c5] !bg-[#74e3c5]" />
         <div className="flex items-center gap-1.5">
           <StatusDot status={data.status || "idle"} />
-          <div className="min-w-0 truncate text-[10px] font-semibold text-white/78">{nodeTitle}</div>
+          <div className="min-w-0 truncate text-[11px] font-semibold text-white/78">{nodeTitle}</div>
         </div>
       </section>
     );
@@ -5777,8 +5777,8 @@ const ImageInputNode = memo(function ImageInputNode({ id, data, selected }: Node
             <FileImage className="size-3" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-[10.5px] font-semibold text-white/84">{nodeTitle}</div>
-            <div className="apple-caption mt-0.5 truncate text-[10px]">{nodeMeta}</div>
+            <div className="truncate text-[11px] font-semibold text-white/84">{nodeTitle}</div>
+            <div className="apple-caption mt-0.5 truncate text-[11px]">{nodeMeta}</div>
           </div>
         </div>
       </section>
@@ -5795,7 +5795,7 @@ const ImageInputNode = memo(function ImageInputNode({ id, data, selected }: Node
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate text-[11px] font-semibold text-white/88">{nodeTitle}</div>
-          <div className="apple-caption mt-0.5 truncate text-[10px]">{nodeMeta}</div>
+          <div className="apple-caption mt-0.5 truncate text-[11px]">{nodeMeta}</div>
         </div>
         {showUploadButton ? (
           <button
@@ -5865,7 +5865,7 @@ const ImageInputNode = memo(function ImageInputNode({ id, data, selected }: Node
         <label className="apple-node-well nodrag flex cursor-pointer flex-col items-center justify-center rounded-[14px] border-dashed p-4 text-center" style={{ height: metrics.previewHeight }}>
           <ImagePlus className="mb-1.5 size-7 text-white/48" />
           <span className="text-[10.5px] font-medium text-white/72">上传 / 拖拽 / 粘贴图片</span>
-          <span className="apple-caption mt-1 text-[10px]">PNG · JPG · WebP</span>
+          <span className="apple-caption mt-1 text-[11px]">PNG · JPG · WebP</span>
           <input
             className="hidden"
             accept="image/png,image/jpeg,image/webp"
@@ -5916,7 +5916,7 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
         ) : null}
         <div className="flex items-center gap-1.5">
           <StatusDot status={data.status || "idle"} />
-          <div className="min-w-0 truncate text-[10px] font-semibold text-white/80">{data.title}</div>
+          <div className="min-w-0 truncate text-[11px] font-semibold text-white/80">{data.title}</div>
         </div>
       </section>
     );
@@ -5943,7 +5943,7 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
               <h3 className="truncate text-[10.5px] font-semibold text-white/84">{data.title}</h3>
               <StatusDot status={data.status || "idle"} />
             </div>
-            <div className="apple-caption mt-0.5 truncate text-[10px]">
+            <div className="apple-caption mt-0.5 truncate text-[11px]">
               {outputs.length ? `${outputs.length} 个结果` : taskStatusLabel(data.status || "idle")}
             </div>
           </div>
@@ -5958,7 +5958,7 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
       style={{ width: operationNodeWidth(data, outputs) }}
     >
       {inputs.map((input, index) => (
-        <div key={input.id} className="absolute left-[-34px] flex items-center gap-1.5 text-[10px] text-white/40" style={{ top: 48 + index * 24 }}>
+        <div key={input.id} className="absolute left-[-36px] flex items-center gap-1.5 text-[11px] text-white/40" style={{ top: 48 + index * 24 }}>
           <span>{input.label}</span>
           <Handle id={input.id} position={Position.Left} type="target" className="!static !size-3 !translate-x-0 !translate-y-0 !border-white/40 !bg-[#0c0d11]" />
         </div>
@@ -5974,9 +5974,9 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
           <div className="flex items-center gap-1.5">
             <h3 className="truncate text-[11px] font-semibold text-white/88">{data.title}</h3>
             <StatusDot status={data.status || "idle"} />
-            <span className="apple-caption shrink-0 text-[10px]">{taskStatusLabel(data.status || "idle")}</span>
+            <span className="apple-caption shrink-0 text-[11px]">{taskStatusLabel(data.status || "idle")}</span>
           </div>
-          <p className="apple-caption mt-0.5 line-clamp-1 text-[10px] leading-4">{operationNodeSubtitle(data, catalog?.description, textReferences.length)}</p>
+          <p className="apple-caption mt-0.5 line-clamp-1 text-[11px] leading-5">{operationNodeSubtitle(data, catalog?.description, textReferences.length)}</p>
         </div>
         <button
           className="apple-button-danger nodrag flex size-6 shrink-0 items-center justify-center opacity-0 transition group-hover:opacity-100"
@@ -6003,7 +6003,7 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
               涂哪里，改哪里；未涂抹区域强制保持原图不变。
             </div>
             {maskBadge ? (
-              <div className={maskBadge.valid ? "apple-pill-accent rounded-xl px-2 py-1.5 text-[10px]" : "rounded-xl border border-[#ffd166]/18 bg-[#ffd166]/10 px-2 py-1.5 text-[10px] text-[#ffe1a3]"}>
+              <div className={maskBadge.valid ? "apple-pill-accent rounded-xl px-2 py-1.5 text-[11px]" : "rounded-xl border border-[#ffd166]/18 bg-[#ffd166]/10 px-2 py-1.5 text-[11px] text-[#ffe1a3]"}>
                 {maskBadge.label}
               </div>
             ) : null}
@@ -6112,8 +6112,8 @@ function CompactOutputSummary({ images }: { images: ImageAsset[] }) {
     const layerBytes = firstImage.pngLayerExport.layers.reduce((sum, layer) => sum + (layer.fileSizeBytes || 0), 0);
     return (
       <div className="flex min-w-0 items-baseline gap-1.5 px-0.5 py-0.5">
-        <div className="shrink-0 truncate text-[10px] font-semibold text-white/78">PNG三层</div>
-        <div className="apple-caption min-w-0 truncate text-[9.5px]">
+        <div className="shrink-0 truncate text-[11px] font-semibold text-white/78">PNG三层</div>
+        <div className="apple-caption min-w-0 truncate text-[11px]">
           {firstImage.pngLayerExport.layerCount} 层 · {formatFileSize(layerBytes)}
         </div>
       </div>
@@ -6121,10 +6121,10 @@ function CompactOutputSummary({ images }: { images: ImageAsset[] }) {
   }
   return (
     <div className="flex min-w-0 items-baseline gap-1.5 px-0.5 py-0.5">
-      <div className="shrink-0 truncate text-[10px] font-semibold text-white/78">
+      <div className="shrink-0 truncate text-[11px] font-semibold text-white/78">
         {images.length > 1 ? `${images.length} 个方案` : imageNodeTitle(firstImage, "方案一")}
       </div>
-      {firstImage ? <div className="apple-caption min-w-0 truncate text-[9.5px]">{compactImageMeta(firstImage)}</div> : null}
+      {firstImage ? <div className="apple-caption min-w-0 truncate text-[11px]">{compactImageMeta(firstImage)}</div> : null}
     </div>
   );
 }
@@ -6201,10 +6201,10 @@ function InlineChipRow({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="mr-1 text-[10px] text-white/38">{label}</span>
+      <span className="mr-1 text-[11px] text-white/38">{label}</span>
       {options.map((option) => (
         <button
-          className={`rounded-full px-2 py-1 text-[10px] transition ${
+          className={`rounded-full px-2 py-1 text-[11px] transition ${
             value === option ? "bg-white text-black" : "border border-white/10 bg-white/[0.045] text-white/52 hover:bg-white/[0.08]"
           }`}
           key={option}
