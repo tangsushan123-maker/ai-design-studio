@@ -169,6 +169,7 @@ export default function SettingsPage() {
     () => groupedModels.image.find((model) => model.id === imageModel) || groupedModels.image[0] || null,
     [groupedModels.image, imageModel],
   );
+  const nodeRuntime = useMemo(() => nodeRuntimeStatus(serverHealth?.diagnostics?.nodeVersion), [serverHealth?.diagnostics?.nodeVersion]);
   const normalizedProviderId = useMemo(() => inferProviderId(providerId, providerSiteUrl, apiBaseUrl), [apiBaseUrl, providerId, providerSiteUrl]);
   const effectiveProvider = useMemo(() => findProviderPreset(normalizedProviderId), [normalizedProviderId]);
   const suggestedImageModels = useMemo(() => {
@@ -786,7 +787,7 @@ export default function SettingsPage() {
 
             <Panel title="服务器">
               <div className="space-y-3">
-                <StatusRow detail={serverHealth?.diagnostics?.nodeVersion ? `v${serverHealth.diagnostics.nodeVersion}` : "未读取"} label="Node" state={serverHealth?.diagnostics?.nodeVersion ? "success" : "idle"} />
+                <StatusRow detail={nodeRuntime.detail} label="Node" state={nodeRuntime.state} />
                 <StatusRow detail={serverHealth?.diagnostics?.runtime || "未读取"} label="运行时" state={serverHealth?.diagnostics?.runtime ? "success" : "idle"} />
                 <StatusRow detail={serverHealth?.diagnostics?.platform || "未读取"} label="平台" state={serverHealth?.diagnostics?.platform ? "success" : "idle"} />
                 <StatusRow detail={formatServerTime(serverHealth?.diagnostics?.serverTime)} label="服务时间" state={serverHealth?.diagnostics?.serverTime ? "success" : "idle"} />
@@ -1122,6 +1123,16 @@ function formatServerTime(value?: string) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return value;
   return date.toLocaleString("zh-CN");
+}
+
+function nodeRuntimeStatus(version?: string): { detail: string; state: "idle" | "success" | "error" } {
+  if (!version) return { detail: "未读取", state: "idle" };
+  const [major = 0, minor = 0] = version.split(".").map(Number);
+  const supported = major > 20 || (major === 20 && minor >= 9);
+  return {
+    detail: supported ? `v${version} · 已满足 >=20.9` : `v${version} · 需升级到 >=20.9`,
+    state: supported ? "success" : "error",
+  };
 }
 
 function StatusRow({ detail, label, state }: { detail: string; label: string; state: "idle" | "success" | "error" }) {

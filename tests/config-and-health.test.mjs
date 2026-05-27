@@ -508,6 +508,9 @@ describe("Settings model management", () => {
     assert.equal(settingsSource.includes("serverHealth"), true);
     assert.equal(settingsSource.includes("reloadServerHealth"), true);
     assert.equal(settingsSource.includes("刷新服务器诊断"), true);
+    assert.equal(settingsSource.includes("nodeRuntimeStatus"), true);
+    assert.equal(settingsSource.includes("已满足 >=20.9"), true);
+    assert.equal(settingsSource.includes("需升级到 >=20.9"), true);
     assert.equal(settingsSource.includes("healthKeyLabel"), true);
     assert.equal(settingsSource.includes("formatServerTime"), true);
     assert.equal(settingsRouteSource.includes("settingsErrorMessage"), true);
