@@ -1224,6 +1224,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(projectRouteSource.includes("parseProjectPayload"), true);
     assert.equal(projectRouteSource.includes("InvalidProjectPayloadError"), true);
     assert.equal(projectRouteSource.includes("项目 JSON 无法解析，保存已拒绝"), true);
+    assert.equal(projectRouteSource.includes("parseProjectDeletePayload"), true);
+    assert.equal(projectRouteSource.includes("InvalidProjectDeletePayloadError"), true);
+    assert.equal(projectRouteSource.includes("项目删除 JSON 无法解析"), true);
     assert.equal(projectRouteSource.includes("{ status: 400 }"), true);
     assert.equal(workbenchSource.includes("图片管理批量清理"), true);
     assert.equal(workbenchSource.includes("saveProjectSnapshot(\"auto\")"), true);

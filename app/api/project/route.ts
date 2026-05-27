@@ -153,7 +153,7 @@ function parseProjectPayload(raw: string): Partial<StoredProject> & { setActive?
 
 export async function DELETE(request: Request) {
   try {
-    const input = (await request.json()) as { id?: string };
+    const input = await parseProjectDeletePayload(request);
     if (!input.id) return NextResponse.json({ error: "缺少项目 ID。" }, { status: 400 });
 
     const store = await readStore();
@@ -167,7 +167,25 @@ export async function DELETE(request: Request) {
     await writeStore(nextStore);
     return NextResponse.json({ ok: true, activeProjectId: nextStore.activeProjectId, projects: summarizeProjects(nextStore.projects) });
   } catch (error) {
+    if (error instanceof InvalidProjectDeletePayloadError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ error: projectErrorMessage("删除项目失败", error) }, { status: 500 });
+  }
+}
+
+class InvalidProjectDeletePayloadError extends Error {}
+
+async function parseProjectDeletePayload(request: Request): Promise<{ id?: string }> {
+  try {
+    const input = await request.json() as unknown;
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new InvalidProjectDeletePayloadError("项目删除请求格式不正确。");
+    }
+    return input as { id?: string };
+  } catch (error) {
+    if (error instanceof InvalidProjectDeletePayloadError) throw error;
+    throw new InvalidProjectDeletePayloadError("项目删除 JSON 无法解析，请刷新项目列表后重试。");
   }
 }
 
