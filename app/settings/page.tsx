@@ -149,6 +149,18 @@ export default function SettingsPage() {
   );
   const normalizedProviderId = useMemo(() => inferProviderId(providerId, providerSiteUrl, apiBaseUrl), [apiBaseUrl, providerId, providerSiteUrl]);
   const effectiveProvider = useMemo(() => findProviderPreset(normalizedProviderId), [normalizedProviderId]);
+  const suggestedImageModels = useMemo(() => {
+    const existing = new Set(groupedModels.image.map((model) => model.id));
+    const providerImages = (effectiveProvider.models as unknown as ModelCatalogItem[]).filter((model) => model.capabilities.includes("image"));
+    const fallbackImages: ModelCatalogItem[] = [
+      { id: "gpt-image-2", label: "gpt-image-2", capabilities: ["image"], description: "优先尝试，适合高清生图、改图和画质增强。" },
+      { id: "gpt-image-1", label: "gpt-image-1", capabilities: ["image"], description: "兼容性更稳，适合常规生图和改图。" },
+    ];
+    return [...providerImages, ...fallbackImages]
+      .filter((model, index, list) => list.findIndex((item) => item.id === model.id) === index)
+      .filter((model) => !existing.has(model.id))
+      .slice(0, 3);
+  }, [effectiveProvider.models, groupedModels.image]);
   const generatedBaseUrl = useMemo(() => inferApiUrl(providerSiteUrl || apiBaseUrl, effectiveProvider), [apiBaseUrl, effectiveProvider, providerSiteUrl]);
   const displayedApiBaseUrl = advancedUrl ? normalizeApiUrl(apiBaseUrl, effectiveProvider) : generatedBaseUrl;
 
@@ -439,6 +451,37 @@ export default function SettingsPage() {
     await testModel("image", primaryImageModel.id);
   }
 
+  async function addSuggestedImageModel(model: ModelCatalogItem) {
+    const saved = await saveSettings();
+    if (!saved) return;
+    setStatus({ type: "loading", message: `添加图片模型 ${model.id}...` });
+    try {
+      const response = await fetch("/api/models/manage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: model.id,
+          label: model.label || model.id,
+          capabilities: ["image"],
+        }),
+      });
+      const data = await response.json() as {
+        ok: boolean;
+        modelsCache?: ModelCatalogItem[];
+        modelsUpdatedAt?: string;
+        imageModel?: string;
+        error?: string;
+      };
+      if (!response.ok || !data.ok) throw new Error(data.error || "添加图片模型失败");
+      setModelsCache(data.modelsCache || modelsCache);
+      setModelsUpdatedAt(data.modelsUpdatedAt || modelsUpdatedAt);
+      setImageModel(data.imageModel || imageModel || model.id);
+      setStatus({ type: "success", message: `已添加 ${model.id}，请点击“测试图片模型”。` });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : "添加图片模型失败" });
+    }
+  }
+
   async function useAsDefault(model: ModelCatalogItem) {
     const next = {
       textModel: model.capabilities.includes("text") ? model.id : textModel,
@@ -676,6 +719,8 @@ export default function SettingsPage() {
               imageModel={primaryImageModel}
               passedImageCount={passedImageModels.length}
               supportsImageGeneration={supportsImageGeneration}
+              suggestedImageModels={suggestedImageModels}
+              onAddSuggestedImageModel={addSuggestedImageModel}
               onDetectAndSave={() => detectProvider({ save: true })}
               onTestImageModel={testPrimaryImageModel}
             />
@@ -749,18 +794,22 @@ function SetupChecklist({
   hasProvider,
   imageModel,
   isBusy,
+  onAddSuggestedImageModel,
   onDetectAndSave,
   onTestImageModel,
   passedImageCount,
+  suggestedImageModels,
   supportsImageGeneration,
 }: {
   hasKey: boolean;
   hasProvider: boolean;
   imageModel: ModelCatalogItem | null;
   isBusy: boolean;
+  onAddSuggestedImageModel: (model: ModelCatalogItem) => void;
   onDetectAndSave: () => void;
   onTestImageModel: () => void;
   passedImageCount: number;
+  suggestedImageModels: ModelCatalogItem[];
   supportsImageGeneration: boolean;
 }) {
   const imageReady = passedImageCount > 0;
@@ -772,6 +821,24 @@ function SetupChecklist({
         <ChecklistRow done={supportsImageGeneration || imageReady} label="检测并保存配置" detail={supportsImageGeneration ? "图片接口已通过检测" : "自动识别接口和推荐模型"} />
         <ChecklistRow done={imageReady} label="测试图片模型" detail={imageReady ? `${passedImageCount} 个图片模型可用于工作台` : imageModel ? `待测试：${imageModel.label || imageModel.id}` : "还没有图片模型"} />
       </div>
+      {!imageReady && suggestedImageModels.length ? (
+        <div className="mt-3 rounded-[14px] border border-[#ffd166]/18 bg-[#ffd166]/10 p-3">
+          <div className="text-xs font-semibold text-[#ffe1a3]">缺少图片模型时可先添加推荐项</div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {suggestedImageModels.map((model) => (
+              <button
+                className="apple-button px-2.5 py-1.5 text-[11px] text-white/72 disabled:opacity-50"
+                disabled={isBusy}
+                key={model.id}
+                onClick={() => onAddSuggestedImageModel(model)}
+                type="button"
+              >
+                添加 {model.label || model.id}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="mt-3 grid gap-2">
         <button
           className="apple-button-primary inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold disabled:opacity-50"
