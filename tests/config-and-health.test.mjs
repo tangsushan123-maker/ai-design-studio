@@ -383,6 +383,10 @@ describe("Settings model management", () => {
     assert.equal(settingsSource.includes("检测失败"), true);
     assert.equal(settingsSource.includes("测试失败"), true);
     assert.equal(settingsSource.includes("activeModelAction"), true);
+    assert.equal(settingsSource.includes("disabled={isBusy}"), true);
+    assert.equal(settingsSource.includes("disabled={isBusy || !advancedUrl}"), true);
+    assert.equal(settingsSource.includes("isBusy={isBusy}"), true);
+    assert.equal(settingsSource.includes("disabled={isBusy || Boolean(activeModelAction)}"), true);
     assert.equal(settingsSource.includes("confirmDeleteId"), true);
     assert.equal(settingsSource.includes("runModelAction"), true);
     assert.equal(settingsSource.includes("测试中"), true);

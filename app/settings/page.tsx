@@ -542,7 +542,8 @@ export default function SettingsPage() {
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {providerPresets.map((provider) => (
                   <button
-                    className={`apple-provider-card p-3 text-left ${providerId === provider.id ? "is-active" : ""}`}
+                    className={`apple-provider-card p-3 text-left disabled:cursor-not-allowed disabled:opacity-55 ${providerId === provider.id ? "is-active" : ""}`}
+                    disabled={isBusy}
                     key={provider.id}
                     onClick={() => selectProvider(provider.id)}
                     type="button"
@@ -565,7 +566,8 @@ export default function SettingsPage() {
                     中转站地址
                   </span>
                   <input
-                    className="apple-input h-10 w-full px-3 text-sm outline-none"
+                    className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
+                    disabled={isBusy}
                     value={providerSiteUrl}
                     onChange={(event) => {
                       const nextSiteUrl = event.target.value;
@@ -584,7 +586,8 @@ export default function SettingsPage() {
                     API Key
                   </span>
                   <input
-                    className="apple-input h-10 w-full px-3 text-sm outline-none"
+                    className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
+                    disabled={isBusy}
                     placeholder={maskedApiKey ? "留空保留当前 Key" : "sk-..."}
                     type="password"
                     value={apiKey}
@@ -617,7 +620,7 @@ export default function SettingsPage() {
                   <span className="apple-field-label mb-2 block">API URL</span>
                   <input
                     className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
-                    disabled={!advancedUrl}
+                    disabled={isBusy || !advancedUrl}
                     value={displayedApiBaseUrl}
                     onChange={(event) => {
                       setApiBaseUrl(event.target.value);
@@ -626,7 +629,7 @@ export default function SettingsPage() {
                   />
                 </label>
                 <label className="mt-7 flex h-10 items-center gap-2 text-sm text-white/64">
-                  <input className="size-4 accent-[#7cf0cf]" checked={advancedUrl} onChange={(event) => {
+                  <input className="size-4 accent-[#7cf0cf] disabled:opacity-60" checked={advancedUrl} disabled={isBusy} onChange={(event) => {
                     setAdvancedUrl(event.target.checked);
                     markConfigDirty();
                   }} type="checkbox" />
@@ -642,19 +645,19 @@ export default function SettingsPage() {
                 <div className="grid gap-3 md:grid-cols-3">
                   <label className="block">
                     <span className="apple-field-label mb-2 block">接口</span>
-                    <select className="apple-select h-10 w-full px-3 text-sm outline-none" value={wireApi} onChange={(event) => setWireApi(event.target.value as ModelWireApi)}>
+                    <select className="apple-select h-10 w-full px-3 text-sm outline-none disabled:opacity-60" disabled={isBusy} value={wireApi} onChange={(event) => setWireApi(event.target.value as ModelWireApi)}>
                       <option value="responses">Responses</option>
                       <option value="chat_completions">Chat Completions</option>
                     </select>
                   </label>
                   <label className="block">
                     <span className="apple-field-label mb-2 block">推理</span>
-                    <select className="apple-select h-10 w-full px-3 text-sm outline-none" value={modelReasoningEffort} onChange={(event) => setModelReasoningEffort(event.target.value as ModelReasoningEffort)}>
+                    <select className="apple-select h-10 w-full px-3 text-sm outline-none disabled:opacity-60" disabled={isBusy} value={modelReasoningEffort} onChange={(event) => setModelReasoningEffort(event.target.value as ModelReasoningEffort)}>
                       {reasoningEfforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}
                     </select>
                   </label>
                   <label className="mt-7 flex h-10 items-center gap-2 text-sm text-white/64">
-                    <input className="size-4 accent-[#7cf0cf]" checked={disableResponseStorage} onChange={(event) => setDisableResponseStorage(event.target.checked)} type="checkbox" />
+                    <input className="size-4 accent-[#7cf0cf] disabled:opacity-60" checked={disableResponseStorage} disabled={isBusy} onChange={(event) => setDisableResponseStorage(event.target.checked)} type="checkbox" />
                     不存储响应
                   </label>
                 </div>
@@ -664,19 +667,22 @@ export default function SettingsPage() {
             {showManualConfig || editingId ? <Panel title={editingId ? "编辑模型" : "手动模型"}>
               <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
                 <input
-                  className="apple-input h-10 w-full px-3 text-sm outline-none"
+                  className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
+                  disabled={isBusy}
                   value={draft.id}
                   onChange={(event) => setDraft((current) => ({ ...current, id: event.target.value }))}
                   placeholder="gpt-5.5"
                 />
                 <input
-                  className="apple-input h-10 w-full px-3 text-sm outline-none"
+                  className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
+                  disabled={isBusy}
                   value={draft.label}
                   onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))}
                   placeholder="显示名"
                 />
                 <select
-                  className="apple-select h-10 w-full px-3 text-sm outline-none"
+                  className="apple-select h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
+                  disabled={isBusy}
                   value={draft.capability}
                   onChange={(event) => setDraft((current) => ({ ...current, capability: event.target.value as ModelCapability }))}
                 >
@@ -694,7 +700,7 @@ export default function SettingsPage() {
                   {editingId ? "更新" : "只添加"}
                 </button>
                 {editingId ? (
-                  <button className="apple-button px-4 py-2 text-sm text-white/70" onClick={() => { setEditingId(""); setDraft(emptyDraft); }} type="button">
+                  <button className="apple-button px-4 py-2 text-sm text-white/70" disabled={isBusy} onClick={() => { setEditingId(""); setDraft(emptyDraft); }} type="button">
                     取消
                   </button>
                 ) : null}
@@ -709,9 +715,9 @@ export default function SettingsPage() {
                 </button>
               </div>
               <div className="space-y-4">
-                <ModelGroup activeModel={textModel} icon={<DatabaseZap className="size-4" />} label="文本" models={groupedModels.text} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("text", model.id)} onUse={useAsDefault} />
-                <ModelGroup activeModel={imageModel} icon={<ImageIcon className="size-4" />} label="图片" models={groupedModels.image} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("image", model.id)} onUse={useAsDefault} />
-                <ModelGroup activeModel={videoModel} icon={<Film className="size-4" />} label="视频" models={groupedModels.video} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("video", model.id)} onUse={useAsDefault} />
+                <ModelGroup activeModel={textModel} icon={<DatabaseZap className="size-4" />} isBusy={isBusy} label="文本" models={groupedModels.text} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("text", model.id)} onUse={useAsDefault} />
+                <ModelGroup activeModel={imageModel} icon={<ImageIcon className="size-4" />} isBusy={isBusy} label="图片" models={groupedModels.image} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("image", model.id)} onUse={useAsDefault} />
+                <ModelGroup activeModel={videoModel} icon={<Film className="size-4" />} isBusy={isBusy} label="视频" models={groupedModels.video} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("video", model.id)} onUse={useAsDefault} />
               </div>
             </Panel>
           </div>
@@ -961,6 +967,7 @@ function DiagnosisItem({ issue }: { issue: DetectionIssue }) {
 function ModelGroup({
   activeModel,
   icon,
+  isBusy,
   label,
   models,
   onDelete,
@@ -970,6 +977,7 @@ function ModelGroup({
 }: {
   activeModel: string;
   icon: React.ReactNode;
+  isBusy: boolean;
   label: string;
   models: ModelCatalogItem[];
   onDelete: (modelId: string) => void | Promise<unknown>;
@@ -1025,14 +1033,14 @@ function ModelGroup({
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                <button className="apple-button px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeModelAction)} onClick={() => void runModelAction("测试", model, () => onTest(model))} type="button">
+                <button className="apple-button px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={isBusy || Boolean(activeModelAction)} onClick={() => void runModelAction("测试", model, () => onTest(model))} type="button">
                   {activeModelAction === `测试:${model.id}` ? "测试中" : "测试"}
                 </button>
-                <button className="apple-button px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeModelAction)} onClick={() => void runModelAction("使用", model, () => onUse(model))} type="button">
+                <button className="apple-button px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={isBusy || Boolean(activeModelAction)} onClick={() => void runModelAction("使用", model, () => onUse(model))} type="button">
                   {activeModelAction === `使用:${model.id}` ? "保存中" : "使用"}
                 </button>
-                <button className="apple-button px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeModelAction)} onClick={() => onEdit(model)} type="button">编辑</button>
-                <button className="apple-button-danger flex items-center gap-1 px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeModelAction)} onClick={() => void deleteModel(model)} type="button">
+                <button className="apple-button px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={isBusy || Boolean(activeModelAction)} onClick={() => onEdit(model)} type="button">编辑</button>
+                <button className="apple-button-danger flex items-center gap-1 px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={isBusy || Boolean(activeModelAction)} onClick={() => void deleteModel(model)} type="button">
                   <Trash2 className="size-3" />
                   {activeModelAction === `删除:${model.id}` ? "删除中" : confirmDeleteId === model.id ? "确认删" : "删"}
                 </button>
