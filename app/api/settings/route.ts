@@ -37,27 +37,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as {
-      apiKey?: string;
-      providerName?: string;
-      providerId?: string;
-      websiteUrl?: string;
-      providerSiteUrl?: string;
-      apiBaseUrl?: string;
-      wireApi?: ModelWireApi;
-      requiresOpenAIAuth?: boolean;
-      disableResponseStorage?: boolean;
-      modelReasoningEffort?: ModelReasoningEffort;
-      textModel?: string;
-      imageModel?: string;
-      analysisModel?: string;
-      videoModel?: string;
-      modelsCache?: unknown;
-      supportsModelsList?: boolean;
-      supportsResponses?: boolean;
-      supportsChatCompletions?: boolean;
-      supportsImageGeneration?: boolean;
-    };
+    const body = await parseSettingsPayload(request);
     const currentLocal = readLocalConfig();
     const nextApiKey = body.apiKey?.trim() || currentLocal.openaiApiKey || "";
 
@@ -114,7 +94,45 @@ export async function POST(request: Request) {
       message: "API 配置已保存。",
     });
   } catch (error) {
+    if (error instanceof InvalidSettingsPayloadError) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ ok: false, error: settingsErrorMessage("保存配置失败", error) }, { status: 500 });
+  }
+}
+
+class InvalidSettingsPayloadError extends Error {}
+
+async function parseSettingsPayload(request: Request) {
+  try {
+    const body = await request.json() as {
+      apiKey?: string;
+      providerName?: string;
+      providerId?: string;
+      websiteUrl?: string;
+      providerSiteUrl?: string;
+      apiBaseUrl?: string;
+      wireApi?: ModelWireApi;
+      requiresOpenAIAuth?: boolean;
+      disableResponseStorage?: boolean;
+      modelReasoningEffort?: ModelReasoningEffort;
+      textModel?: string;
+      imageModel?: string;
+      analysisModel?: string;
+      videoModel?: string;
+      modelsCache?: unknown;
+      supportsModelsList?: boolean;
+      supportsResponses?: boolean;
+      supportsChatCompletions?: boolean;
+      supportsImageGeneration?: boolean;
+    };
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      throw new InvalidSettingsPayloadError("配置请求格式不正确。");
+    }
+    return body;
+  } catch (error) {
+    if (error instanceof InvalidSettingsPayloadError) throw error;
+    throw new InvalidSettingsPayloadError("配置 JSON 无法解析，请检查请求内容后重试。");
   }
 }
 
