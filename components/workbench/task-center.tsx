@@ -307,7 +307,7 @@ export function TaskCenter({
             setConfirmActionKey("");
             setVisibleCount(12);
           }}
-          placeholder="搜索节点、模型、请求、错误、状态"
+          placeholder="搜索节点、模型、质检、请求、错误、状态"
           value={query}
         />
         {query ? (

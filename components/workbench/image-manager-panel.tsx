@@ -51,6 +51,10 @@ export type ImageManagerImage = {
   fileSizeBytes?: number;
   favorite?: boolean;
   trashed?: boolean;
+  qualityCheck?: {
+    deliverability?: string;
+    status?: string;
+  };
   alphaCheck?: {
     hasTransparentPixels?: boolean;
   };
@@ -66,9 +70,9 @@ type ImageManagerNode<TImage extends ImageManagerImage> = {
   };
 };
 
-type ImageManagerFilter = "全部" | "收藏" | "项目素材" | "节点引用" | "PNG三层" | "可清理" | "回收站";
+type ImageManagerFilter = "全部" | "需复查" | "收藏" | "项目素材" | "节点引用" | "PNG三层" | "可清理" | "回收站";
 
-const imageManagerFilters: ImageManagerFilter[] = ["全部", "收藏", "项目素材", "节点引用", "PNG三层", "可清理", "回收站"];
+const imageManagerFilters: ImageManagerFilter[] = ["全部", "需复查", "收藏", "项目素材", "节点引用", "PNG三层", "可清理", "回收站"];
 
 function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode extends ImageManagerNode<TImage>>({
   downloadRemoteFile,
@@ -151,7 +155,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   );
   const stats = useMemo(() => imageManagerStats(managedRows), [managedRows]);
   const filteredRows = useMemo(
-    () => managedRows.filter((row) => imageManagerMatchesFilter(row.protection, filter) && imageManagerMatchesSearch(row.image, row.protection, normalizedQuery, nodeOperationLabel)),
+    () => managedRows.filter((row) => imageManagerMatchesFilter(row.image, row.protection, filter) && imageManagerMatchesSearch(row.image, row.protection, normalizedQuery, nodeOperationLabel)),
     [filter, managedRows, nodeOperationLabel, normalizedQuery],
   );
   const selectableRows = useMemo(
@@ -347,7 +351,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
               setQuery(event.target.value);
               clearSelected();
             }}
-            placeholder="搜索文件、来源、保护状态"
+            placeholder="搜索文件、来源、质检、保护状态"
             value={query}
           />
           {query ? (
@@ -632,8 +636,9 @@ function imageManagerStats<TImage extends ImageManagerImage>(rows: Array<{ image
   );
 }
 
-function imageManagerMatchesFilter(protection: ImageDeletionProtection, filter: ImageManagerFilter) {
+function imageManagerMatchesFilter(image: ImageManagerImage, protection: ImageDeletionProtection, filter: ImageManagerFilter) {
   if (protection.isTrashed) return filter === "回收站";
+  if (filter === "需复查") return image.qualityCheck?.deliverability === "needs_review" || image.qualityCheck?.deliverability === "not_ready" || Boolean(image.qualityCheck?.status && image.qualityCheck.status !== "passed");
   if (filter === "收藏") return protection.isFavorite;
   if (filter === "项目素材") return protection.isProjectAsset;
   if (filter === "节点引用") return protection.usedByNodes > 0;
