@@ -4761,8 +4761,8 @@ function NodeWorkflowWorkbench({
     setProjectListError("");
     try {
       const response = await fetch("/api/project?mode=list");
-      if (!response.ok) throw new Error("项目列表刷新失败。");
-      const data = (await response.json()) as { activeProjectId?: string; projects?: ProjectSummary[] };
+      const data = (await response.json().catch(() => ({}))) as { activeProjectId?: string; projects?: ProjectSummary[]; error?: string };
+      if (!response.ok) throw new Error(data.error || `项目列表刷新失败（HTTP ${response.status}）。`);
       setProjectList(data.projects || []);
       if (data.activeProjectId) setProjectId((current) => current || data.activeProjectId || "local-project");
       return true;
@@ -4806,7 +4806,11 @@ function NodeWorkflowWorkbench({
       setStatus(data.error || `打开项目失败（HTTP ${response.status}）。`);
       return false;
     }
-    const project = (await response.json()) as ProjectPayload;
+    const project = (await response.json().catch(() => null)) as ProjectPayload | null;
+    if (!project) {
+      setStatus("打开项目失败：接口没有返回有效项目数据。");
+      return false;
+    }
     setProjectId(project.id || id);
     setProjectName(project.name || "AI 设计项目");
     setProjectKind(normalizeProjectKind(project.projectKind));
@@ -4869,7 +4873,7 @@ function NodeWorkflowWorkbench({
       setStatus(message);
       throw new Error(message);
     }
-    const data = (await response.json()) as { activeProjectId?: string; projects?: ProjectSummary[] };
+    const data = (await response.json().catch(() => ({}))) as { activeProjectId?: string; projects?: ProjectSummary[] };
     setProjectList(data.projects || []);
     if (id === projectId && data.activeProjectId) await loadProject(data.activeProjectId);
     setStatus("项目已删除。");

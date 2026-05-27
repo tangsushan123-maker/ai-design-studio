@@ -1360,6 +1360,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("throw new Error(\"收藏状态保存失败。\")"), true);
     assert.equal(workbenchSource.includes("data.error || `删除项目失败（HTTP ${response.status}）。`"), true);
     assert.equal(workbenchSource.includes("data.error || `打开项目失败（HTTP ${response.status}）。`"), true);
+    assert.equal(workbenchSource.includes("data.error || `项目列表刷新失败（HTTP ${response.status}）。`"), true);
+    assert.equal(workbenchSource.includes("打开项目失败：接口没有返回有效项目数据。"), true);
     assert.equal(workbenchSource.includes("projectListLoadingRef"), true);
     assert.equal(workbenchSource.includes("projectListLoading"), true);
     assert.equal(workbenchSource.includes("projectListError"), true);
