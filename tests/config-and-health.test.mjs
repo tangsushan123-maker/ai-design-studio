@@ -1189,6 +1189,9 @@ describe("Workflow canvas performance", () => {
     assert.equal(workbenchSource.includes("workflow-edge-compact"), true);
     assert.equal(workbenchSource.includes("nodeMenuOpen && !isPerformanceMode"), true);
     assert.equal(workbenchSource.includes('className={`node-workflow-flow ${isPerformanceMode ? "is-performance-mode" : ""}`}'), true);
+    assert.equal(workbenchSource.includes('absolute left-[-34px] flex items-center gap-1.5 text-[10px]'), true);
+    assert.equal(workbenchSource.includes('operationNodeSubtitle(data, catalog?.description, textReferences.length)}</p>'), true);
+    assert.equal(workbenchSource.includes('line-clamp-1 text-[9px] leading-4">{operationNodeSubtitle'), false);
 
     assert.equal(globalsSource.includes(".node-workflow-flow.is-performance-mode .apple-node-card"), true);
     assert.equal(globalsSource.includes("backdrop-filter: none"), true);

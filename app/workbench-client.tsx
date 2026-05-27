@@ -5778,7 +5778,7 @@ const ImageInputNode = memo(function ImageInputNode({ id, data, selected }: Node
           </div>
           <div className="min-w-0">
             <div className="truncate text-[10.5px] font-semibold text-white/84">{nodeTitle}</div>
-            <div className="apple-caption mt-0.5 truncate text-[9px]">{nodeMeta}</div>
+            <div className="apple-caption mt-0.5 truncate text-[10px]">{nodeMeta}</div>
           </div>
         </div>
       </section>
@@ -5943,7 +5943,7 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
               <h3 className="truncate text-[10.5px] font-semibold text-white/84">{data.title}</h3>
               <StatusDot status={data.status || "idle"} />
             </div>
-            <div className="apple-caption mt-0.5 truncate text-[9px]">
+            <div className="apple-caption mt-0.5 truncate text-[10px]">
               {outputs.length ? `${outputs.length} 个结果` : taskStatusLabel(data.status || "idle")}
             </div>
           </div>
@@ -5958,7 +5958,7 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
       style={{ width: operationNodeWidth(data, outputs) }}
     >
       {inputs.map((input, index) => (
-        <div key={input.id} className="absolute left-[-32px] flex items-center gap-1.5 text-[9px] text-white/38" style={{ top: 48 + index * 24 }}>
+        <div key={input.id} className="absolute left-[-34px] flex items-center gap-1.5 text-[10px] text-white/40" style={{ top: 48 + index * 24 }}>
           <span>{input.label}</span>
           <Handle id={input.id} position={Position.Left} type="target" className="!static !size-3 !translate-x-0 !translate-y-0 !border-white/40 !bg-[#0c0d11]" />
         </div>
@@ -5974,9 +5974,9 @@ const OperationNode = memo(function OperationNode({ id, data, selected }: NodePr
           <div className="flex items-center gap-1.5">
             <h3 className="truncate text-[11px] font-semibold text-white/88">{data.title}</h3>
             <StatusDot status={data.status || "idle"} />
-            <span className="apple-caption shrink-0 text-[9px]">{taskStatusLabel(data.status || "idle")}</span>
+            <span className="apple-caption shrink-0 text-[10px]">{taskStatusLabel(data.status || "idle")}</span>
           </div>
-          <p className="apple-caption mt-0.5 line-clamp-1 text-[9px] leading-4">{operationNodeSubtitle(data, catalog?.description, textReferences.length)}</p>
+          <p className="apple-caption mt-0.5 line-clamp-1 text-[10px] leading-4">{operationNodeSubtitle(data, catalog?.description, textReferences.length)}</p>
         </div>
         <button
           className="apple-button-danger nodrag flex size-6 shrink-0 items-center justify-center opacity-0 transition group-hover:opacity-100"
