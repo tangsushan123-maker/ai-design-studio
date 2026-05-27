@@ -7831,6 +7831,7 @@ function ImageLightbox({
   const [message, setMessage] = useState("");
   const [sidebarTab, setSidebarTab] = useState<"actions" | "info">("actions");
   const [activeEditTool, setActiveEditTool] = useState<"optimize" | "mask" | "resize" | "upscale" | null>(null);
+  const [activeActionLabel, setActiveActionLabel] = useState("");
   const [showPromptDetails, setShowPromptDetails] = useState(false);
   const [showMoreFooterActions, setShowMoreFooterActions] = useState(false);
   const [compareSplit, setCompareSplit] = useState(50);
@@ -7896,14 +7897,19 @@ function ImageLightbox({
   );
 
   async function runAction(label: string, action: () => void | Promise<void>) {
+    if (activeActionLabel) return;
+    setActiveActionLabel(label);
     setMessage(`${label}中...`);
     try {
       await action();
       setMessage(`${label}成功`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : `${label}失败`);
+    } finally {
+      setActiveActionLabel("");
     }
   }
+  const actionBusy = Boolean(activeActionLabel);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(7,11,18,0.82)] p-2 sm:p-5" onClick={onClose}>
@@ -7975,17 +7981,17 @@ function ImageLightbox({
                   ))}
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button className="apple-button-primary flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-semibold" onClick={() => void runAction("保留此版", onKeep)} type="button">
+                  <button className="apple-button-primary flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] font-semibold disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("保留此版", onKeep)} type="button">
                     <Check className="size-3.5" />
-                    保留此版
+                    {activeActionLabel === "保留此版" ? "保留中..." : "保留此版"}
                   </button>
-                  <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("下载 PNG", () => downloadImageFile(image, "png"))} type="button">
+                  <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("下载 PNG", () => downloadImageFile(image, "png"))} type="button">
                     <ArrowDownToLine className="size-3.5" />
-                    下载 PNG
+                    {activeActionLabel === "下载 PNG" ? "下载中..." : "下载 PNG"}
                   </button>
-                  <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("复制图片", () => onCopyImage(image))} type="button">
+                  <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("复制图片", () => onCopyImage(image))} type="button">
                     <Images className="size-3.5" />
-                    复制图片
+                    {activeActionLabel === "复制图片" ? "复制中..." : "复制图片"}
                   </button>
                   <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => setShowMoreFooterActions((value) => !value)} type="button">
                     <ChevronDown className={`size-3.5 transition ${showMoreFooterActions ? "rotate-180" : ""}`} />
@@ -7994,23 +8000,23 @@ function ImageLightbox({
                 </div>
                 {showMoreFooterActions ? (
                   <div className="mt-2 grid grid-cols-2 gap-2 rounded-[16px] border border-white/10 bg-white/[0.05] p-2">
-                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("下载 JPG", () => downloadImageFile(image, "jpg"))} type="button">
+                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("下载 JPG", () => downloadImageFile(image, "jpg"))} type="button">
                       <ArrowDownToLine className="size-3.5" />
-                      下载 JPG
+                      {activeActionLabel === "下载 JPG" ? "下载中..." : "下载 JPG"}
                     </button>
-                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("下载 WebP", () => downloadImageFile(image, "webp"))} type="button">
+                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("下载 WebP", () => downloadImageFile(image, "webp"))} type="button">
                       <ArrowDownToLine className="size-3.5" />
-                      下载 WebP
+                      {activeActionLabel === "下载 WebP" ? "下载中..." : "下载 WebP"}
                     </button>
-                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("复制交付摘要", () => onCopyPrompt(deliverySummary))} type="button">
+                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("复制交付摘要", () => onCopyPrompt(deliverySummary))} type="button">
                       <FileImage className="size-3.5" />
                       交付摘要
                     </button>
-                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("复制质检摘要", () => onCopyPrompt(qualityReviewSummary))} type="button">
+                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("复制质检摘要", () => onCopyPrompt(qualityReviewSummary))} type="button">
                       <ShieldCheck className="size-3.5" />
                       质检摘要
                     </button>
-                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px]" onClick={() => void runAction("复制 Prompt", () => onCopyPrompt(image.prompt || ""))} type="button">
+                    <button className="apple-button flex items-center justify-center gap-1.5 px-3 py-2 text-[11px] disabled:opacity-55" disabled={actionBusy} onClick={() => void runAction("复制 Prompt", () => onCopyPrompt(image.prompt || ""))} type="button">
                       <Wand2 className="size-3.5" />
                       复制 Prompt
                     </button>

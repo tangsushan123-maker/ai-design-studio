@@ -1140,6 +1140,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("imageSourceDetailLines"), true);
     assert.equal(workbenchUiSource.includes("来源节点"), true);
     assert.equal(workbenchUiSource.includes("请求ID"), true);
+    assert.equal(workbenchSource.includes("activeActionLabel"), true);
+    assert.equal(workbenchSource.includes("if (activeActionLabel) return"), true);
+    assert.equal(workbenchSource.includes("disabled={actionBusy}"), true);
     assert.equal(workbenchSource.includes("服务端确认完成，结果已恢复到画布"), true);
     assert.equal(workbenchSource.includes("appendTaskTrace(formData"), true);
     assert.equal(workbenchSource.includes("taskTracePayload(taskId"), true);
