@@ -1460,7 +1460,9 @@ function NodeWorkflowWorkbench({
         const nextImageModel = preferredAutoImageModelId(passedImages, data.imageModel);
         setComposerModel((current) => current || nextImageModel);
       })
-      .catch(() => {});
+      .catch((error) => {
+        setStatus(error instanceof Error ? `模型配置检测失败：${error.message}` : "模型配置检测失败，请到设置页检查 API。");
+      });
   }, [initialModelInfo]);
 
   useEffect(() => {

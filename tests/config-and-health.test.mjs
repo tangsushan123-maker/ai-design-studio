@@ -377,6 +377,11 @@ describe("Settings model management", () => {
   it("guards model row actions with busy and delete confirmation states", async () => {
     const settingsSource = await readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8");
 
+    assert.equal(settingsSource.includes("settingsRequestFailure"), true);
+    assert.equal(settingsSource.includes("读取配置失败"), true);
+    assert.equal(settingsSource.includes("保存配置失败"), true);
+    assert.equal(settingsSource.includes("检测失败"), true);
+    assert.equal(settingsSource.includes("测试失败"), true);
     assert.equal(settingsSource.includes("activeModelAction"), true);
     assert.equal(settingsSource.includes("confirmDeleteId"), true);
     assert.equal(settingsSource.includes("runModelAction"), true);
@@ -1073,6 +1078,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("requestId"), true);
     assert.equal(workbenchSource.includes("projectName"), true);
     assert.equal(workbenchSource.includes("taskProjectContextRef"), true);
+    assert.equal(workbenchSource.includes("模型配置检测失败"), true);
     assert.equal(workbenchSource.includes("notifyBackendTaskCancelled"), true);
     assert.equal(workbenchSource.includes("backendRunState"), true);
     assert.equal(workbenchSource.includes("lastHeartbeatAt"), true);

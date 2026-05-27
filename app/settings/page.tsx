@@ -108,6 +108,11 @@ const customProvider = findProviderPreset("custom");
 const emptyDraft = { id: "", label: "", capability: "text" as ModelCapability };
 const reasoningEfforts: ModelReasoningEffort[] = ["none", "minimal", "low", "medium", "high", "xhigh"];
 
+function settingsRequestFailure(action: string, error: unknown) {
+  const detail = error instanceof Error ? error.message : "";
+  return detail ? `${action}：${detail}` : action;
+}
+
 export default function SettingsPage() {
   const [providerId, setProviderId] = useState<string>(customProvider.id);
   const [providerSiteUrl, setProviderSiteUrl] = useState<string>(customProvider.siteUrl);
@@ -168,7 +173,7 @@ export default function SettingsPage() {
     fetch("/api/settings")
       .then((response) => response.json())
       .then((data: SettingsResponse) => applySettings(data))
-      .catch(() => setStatus({ type: "error", message: "读取失败" }));
+      .catch((error) => setStatus({ type: "error", message: settingsRequestFailure("读取配置失败", error) }));
   }, []);
 
   function markConfigDirty(message = "已修改，需重新检测") {
@@ -260,8 +265,8 @@ export default function SettingsPage() {
       setSavedAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
       setStatus({ type: "success", message: "已保存" });
       return true;
-    } catch {
-      setStatus({ type: "error", message: "保存失败" });
+    } catch (error) {
+      setStatus({ type: "error", message: settingsRequestFailure("保存配置失败", error) });
       return false;
     }
   }
@@ -320,8 +325,8 @@ export default function SettingsPage() {
         await reloadSettings();
       }
       setStatus({ type: response.ok && data.ok ? "success" : "error", message: data.message || (response.ok ? "检测完成" : "检测失败") });
-    } catch {
-      setStatus({ type: "error", message: "检测失败" });
+    } catch (error) {
+      setStatus({ type: "error", message: settingsRequestFailure("检测失败", error) });
     }
   }
 
@@ -438,8 +443,8 @@ export default function SettingsPage() {
       setLastModelTest(data);
       await reloadSettings();
       setStatus({ type: data.ok ? "success" : "error", message: data.message || "测试完成" });
-    } catch {
-      setStatus({ type: "error", message: "测试失败" });
+    } catch (error) {
+      setStatus({ type: "error", message: settingsRequestFailure("测试失败", error) });
     }
   }
 
