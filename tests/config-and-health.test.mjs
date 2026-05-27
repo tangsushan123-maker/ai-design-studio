@@ -430,10 +430,12 @@ describe("API error hygiene", () => {
 
 describe("Settings model management", () => {
   it("guards model row actions with busy and delete confirmation states", async () => {
-    const [settingsSource, settingsRouteSource, modelsManageSource] = await Promise.all([
+    const [settingsSource, settingsRouteSource, modelsManageSource, modelsRefreshSource, modelsTestSource] = await Promise.all([
       readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/api/settings/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/models/manage/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/models/refresh/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/models/test/route.ts", import.meta.url), "utf8"),
     ]);
 
     assert.equal(settingsSource.includes("settingsRequestFailure"), true);
@@ -461,6 +463,10 @@ describe("Settings model management", () => {
     assert.equal(modelsManageSource.includes("modelManageErrorMessage"), true);
     assert.equal(modelsManageSource.includes('modelManageErrorMessage("模型保存失败", error)'), true);
     assert.equal(modelsManageSource.includes('modelManageErrorMessage("模型删除失败", error)'), true);
+    assert.equal(modelsRefreshSource.includes("modelRouteErrorMessage"), true);
+    assert.equal(modelsRefreshSource.includes('modelRouteErrorMessage("刷新模型列表失败", error)'), true);
+    assert.equal(modelsTestSource.includes("modelTestRouteErrorMessage"), true);
+    assert.equal(modelsTestSource.includes('modelTestRouteErrorMessage("模型测试失败", error)'), true);
   });
 });
 
