@@ -4807,7 +4807,7 @@ function NodeWorkflowWorkbench({
     });
     if (!response.ok) {
       setStatus("删除项目失败。");
-      return;
+      throw new Error("删除项目失败。");
     }
     const data = (await response.json()) as { activeProjectId?: string; projects?: ProjectSummary[] };
     setProjectList(data.projects || []);

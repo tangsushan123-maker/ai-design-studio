@@ -1006,7 +1006,7 @@ describe("Workflow canvas performance", () => {
 
 describe("Project stability and task tracing", () => {
   it("keeps local snapshots and explicit task run traces", async () => {
-    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, imageUtilsSource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
+    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, imageUtilsSource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/task-run-ledger.ts", import.meta.url), "utf8"),
@@ -1016,13 +1016,14 @@ describe("Project stability and task tracing", () => {
       readFile(new URL("../lib/generated-history.ts", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/history-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/image-manager-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/project-library-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/image-resource/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/edit-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/redraw-upscale-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/workbench-image-source.ts", import.meta.url), "utf8"),
     ]);
-    const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}\n${imageSourceSource}`;
+    const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}\n${projectLibraryPanelSource}\n${imageSourceSource}`;
 
     assert.equal(workbenchSource.includes("type ProjectSnapshot"), true);
     assert.equal(workbenchSource.includes("const projectSnapshotLimit = 5"), true);
@@ -1183,6 +1184,12 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("favorite: nextFavorite"), true);
     assert.equal(workbenchSource.includes("metadata: { favorite: nextFavorite }"), true);
     assert.equal(workbenchSource.includes("throw new Error(\"收藏状态保存失败。\")"), true);
+    assert.equal(workbenchSource.includes("throw new Error(\"删除项目失败。\")"), true);
+    assert.equal(projectLibraryPanelSource.includes("confirmDeleteId"), true);
+    assert.equal(projectLibraryPanelSource.includes("deletingId"), true);
+    assert.equal(projectLibraryPanelSource.includes("确认删除"), true);
+    assert.equal(projectLibraryPanelSource.includes("删除中"), true);
+    assert.equal(projectLibraryPanelSource.includes("window.confirm"), false);
     assert.equal(workbenchSource.includes("这张图已受保护"), true);
     assert.equal(workbenchUiSource.includes("可清理"), true);
     assert.equal(generatedImagesRouteSource.includes("requestIds"), true);

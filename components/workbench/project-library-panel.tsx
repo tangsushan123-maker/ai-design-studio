@@ -1,6 +1,7 @@
 "use client";
 
 import { FolderOpen, Plus, RefreshCcw, Trash2, X } from "lucide-react";
+import { useState } from "react";
 
 type ProjectLibraryItem = {
   id: string;
@@ -26,12 +27,36 @@ export function ProjectLibraryPanel({
   activeProjectId: string;
   onClose: () => void;
   onCreateNew: () => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<unknown>;
   onOpen: (id: string) => void;
   onRefresh: () => void;
   projects: ProjectLibraryItem[];
   formatUpdatedAt: (value: string) => string;
 }) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState("");
+  const [deletingId, setDeletingId] = useState("");
+  const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+
+  async function deleteProject(project: ProjectLibraryItem) {
+    if (deletingId) return;
+    if (confirmDeleteId !== project.id) {
+      setConfirmDeleteId(project.id);
+      setActionMessage({ tone: "success", text: `再点一次确认删除「${project.name}」。` });
+      return;
+    }
+    setDeletingId(project.id);
+    setActionMessage(null);
+    try {
+      await onDelete(project.id);
+      setConfirmDeleteId("");
+      setActionMessage({ tone: "success", text: "项目删除已提交。" });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "删除项目失败。" });
+    } finally {
+      setDeletingId("");
+    }
+  }
+
   return (
     <section className="apple-panel-strong apple-drawer fixed bottom-4 left-[52px] top-4 z-50 flex w-[min(348px,calc(100vw-64px))] flex-col overflow-hidden sm:left-[96px]">
       <div className="flex items-center justify-between border-b border-white/10 p-3">
@@ -60,6 +85,15 @@ export function ProjectLibraryPanel({
             刷新
           </button>
         </div>
+        {actionMessage ? (
+          <div className={`mb-3 rounded-[14px] border px-3 py-2 text-[10px] leading-4 ${
+            actionMessage.tone === "success"
+              ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
+              : "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
+          }`}>
+            {actionMessage.text}
+          </div>
+        ) : null}
         {projects.length ? (
           <div className="space-y-2">
             {projects.map((project) => (
@@ -89,15 +123,14 @@ export function ProjectLibraryPanel({
                     {project.libraryName || "独立素材"}
                   </span>
                   <button
-                    className="apple-button-danger flex items-center gap-1 px-2.5 py-1 text-[11px]"
-                    onClick={() => {
-                      if (window.confirm(`确认删除项目「${project.name}」吗？`)) onDelete(project.id);
-                    }}
+                    className="apple-button-danger flex items-center gap-1 px-2.5 py-1 text-[11px] disabled:opacity-45"
+                    disabled={Boolean(deletingId)}
+                    onClick={() => void deleteProject(project)}
                     title="删除项目"
                     type="button"
                   >
-                    <Trash2 className="size-3" />
-                    删除
+                    <Trash2 className={`size-3 ${deletingId === project.id ? "animate-pulse" : ""}`} />
+                    {deletingId === project.id ? "删除中" : confirmDeleteId === project.id ? "确认删除" : "删除"}
                   </button>
                 </div>
               </article>
