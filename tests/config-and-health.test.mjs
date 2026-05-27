@@ -1225,6 +1225,11 @@ describe("Project stability and task tracing", () => {
     assert.equal(ledgerSource.includes("projectId?: string"), true);
     assert.equal(ledgerSource.includes("projectName?: string"), true);
     assert.equal(routeSource.includes("requestIds"), true);
+    assert.equal(routeSource.includes("taskRunRequestIdLimit"), true);
+    assert.equal(routeSource.includes("taskRunErrorMessage"), true);
+    assert.equal(routeSource.includes('taskRunErrorMessage("读取任务记录失败", error)'), true);
+    assert.equal(routeSource.includes('taskRunErrorMessage("更新任务记录失败", error)'), true);
+    assert.equal(routeSource.includes("emptyTaskRunSummary"), true);
     assert.equal(routeSource.includes("projectId"), true);
     assert.equal(routeSource.includes('action === "delete"'), true);
     assert.equal(routeSource.includes('action === "clear_finished"'), true);
