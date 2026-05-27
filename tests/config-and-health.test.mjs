@@ -6,6 +6,7 @@ import { defaultOpenAIConfig, providerPresets } from "../lib/openai-defaults.ts"
 import { parseHealthMode, skippedImageCheck } from "../lib/openai-health.ts";
 import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualityBadgeLabel, qualityDeliveryTone, qualityTone } from "../lib/workbench-delivery.ts";
 import { historyMatchesFilter, historyMatchesQuery, historySearchText } from "../lib/workbench-history.ts";
+import { imageManagerMatchesSearch, imageManagerSearchText } from "../lib/workbench-image-manager.ts";
 
 describe("OpenAI defaults", () => {
   it("keeps the official provider aligned with shared defaults", () => {
@@ -142,6 +143,59 @@ describe("Workbench history search", () => {
     assert.equal(historyMatchesQuery(image, "白边"), true);
     assert.equal(historyMatchesQuery(image, "1536 × 864px"), true);
     assert.equal(historySearchText(image).includes("abcdef123456"), true);
+  });
+});
+
+describe("Workbench image manager search", () => {
+  it("searches image metadata and protection state", () => {
+    const image = {
+      fileName: "generated/poster.png",
+      id: "img_001",
+      mode: "文生图",
+      nodeOperation: "text_to_image",
+      prompt: "高端活动海报",
+      sourceNodeName: "主视觉节点",
+      sourceRequestId: "req_search_123456",
+    };
+    const protection = {
+      canDelete: false,
+      isFavorite: true,
+      isLayerPack: false,
+      isProjectAsset: true,
+      isTrashed: false,
+      protected: true,
+      reasons: ["收藏", "项目素材"],
+      usedByNodeNames: ["文生图"],
+      usedByNodes: 1,
+    };
+    const operationLabel = (value) => value === "text_to_image" ? "文生图" : value || "";
+
+    assert.equal(imageManagerMatchesSearch(image, protection, "poster", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch(image, protection, "主视觉节点", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch(image, protection, "项目素材", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch(image, protection, "节点引用", operationLabel), true);
+    assert.equal(imageManagerMatchesSearch(image, protection, "受保护", operationLabel), true);
+    assert.equal(imageManagerSearchText(image, protection, operationLabel).includes("req_search_123456"), true);
+  });
+
+  it("searches cleanup and trash aliases", () => {
+    const cleanableProtection = {
+      canDelete: true,
+      isFavorite: false,
+      isLayerPack: true,
+      isProjectAsset: false,
+      isTrashed: false,
+      protected: false,
+      reasons: [],
+      usedByNodeNames: [],
+      usedByNodes: 0,
+    };
+    const trashedProtection = { ...cleanableProtection, canDelete: true, isLayerPack: false, isTrashed: true };
+
+    assert.equal(imageManagerMatchesSearch({ id: "layer_pack" }, cleanableProtection, "可清理"), true);
+    assert.equal(imageManagerMatchesSearch({ id: "layer_pack" }, cleanableProtection, "png三层"), true);
+    assert.equal(imageManagerMatchesSearch({ id: "deleted" }, trashedProtection, "回收站"), true);
+    assert.equal(imageManagerMatchesSearch({ id: "deleted" }, trashedProtection, "已删除"), true);
   });
 });
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { memo, useMemo, useState, type ReactNode } from "react";
-import { ArrowDownToLine, Images, Plus, RefreshCcw, ShieldCheck, Star, Trash2 } from "lucide-react";
+import { ArrowDownToLine, Images, Plus, RefreshCcw, Search, ShieldCheck, Star, Trash2, X } from "lucide-react";
 import { ImageFrame } from "@/components/workbench/image-frame";
+import { imageManagerMatchesSearch } from "@/lib/workbench-image-manager";
 
 export type ImageDeletionProtection = {
   protected: boolean;
@@ -129,7 +130,9 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   onToggleFavorite: (image: TImage) => void;
 }) {
   const [filter, setFilter] = useState<ImageManagerFilter>("全部");
+  const [query, setQuery] = useState("");
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
+  const normalizedQuery = query.trim();
   const managedImages = useMemo(() => {
     const trashedImages = trashImages.map((image) => ({ ...image, trashed: true })) as TImage[];
     const projectAssetImages = projectAssets.map((image) => ({ ...image, source: "asset" })) as TImage[];
@@ -141,8 +144,8 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   );
   const stats = useMemo(() => imageManagerStats(managedRows), [managedRows]);
   const filteredRows = useMemo(
-    () => managedRows.filter((row) => imageManagerMatchesFilter(row.protection, filter)),
-    [filter, managedRows],
+    () => managedRows.filter((row) => imageManagerMatchesFilter(row.protection, filter) && imageManagerMatchesSearch(row.image, row.protection, normalizedQuery, nodeOperationLabel)),
+    [filter, managedRows, nodeOperationLabel, normalizedQuery],
   );
   const selectedRows = useMemo(
     () => managedRows.filter((row) => selectedKeys.has(imageManagerKey(row.image))),
@@ -233,6 +236,31 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
             {item}
           </button>
         ))}
+        <label className="col-span-3 mt-1 flex h-8 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.05] px-2.5 text-[11px] text-white/58 focus-within:border-[#8fa7ff]/40 focus-within:bg-white/[0.075]">
+          <Search className="size-3.5 shrink-0 text-white/38" />
+          <input
+            className="min-w-0 flex-1 bg-transparent text-white/72 outline-none placeholder:text-white/30"
+            onChange={(event) => {
+              setQuery(event.target.value);
+              clearSelected();
+            }}
+            placeholder="搜索文件、来源、保护状态"
+            value={query}
+          />
+          {query ? (
+            <button
+              aria-label="清空图片搜索"
+              className="flex size-5 shrink-0 items-center justify-center rounded-full text-white/42 transition hover:bg-white/10 hover:text-white/72"
+              onClick={() => {
+                setQuery("");
+                clearSelected();
+              }}
+              type="button"
+            >
+              <X className="size-3" />
+            </button>
+          ) : null}
+        </label>
       </div>
 
       <div className="apple-surface-section flex flex-wrap items-center gap-1.5 p-2">
@@ -298,6 +326,19 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
       {!filteredRows.length ? (
         <div className="rounded-[20px] border border-dashed border-white/12 bg-white/[0.035] p-6 text-center text-[12px] text-white/44">
           当前筛选没有图片。
+          {filter !== "全部" || normalizedQuery ? (
+            <button
+              className="apple-button mt-3 px-3 py-1.5 text-[11px]"
+              onClick={() => {
+                setFilter("全部");
+                setQuery("");
+                clearSelected();
+              }}
+              type="button"
+            >
+              清空筛选
+            </button>
+          ) : null}
         </div>
       ) : null}
 
