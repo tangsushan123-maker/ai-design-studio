@@ -8,18 +8,23 @@ import { writeJsonAtomic } from "@/lib/local-json-store";
 export const runtime = "nodejs";
 
 const generatedTrashDirName = "_trash";
+const generatedImageListMaxLimit = 100;
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const limit = Number(searchParams.get("limit") || 20);
-  const offset = Number(searchParams.get("offset") || 0);
-  const projectId = searchParams.get("projectId") || undefined;
-  const trashOnly = searchParams.get("trash") === "1" || searchParams.get("mode") === "trash";
-  const requestIds = (searchParams.get("requestIds") || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return NextResponse.json(await listGeneratedImages({ limit, offset, projectId, requestIds, trashOnly }));
+  try {
+    const { searchParams } = new URL(request.url);
+    const limit = boundedListNumber(searchParams.get("limit"), 20, 1, generatedImageListMaxLimit);
+    const offset = boundedListNumber(searchParams.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER);
+    const projectId = searchParams.get("projectId") || undefined;
+    const trashOnly = searchParams.get("trash") === "1" || searchParams.get("mode") === "trash";
+    const requestIds = (searchParams.get("requestIds") || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return NextResponse.json(await listGeneratedImages({ limit, offset, projectId, requestIds, trashOnly }));
+  } catch (error) {
+    return NextResponse.json({ error: generatedImageErrorMessage("读取图片列表失败", error) }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: Request) {
@@ -172,6 +177,12 @@ function isSafeGeneratedRelativePath(fileName: string) {
   const normalized = path.normalize(fileName);
   if (normalized.startsWith("..") || normalized.includes(`..${path.sep}`)) return false;
   return /\.(png|jpg|jpeg|webp)$/i.test(normalized);
+}
+
+function boundedListNumber(value: string | null, fallback: number, min: number, max: number) {
+  const numberValue = Number(value ?? fallback);
+  if (!Number.isFinite(numberValue)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(numberValue)));
 }
 
 function generatedImageErrorMessage(prefix: string, error: unknown) {
