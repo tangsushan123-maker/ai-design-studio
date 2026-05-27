@@ -1020,7 +1020,7 @@ describe("Workflow canvas performance", () => {
 
 describe("Project stability and task tracing", () => {
   it("keeps local snapshots and explicit task run traces", async () => {
-    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, assetLibraryPanelSource, imageUtilsSource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
+    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, assetLibraryPanelSource, imageUtilsSource, imageResourceRouteSource, editRouteSource, redrawRouteSource, imageSourceSource] = await Promise.all([
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/task-run-ledger.ts", import.meta.url), "utf8"),
@@ -1031,6 +1031,7 @@ describe("Project stability and task tracing", () => {
       readFile(new URL("../components/workbench/history-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/image-manager-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/project-library-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/project-home-screen.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/asset-library-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/image-resource/route.ts", import.meta.url), "utf8"),
@@ -1038,7 +1039,7 @@ describe("Project stability and task tracing", () => {
       readFile(new URL("../app/api/redraw-upscale-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/workbench-image-source.ts", import.meta.url), "utf8"),
     ]);
-    const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}\n${projectLibraryPanelSource}\n${assetLibraryPanelSource}\n${imageSourceSource}`;
+    const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}\n${projectLibraryPanelSource}\n${projectHomeSource}\n${assetLibraryPanelSource}\n${imageSourceSource}`;
 
     assert.equal(workbenchSource.includes("type ProjectSnapshot"), true);
     assert.equal(workbenchSource.includes("const projectSnapshotLimit = 5"), true);
@@ -1230,7 +1231,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("projectListError"), true);
     assert.equal(workbenchSource.includes("onRefreshProjects"), true);
     assert.equal(workbenchSource.includes("项目列表刷新失败。"), true);
-    assert.equal(workbenchSource.includes("正在刷新项目列表"), true);
+    assert.equal(workbenchSource.includes("ProjectHomeScreen"), true);
+    assert.equal(projectHomeSource.includes("export function ProjectHomeScreen"), true);
+    assert.equal(projectHomeSource.includes("ProjectHomeItem"), true);
+    assert.equal(projectHomeSource.includes("正在刷新项目列表"), true);
     assert.equal(workbenchSource.includes("organization: explicitAdd"), true);
     assert.equal(workbenchSource.includes("保留|保持|沿用|复用|还原"), true);
     assert.equal(workbenchSource.includes("visibleRequests.organization"), true);
