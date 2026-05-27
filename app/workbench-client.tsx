@@ -4808,12 +4808,17 @@ function NodeWorkflowWorkbench({
     setProjectPanelOpen(false);
     restoreCanvasViewport(restoredNodes, project.viewport);
     writeProjectLocalCache(projectStorageKey, stringifyProjectPayload(stripProjectRuntimeState(project)));
+    let activeProjectSyncFailed = false;
     await fetch("/api/project", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(stripProjectRuntimeState({ ...project, setActive: true })),
-    }).catch(() => {});
-    setStatus(`已打开项目：${project.name || "AI 设计项目"}`);
+    }).catch(() => {
+      activeProjectSyncFailed = true;
+    });
+    setStatus(activeProjectSyncFailed
+      ? `已打开项目：${project.name || "AI 设计项目"}；但同步默认项目失败，下次启动如未进入该项目，请从项目列表重新打开。`
+      : `已打开项目：${project.name || "AI 设计项目"}`);
     void refreshProjectList();
     void refreshMaterialLibraries();
     return true;
@@ -4969,7 +4974,9 @@ function NodeWorkflowWorkbench({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileName: image.fileName, metadata: { nextImageIds: patchIds } }),
-      }).catch(() => {});
+      }).catch(() => {
+        setStatus("已创建新版本，但图片版本关系同步失败；刷新后版本链可能不完整。");
+      });
     }
   }
   async function persistGeneratedMetadata(images: ImageAsset[]) {

@@ -1161,6 +1161,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("服务端任务记录同步删除失败"), true);
     assert.equal(workbenchSource.includes("服务端停止同步失败"), true);
     assert.equal(workbenchSource.includes("服务端任务记录同步清理失败"), true);
+    assert.equal(workbenchSource.includes("activeProjectSyncFailed"), true);
+    assert.equal(workbenchSource.includes("同步默认项目失败"), true);
+    assert.equal(workbenchSource.includes("图片版本关系同步失败"), true);
     assert.equal(workbenchSource.includes("new URLSearchParams({ requestIds: backendTaskSyncKey, projectId })"), true);
     assert.equal(workbenchSource.includes("serverTaskRunOutputs"), true);
     assert.equal(workbenchSource.includes("activeProjectIdRef.current === taskProjectId"), true);
