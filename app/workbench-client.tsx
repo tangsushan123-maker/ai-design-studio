@@ -8085,7 +8085,7 @@ function ImageLightbox({
                           {primaryDeliverySuggestion}
                         </div>
                       </div>
-                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${qualityDeliveryTone(image.qualityCheck?.deliverability)}`}>
+                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${qualityDeliveryTone(image.qualityCheck?.deliverability)}`}>
                         {image.qualityCheck?.deliverabilityLabel || qualityBadgeLabel(image)}
                       </span>
                     </div>
@@ -8118,7 +8118,7 @@ function ImageLightbox({
                       </button>
                     </div>
                     {deliveryIssues.length ? (
-                      <div className="mt-2 rounded-[12px] border border-white/10 bg-black/15 px-2.5 py-2 text-[10px] leading-4 text-white/54">
+                      <div className="mt-2 rounded-[12px] border border-white/10 bg-black/15 px-2.5 py-2 text-[11px] leading-5 text-white/54">
                         {deliveryIssues.slice(0, 2).map((issue) => (
                           <div className="line-clamp-1" key={issue}>{issue}</div>
                         ))}
@@ -8179,7 +8179,7 @@ function ImageLightbox({
                       <div className="mt-3 grid grid-cols-2 gap-1.5">
                         {maskQuickActions.map((action) => (
                           <button
-                            className="apple-button px-2 py-1.5 text-[10px] text-white/66"
+                            className="apple-button px-2 py-1.5 text-[11px] text-white/66"
                             key={action.label}
                             onClick={() => {
                               setMaskPrompt(action.prompt);
@@ -8257,7 +8257,7 @@ function ImageLightbox({
                       <div className="apple-caption mt-1">Standard 修文字，Plus 图文双清晰，Creative 做质感重绘，再输出到目标尺寸。</div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {qualityEnhanceTargets.map((value) => (
-                          <button className={`${activeUpscaleSize === value ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[10px]`} key={value} onClick={() => setUpscaleSize(value)} type="button">
+                          <button className={`${activeUpscaleSize === value ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[11px]`} key={value} onClick={() => setUpscaleSize(value)} type="button">
                             {value}
                           </button>
                         ))}
@@ -8276,7 +8276,7 @@ function ImageLightbox({
                       <div className="mt-2">
                         <InlineChipRow label="导出格式" value={upscaleFormat} options={["png", "jpg", "webp"]} onChange={(value) => setUpscaleFormat(exportFormatParam(value))} />
                       </div>
-                      <div className="mt-2 rounded-[14px] border border-[#ffd166]/18 bg-[#ffd166]/10 px-3 py-2 text-[10px] leading-5 text-[#ffe1a3]">
+                      <div className="mt-2 rounded-[14px] border border-[#ffd166]/18 bg-[#ffd166]/10 px-3 py-2 text-[11px] leading-5 text-[#ffe1a3]">
                         {qualityEnhanceModeDescription(qualityEnhanceModeFromFitMode(upscaleFitMode, {}))}
                       </div>
                       <button
@@ -8297,7 +8297,7 @@ function ImageLightbox({
                 <>
                   <section className="apple-surface-section p-3">
                     <div className="apple-section-title">详情</div>
-                    <div className="mt-2 space-y-1.5 text-[10px] leading-4 text-white/52">
+                    <div className="mt-2 space-y-1.5 text-[11px] leading-5 text-white/52">
                       {expectedSizeLabel && expectedSizeLabel !== actualSizeLabel ? <DetailLine label="目标" value={expectedSizeLabel} /> : null}
                       <DetailLine label="模型" value={image.model || "unknown"} />
                       <DetailLine label="质检" value={qualityBadgeLabel(image)} />
@@ -8316,13 +8316,13 @@ function ImageLightbox({
                     <section className="apple-surface-section p-3">
                       <div className="flex items-center justify-between gap-2">
                         <div className="apple-section-title">交付检查</div>
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] ${qualityDeliveryTone(image.qualityCheck.deliverability)}`}>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] ${qualityDeliveryTone(image.qualityCheck.deliverability)}`}>
                           {image.qualityCheck.deliverabilityLabel || qualityBadgeLabel(image)}
                         </span>
                       </div>
                       <div className="mt-2 grid gap-1.5">
                         {image.qualityCheck.fourKCheckItems.slice(0, 8).map((item) => (
-                          <div className="flex items-start justify-between gap-2 rounded-[12px] border border-white/8 bg-white/[0.035] px-2.5 py-2 text-[10px] leading-4" key={item.label}>
+                          <div className="flex items-start justify-between gap-2 rounded-[12px] border border-white/8 bg-white/[0.035] px-2.5 py-2 text-[11px] leading-5" key={item.label}>
                             <div className="min-w-0">
                               <div className="font-semibold text-white/70">{item.label}</div>
                               {item.detail ? <div className="mt-0.5 line-clamp-2 text-white/38">{item.detail}</div> : null}
@@ -8334,7 +8334,7 @@ function ImageLightbox({
                         ))}
                       </div>
                       {image.qualityCheck.textDetailLabel ? (
-                        <div className={`mt-2 rounded-[12px] border px-2.5 py-2 text-[10px] leading-4 ${image.qualityCheck.textDetailRisk ? "border-[#ffd166]/18 bg-[#ffd166]/10 text-[#ffe1a3]" : "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"}`}>
+                        <div className={`mt-2 rounded-[12px] border px-2.5 py-2 text-[11px] leading-5 ${image.qualityCheck.textDetailRisk ? "border-[#ffd166]/18 bg-[#ffd166]/10 text-[#ffe1a3]" : "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"}`}>
                           {image.qualityCheck.textDetailLabel}
                         </div>
                       ) : null}
@@ -8344,11 +8344,11 @@ function ImageLightbox({
                   <section className="apple-surface-section p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="apple-section-title">生成 Prompt</div>
-                      <button className="apple-button rounded-full px-2.5 py-1 text-[10px]" onClick={() => setShowPromptDetails((value) => !value)} type="button">
+                      <button className="apple-button rounded-full px-2.5 py-1 text-[11px]" onClick={() => setShowPromptDetails((value) => !value)} type="button">
                         {showPromptDetails ? "收起" : "展开"}
                       </button>
                     </div>
-                    <div className={`mt-2 overflow-auto rounded-[14px] border border-white/10 bg-white/[0.055] p-2 text-[10px] leading-4 text-white/42 ${showPromptDetails ? "max-h-[240px]" : "max-h-[92px]"}`}>
+                    <div className={`mt-2 overflow-auto rounded-[14px] border border-white/10 bg-white/[0.055] p-2 text-[11px] leading-5 text-white/42 ${showPromptDetails ? "max-h-[240px]" : "max-h-[92px]"}`}>
                       {image.prompt || "没有记录 Prompt。"}
                     </div>
                     <div className="mt-2 flex gap-2">
@@ -8358,17 +8358,17 @@ function ImageLightbox({
                   </section>
 
                   {image.qualityCheck?.issues?.length ? (
-                    <div className="rounded-[14px] border border-[#ff6b5f]/18 bg-[#ff6b5f]/10 p-3 text-[10px] leading-5 text-[#ffc1b8]">
+                    <div className="rounded-[14px] border border-[#ff6b5f]/18 bg-[#ff6b5f]/10 p-3 text-[11px] leading-5 text-[#ffc1b8]">
                       <div className="mb-1 font-semibold">质检提醒</div>
                       {image.qualityCheck.issues.slice(0, 4).map((issue) => <div key={issue}>· {issue}</div>)}
                     </div>
                   ) : (
-                    <div className="rounded-[14px] border border-[#74e3c5]/18 bg-[#74e3c5]/10 p-3 text-[10px] leading-5 text-[#adf8e5]">
+                    <div className="rounded-[14px] border border-[#74e3c5]/18 bg-[#74e3c5]/10 p-3 text-[11px] leading-5 text-[#adf8e5]">
                       质检正常。
                     </div>
                   )}
                   {image.maskProtectionCheck ? (
-                    <div className={`rounded-[14px] border p-3 text-[10px] leading-5 ${
+                    <div className={`rounded-[14px] border p-3 text-[11px] leading-5 ${
                       image.maskProtectionCheck.status === "failed"
                         ? "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
                         : image.maskProtectionCheck.status === "warning"

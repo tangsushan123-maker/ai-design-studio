@@ -704,6 +704,9 @@ describe("Quality enhance mode", () => {
     assert.equal(workbenchSource.includes("交付检查"), true);
     assert.equal(workbenchSource.includes("qualityDeliveryTone"), true);
     assert.equal(workbenchSource.includes("官方 GPT Image 高保真编辑 → 原生高清输出 → 质检"), true);
+    assert.equal(workbenchSource.includes("rounded-full border px-2 py-0.5 text-[11px] ${qualityDeliveryTone(image.qualityCheck.deliverability)"), true);
+    assert.equal(workbenchSource.includes("text-[11px] leading-5 ${image.qualityCheck.textDetailRisk"), true);
+    assert.equal(workbenchSource.includes("mt-2 space-y-1.5 text-[11px] leading-5 text-white/52"), true);
   });
 });
 
