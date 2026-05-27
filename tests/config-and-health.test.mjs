@@ -408,6 +408,22 @@ describe("Image size requests", () => {
   });
 });
 
+describe("Remote image import security", () => {
+  it("blocks local and private image URLs before server-side fetches", async () => {
+    const routeSource = await readFile(new URL("../app/api/import-image/route.ts", import.meta.url), "utf8");
+
+    assert.equal(routeSource.includes('import { lookup } from "node:dns/promises"'), true);
+    assert.equal(routeSource.includes('import { isIP } from "node:net"'), true);
+    assert.equal(routeSource.includes("fetchAllowedImageUrl"), true);
+    assert.equal(routeSource.includes("assertPublicHttpImageUrl"), true);
+    assert.equal(routeSource.includes("parseImageUrl"), true);
+    assert.equal(routeSource.includes("normalizeHostname"), true);
+    assert.equal(routeSource.includes("redirect: \"manual\""), true);
+    assert.equal(routeSource.includes("isPrivateAddress"), true);
+    assert.equal(routeSource.includes("不支持导入本机或内网图片链接"), true);
+  });
+});
+
 describe("Quality enhance mode", () => {
   it("unifies HD redraw and 4K output into quality enhancement modes", async () => {
     const [promptSource, routeSource] = await Promise.all([
