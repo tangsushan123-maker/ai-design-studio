@@ -169,6 +169,17 @@ describe("Workbench history search", () => {
   });
 });
 
+describe("Workbench history panel actions", () => {
+  it("requires confirmation before deleting a history image", async () => {
+    const historyPanelSource = await readFile(new URL("../components/workbench/history-panel.tsx", import.meta.url), "utf8");
+
+    assert.equal(historyPanelSource.includes("confirmDeleteKey"), true);
+    assert.equal(historyPanelSource.includes("再点一次删除，确认移入回收站。"), true);
+    assert.equal(historyPanelSource.includes("确认删除图片"), true);
+    assert.equal(historyPanelSource.includes("再次点击确认删除"), true);
+  });
+});
+
 describe("Workbench image manager search", () => {
   it("searches image metadata and protection state", () => {
     const image = {
@@ -1318,7 +1329,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(historyPanelSource.includes('aria-label="加入画布"'), true);
     assert.equal(historyPanelSource.includes('aria-label="改尺寸"'), true);
     assert.equal(historyPanelSource.includes('aria-label="画质增强"'), true);
-    assert.equal(historyPanelSource.includes('aria-label="删除图片"'), true);
+    assert.equal(historyPanelSource.includes("confirmDeleteKey"), true);
+    assert.equal(historyPanelSource.includes("确认删除图片"), true);
     assert.equal(historyPanelSource.includes("actionMessage"), true);
     assert.equal(historyPanelSource.includes("deletingKey"), true);
     assert.equal(historyPanelSource.includes("favoritingKey"), true);

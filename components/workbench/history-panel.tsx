@@ -86,6 +86,7 @@ export function HistoryPanel({
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(resultPageSize);
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState("");
   const [deletingKey, setDeletingKey] = useState("");
   const [favoritingKey, setFavoritingKey] = useState("");
   const [loadingMoreLocal, setLoadingMoreLocal] = useState(false);
@@ -113,6 +114,7 @@ export function HistoryPanel({
   if (!images.length) return emptyState || null;
 
   function runInlineAction(label: string, action: () => void) {
+    setConfirmDeleteKey("");
     setActionMessage(null);
     action();
     setActionMessage({ tone: "success", text: `${label}已提交。` });
@@ -121,7 +123,13 @@ export function HistoryPanel({
   async function deleteImage(image: HistoryPanelImage) {
     if (!onDelete || deletingKey) return;
     const key = historyImageKey(image);
+    if (confirmDeleteKey !== key) {
+      setConfirmDeleteKey(key);
+      setActionMessage({ tone: "success", text: "再点一次删除，确认移入回收站。" });
+      return;
+    }
     setDeletingKey(key);
+    setConfirmDeleteKey("");
     setActionMessage(null);
     try {
       await onDelete(image);
@@ -138,6 +146,7 @@ export function HistoryPanel({
     const key = historyImageKey(image);
     const nextFavorite = !image.favorite;
     setFavoritingKey(key);
+    setConfirmDeleteKey("");
     setActionMessage(null);
     try {
       await onToggleFavorite(image);
@@ -173,6 +182,7 @@ export function HistoryPanel({
               key={item}
               onClick={() => {
                 setFilter(item);
+                setConfirmDeleteKey("");
                 setVisibleCount(resultPageSize);
               }}
               type="button"
@@ -195,6 +205,7 @@ export function HistoryPanel({
             className="min-w-0 flex-1 bg-transparent text-white/72 outline-none placeholder:text-white/30"
             onChange={(event) => {
               setQuery(event.target.value);
+              setConfirmDeleteKey("");
               setVisibleCount(resultPageSize);
             }}
             placeholder="搜索模型、来源、质检、Prompt"
@@ -206,6 +217,7 @@ export function HistoryPanel({
               className="flex size-5 shrink-0 items-center justify-center rounded-full text-white/42 transition hover:bg-white/10 hover:text-white/72"
               onClick={() => {
                 setQuery("");
+                setConfirmDeleteKey("");
                 setVisibleCount(resultPageSize);
               }}
               type="button"
@@ -235,6 +247,7 @@ export function HistoryPanel({
               onClick={() => {
                 setFilter("全部");
                 setQuery("");
+                setConfirmDeleteKey("");
               }}
               type="button"
             >
@@ -330,14 +343,14 @@ export function HistoryPanel({
                 </button>
                 {onDelete ? (
                   <button
-                    aria-label="删除图片"
-                    className="apple-button flex h-7 items-center justify-center text-[#ffb4a8] disabled:opacity-45"
+                    aria-label={confirmDeleteKey === historyImageKey(image) ? "确认删除图片" : "删除图片"}
+                    className={`apple-button flex h-7 items-center justify-center disabled:opacity-45 ${confirmDeleteKey === historyImageKey(image) ? "bg-[#ff6b5f]/18 text-[#ffd0c9]" : "text-[#ffb4a8]"}`}
                     disabled={Boolean(deletingKey)}
                     onClick={(event) => {
                       event.stopPropagation();
                       void deleteImage(image);
                     }}
-                    title="删除图片"
+                    title={confirmDeleteKey === historyImageKey(image) ? "再次点击确认删除" : "删除图片"}
                     type="button"
                   >
                     {deletingKey === historyImageKey(image) ? <X className="size-3 animate-pulse" /> : <Trash2 className="size-3" />}
