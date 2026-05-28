@@ -184,12 +184,7 @@ export async function POST(request: Request) {
       const settledResults = await Promise.allSettled(requests);
       const failed = settledResults.find((result) => result.status === "rejected");
       if (failed?.status === "rejected") firstRequestError ||= failed.reason;
-      resultItems = [
-        ...resultItems,
-        ...settledResults.flatMap((result, index) =>
-          result.status === "fulfilled" ? (result.value.data ?? []).map((item) => ({ ...item, prompt: remainingPrompts[index] || prompts[0] })) : [],
-        ),
-      ].slice(0, targetCount);
+      appendGeneratedResultItems(resultItems, settledResults, remainingPrompts, prompts[0], targetCount);
     }
 
     if (!resultItems.length) {
@@ -326,8 +321,9 @@ export async function POST(request: Request) {
         return image;
       }),
     );
-    let images = settledImages.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
-    const fillErrors: unknown[] = settledImages.flatMap((result) => result.status === "rejected" ? [result.reason] : []);
+    const settledImageResults = collectSettledImages(settledImages);
+    let images = settledImageResults.images;
+    const fillErrors = settledImageResults.errors;
     for (let attempt = 1; images.length < targetCount && attempt <= targetCount * 2; attempt += 1) {
       const variantIndex = images.length;
       const fillPrompt = buildMissingTextVariantRetryPrompt(prompts[variantIndex] || prompts[0], attempt, targetCount, outputRatioLabel, outputSize);
@@ -994,6 +990,36 @@ function parseDesignPlanField(value: FormDataEntryValue | null): DesignPlan | un
 function parseTextModeField(value: FormDataEntryValue | null): DesignRequest["textMode"] {
   if (typeof value !== "string") return undefined;
   return value === "background_only" || value === "ai_text_preview" || value === "real_text_overlay" ? value : undefined;
+}
+
+function appendGeneratedResultItems(
+  resultItems: Array<{ b64_json?: string | null; url?: string | null; prompt: string }>,
+  settledResults: PromiseSettledResult<{ data?: Array<{ b64_json?: string | null; url?: string | null }> | null }>[],
+  prompts: string[],
+  fallbackPrompt: string,
+  targetCount: number,
+) {
+  for (let index = 0; index < settledResults.length && resultItems.length < targetCount; index += 1) {
+    const result = settledResults[index];
+    if (result.status !== "fulfilled") continue;
+    for (const item of result.value.data ?? []) {
+      resultItems.push({ ...item, prompt: prompts[index] || fallbackPrompt });
+      if (resultItems.length >= targetCount) break;
+    }
+  }
+}
+
+function collectSettledImages<T>(settledImages: PromiseSettledResult<T>[]) {
+  const images: T[] = [];
+  const errors: unknown[] = [];
+  for (const result of settledImages) {
+    if (result.status === "fulfilled") {
+      images.push(result.value);
+    } else {
+      errors.push(result.reason);
+    }
+  }
+  return { images, errors };
 }
 
 function parseReferenceManifest(value: FormDataEntryValue | null): TextReferenceImage[] {

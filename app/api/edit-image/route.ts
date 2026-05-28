@@ -285,9 +285,7 @@ export async function POST(request: Request) {
     };
     const requests = promptVariants.map(createEditRequest);
     const settledResults = await Promise.allSettled(requests);
-    const resultItems: Array<{ b64_json?: string | null; url?: string | null; prompt: string }> = settledResults.flatMap((result) =>
-      result.status === "fulfilled" ? result.value.items.map((item) => ({ ...item, prompt: result.value.prompt })) : [],
-    );
+    const resultItems = collectEditResultItems(settledResults);
 
     if (!resultItems.length) {
       const failed = settledResults.find((result) => result.status === "rejected");
@@ -422,8 +420,9 @@ export async function POST(request: Request) {
         return image;
       }),
     );
-    let images = processedSettled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
-    const fillErrors: unknown[] = processedSettled.flatMap((result) => result.status === "rejected" ? [result.reason] : []);
+    const settledImageResults = collectSettledImages(processedSettled);
+    let images = settledImageResults.images;
+    const fillErrors = settledImageResults.errors;
     for (let attempt = 1; images.length < targetCount && attempt <= targetCount * 2; attempt += 1) {
       const variantIndex = images.length;
       const basePrompt = promptVariants[variantIndex] || promptVariants[0] || prompt;
@@ -943,4 +942,30 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
         reject(error);
       });
   });
+}
+
+function collectEditResultItems(
+  settledResults: PromiseSettledResult<{ items: Array<{ b64_json?: string | null; url?: string | null }>; prompt: string }>[],
+) {
+  const resultItems: Array<{ b64_json?: string | null; url?: string | null; prompt: string }> = [];
+  for (const result of settledResults) {
+    if (result.status !== "fulfilled") continue;
+    for (const item of result.value.items) {
+      resultItems.push({ ...item, prompt: result.value.prompt });
+    }
+  }
+  return resultItems;
+}
+
+function collectSettledImages<T>(settledImages: PromiseSettledResult<T>[]) {
+  const images: T[] = [];
+  const errors: unknown[] = [];
+  for (const result of settledImages) {
+    if (result.status === "fulfilled") {
+      images.push(result.value);
+    } else {
+      errors.push(result.reason);
+    }
+  }
+  return { images, errors };
 }

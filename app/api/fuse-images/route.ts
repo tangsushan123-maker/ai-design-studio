@@ -125,9 +125,7 @@ export async function POST(request: Request) {
     };
     const requests = promptVariants.map(createFuseRequest);
     const settledResults = await Promise.allSettled(requests);
-    const resultItems: Array<{ b64_json?: string | null; url?: string | null; prompt: string }> = settledResults.flatMap((result) =>
-      result.status === "fulfilled" ? result.value.items.map((item) => ({ ...item, prompt: result.value.prompt })) : [],
-    );
+    const resultItems = collectFuseResultItems(settledResults);
 
     if (!resultItems.length) {
       const failed = settledResults.find((result) => result.status === "rejected");
@@ -226,7 +224,7 @@ export async function POST(request: Request) {
         return image;
       }),
     );
-    const images = processedSettled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+    const images = collectFulfilledImages(processedSettled);
     if (!images.length) {
       const failed = processedSettled.find((result) => result.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
@@ -390,6 +388,27 @@ function fuseRiskValue(qualityCheck: Awaited<ReturnType<typeof inspectImageQuali
     (qualityCheck.ratioMatched === false ? 1 : 0) +
     (qualityCheck.suspectedBlurredPadding ? 1 : 0) +
     maxEdgeRatio;
+}
+
+function collectFuseResultItems(
+  settledResults: PromiseSettledResult<{ items: Array<{ b64_json?: string | null; url?: string | null }>; prompt: string }>[],
+) {
+  const resultItems: Array<{ b64_json?: string | null; url?: string | null; prompt: string }> = [];
+  for (const result of settledResults) {
+    if (result.status !== "fulfilled") continue;
+    for (const item of result.value.items) {
+      resultItems.push({ ...item, prompt: result.value.prompt });
+    }
+  }
+  return resultItems;
+}
+
+function collectFulfilledImages<T>(settledImages: PromiseSettledResult<T>[]) {
+  const images: T[] = [];
+  for (const result of settledImages) {
+    if (result.status === "fulfilled") images.push(result.value);
+  }
+  return images;
 }
 
 async function readImageInput(formData: FormData, fileKey: string, urlKey: string, fallbackName: string) {

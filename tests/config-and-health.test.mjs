@@ -697,6 +697,22 @@ describe("Generated image serving", () => {
     assert.equal(combinedRouteSource.includes("fileSizeBytes: saved.fileSizeBytes"), true);
   });
 
+  it("collects settled image variants without flatMap churn", async () => {
+    const [generateSource, editSource, fuseSource] = await Promise.all([
+      readFile(new URL("../app/api/generate-image/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/edit-image/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/fuse-images/route.ts", import.meta.url), "utf8"),
+    ]);
+    const combinedRouteSource = `${generateSource}\n${editSource}\n${fuseSource}`;
+
+    assert.equal(generateSource.includes("appendGeneratedResultItems"), true);
+    assert.equal(editSource.includes("collectEditResultItems"), true);
+    assert.equal(fuseSource.includes("collectFuseResultItems"), true);
+    assert.equal(combinedRouteSource.includes("settledResults.flatMap"), false);
+    assert.equal(combinedRouteSource.includes("processedSettled.flatMap"), false);
+    assert.equal(combinedRouteSource.includes("settledImages.flatMap"), false);
+  });
+
   it("checks generated image restore conflicts without reading image files", async () => {
     const generatedImagesRouteSource = await readFile(new URL("../app/api/generated-images/route.ts", import.meta.url), "utf8");
 
