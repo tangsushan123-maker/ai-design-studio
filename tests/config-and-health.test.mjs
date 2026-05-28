@@ -1712,6 +1712,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(ledgerSource.includes("taskRunResponseMeta"), true);
     assert.equal(ledgerSource.includes("已忽略后到的失败/取消记录"), true);
     assert.equal(ledgerSource.includes("sanitizeTaskRunOutputs"), true);
+    assert.equal(ledgerSource.includes("requestIdSetFromList"), true);
+    assert.equal(ledgerSource.includes("new Set((requestIds || []).map"), false);
+    assert.equal(ledgerSource.includes("new Set(requestIds.map"), false);
     assert.equal(ledgerSource.includes("resultGroupId?: string"), true);
     assert.equal(ledgerSource.includes("sourceTaskId?: string"), true);
     assert.equal(ledgerSource.includes("projectId?: string"), true);

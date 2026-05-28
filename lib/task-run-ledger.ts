@@ -82,6 +82,15 @@ const taskRunStorePath = path.join(process.cwd(), "task-runs.local.json");
 const taskRunLimit = 300;
 let taskRunStoreQueue: Promise<unknown> = Promise.resolve();
 
+function requestIdSetFromList(requestIds: string[] = []) {
+  const idSet = new Set<string>();
+  for (const id of requestIds) {
+    const normalized = id.trim();
+    if (normalized) idSet.add(normalized);
+  }
+  return idSet;
+}
+
 export function taskTraceFromFormData(formData: FormData, operation: string, route?: string): TaskRunTrace {
   return normalizeTaskTrace({
     requestId: stringField(formData.get("requestId")),
@@ -245,7 +254,7 @@ export function taskRunResponseMeta(
 
 export async function listTaskRuns(requestIds?: string[], options: { projectId?: string } = {}) {
   const store = await readTaskRunStore();
-  const idSet = new Set((requestIds || []).map((id) => id.trim()).filter(Boolean));
+  const idSet = requestIdSetFromList(requestIds);
   return store.runs.filter((run) => {
     if (idSet.size && !idSet.has(run.requestId)) return false;
     if (options.projectId && run.projectId !== options.projectId) return false;
@@ -254,7 +263,7 @@ export async function listTaskRuns(requestIds?: string[], options: { projectId?:
 }
 
 export async function removeTaskRuns(requestIds: string[], options: { projectId?: string } = {}) {
-  const idSet = new Set(requestIds.map((id) => id.trim()).filter(Boolean));
+  const idSet = requestIdSetFromList(requestIds);
   if (!idSet.size) return 0;
   return mutateTaskRunStore((store) => {
     let removed = 0;
