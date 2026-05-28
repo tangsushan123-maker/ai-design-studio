@@ -8,6 +8,9 @@ import { readJsonWithBackup } from "./local-json-store";
 
 const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const generatedTrashDirName = "_trash";
+const historyMetadataReadConcurrency = 48;
+const historyFileStatConcurrency = 48;
+const historyImageBuildConcurrency = 8;
 
 export type GeneratedHistoryOptions = {
   limit?: number;
@@ -26,12 +29,14 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
 
   try {
     const files = await listGeneratedImageFiles(dir, options.trashOnly ? generatedTrashDirName : "", { includeTrash: Boolean(options.trashOnly) });
-    const fileEntries = await Promise.all(
-      files.map(async (fileName) => {
+    const fileEntries = await mapWithConcurrency(
+      files,
+      historyMetadataReadConcurrency,
+      async (fileName) => {
         const fullPath = path.join(dir, fileName);
         const savedMetadata = await readSavedMetadata(dir, fileName);
         return { fileName, fullPath, savedMetadata, sortTime: historyMetadataSortTime(savedMetadata) };
-      }),
+      },
     );
     const requestIdSet = new Set((options.requestIds || []).map((item) => item.trim()).filter(Boolean));
     const taskIdSet = new Set([...requestIdSet].map((item) => item.replace(/^req_/, "task_")));
@@ -51,17 +56,19 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
         (resultGroupId && taskIdSet.has(resultGroupId)),
       );
     });
-    const sortableEntries = await Promise.all(scopedEntries.map(async (entry) => {
+    const sortableEntries = await mapWithConcurrency(scopedEntries, historyFileStatConcurrency, async (entry) => {
       if (typeof entry.sortTime === "number") return { ...entry, sortTime: entry.sortTime };
       const fileStat = await stat(entry.fullPath);
       return { ...entry, fileStat, sortTime: fileStat.mtime.getTime() };
-    }));
+    });
     sortableEntries.sort((a, b) => b.sortTime - a.sortTime);
     const total = sortableEntries.length;
     const pagedEntries = sortableEntries.slice(offset, offset + limit);
 
-    const images = await Promise.all(
-      pagedEntries.map(async (entry) => {
+    const images = await mapWithConcurrency(
+      pagedEntries,
+      historyImageBuildConcurrency,
+      async (entry) => {
         const { fileName, fullPath, savedMetadata } = entry;
         const cachedFileStat = "fileStat" in entry ? entry.fileStat : undefined;
         const fileStat = cachedFileStat || await stat(fullPath);
@@ -138,7 +145,7 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
           qualityCheck,
           savedPath: fullPath,
         };
-      }),
+      },
     );
 
     images.sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
@@ -163,6 +170,24 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
 
 async function readSavedMetadata(dir: string, fileName: string) {
   return readJsonWithBackup<Record<string, unknown>>(path.join(dir, `${fileName}.json`), {});
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }));
+  return results;
 }
 
 function historyMetadataSortTime(metadata: Record<string, unknown>) {
