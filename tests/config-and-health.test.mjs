@@ -1107,6 +1107,8 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("imageModel: String(formData.get(\"imageModel\")"), true);
     assert.equal(workbenchSource.includes("appendImageModel(formData"), true);
     assert.equal(workbenchSource.includes("图片模型"), true);
+    assert.equal(workbenchSource.includes('findBrandAssets(assets, "logo").slice(0, 1)'), true);
+    assert.equal(workbenchSource.includes('findBrandAssets(assets, "ip").slice(0, 1)'), true);
     assert.equal(workbenchSource.includes('if (index === 0) return "composition";'), true);
     assert.equal(workbenchSource.includes("活动主题、核心文案、版式骨架"), true);
     assert.equal(creativeBriefRouteSource.includes("getAnalysisModel"), true);

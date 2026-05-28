@@ -9009,9 +9009,9 @@ function findBrandAssets(assets: ImageAsset[], kind: "logo" | "ip" | "qrcode" | 
 function resolveBrandReferenceAssets(profile: ProjectProfile, assets: ImageAsset[]) {
   const usage = normalizeBrandAssetUsage(profile.brandAssetUsage);
   const selected = [
-    ...(usage.useLogo ? findBrandAssets(assets, "logo") : []),
-    ...(usage.useIpImage ? findBrandAssets(assets, "ip") : []),
-    ...(usage.useQrCode ? findBrandAssets(assets, "qrcode") : []),
+    ...(usage.useLogo ? findBrandAssets(assets, "logo").slice(0, 1) : []),
+    ...(usage.useIpImage ? findBrandAssets(assets, "ip").slice(0, 1) : []),
+    ...(usage.useQrCode ? findBrandAssets(assets, "qrcode").slice(0, 1) : []),
   ];
   const seen = new Set<string>();
   return selected.filter((asset) => {
