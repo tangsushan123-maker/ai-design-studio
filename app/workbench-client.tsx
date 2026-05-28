@@ -385,6 +385,15 @@ function countProjectUserFacingImages(images: ImageAsset[], projectId: string) {
   return count;
 }
 
+function countTextReferenceEdges(edges: FlowEdge[], targetNodeId: string | null | undefined) {
+  if (!targetNodeId) return 0;
+  let count = 0;
+  for (const edge of edges) {
+    if (edge.target === targetNodeId && isTextReferenceTargetHandle(edge.targetHandle)) count += 1;
+  }
+  return count;
+}
+
 export default function WorkbenchClient({
   initialImages = [],
   initialHistoryHasMore = false,
@@ -833,7 +842,7 @@ function NodeWorkflowWorkbench({
     (connection: Connection) => {
       const targetNode = nodes.find((node) => node.id === connection.target);
       if (targetNode?.data.kind === "text_to_image" && isTextReferenceTargetHandle(connection.targetHandle)) {
-        const referenceCount = edges.filter((edge) => edge.target === connection.target && isTextReferenceTargetHandle(edge.targetHandle)).length;
+        const referenceCount = countTextReferenceEdges(edges, connection.target);
         const alreadyConnected = edges.some((edge) => edge.source === connection.source && edge.target === connection.target && isTextReferenceTargetHandle(edge.targetHandle));
         if (alreadyConnected) {
           setStatus("这张图片已经连接到当前文生图节点。");
@@ -2024,7 +2033,7 @@ function NodeWorkflowWorkbench({
     void createImageNodeFromFile(file, { x: selectedTextNode.position.x - 390, y: selectedTextNode.position.y + 24 }, "upload")
       .then((source) => {
         if (!source) return;
-        const referenceCount = edges.filter((edge) => edge.target === selectedTextNode.id && isTextReferenceTargetHandle(edge.targetHandle)).length;
+        const referenceCount = countTextReferenceEdges(edges, selectedTextNode.id);
         if (referenceCount >= maxTextReferenceImages) {
           setStatus(`文生图图片参考最多连接 ${maxTextReferenceImages} 张。`);
           return;

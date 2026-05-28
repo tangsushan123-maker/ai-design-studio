@@ -1365,6 +1365,9 @@ describe("Text-to-image references", () => {
     assert.equal(workbenchSource.includes('findBrandAssets(assets, "ip").slice(0, 1)'), true);
     assert.equal(workbenchSource.includes('if (index === 0) return "composition";'), true);
     assert.equal(workbenchSource.includes("活动主题、核心文案、版式骨架"), true);
+    assert.equal(workbenchSource.includes("function countTextReferenceEdges"), true);
+    assert.equal(workbenchSource.includes("edges.filter((edge) => edge.target === connection.target && isTextReferenceTargetHandle(edge.targetHandle)).length"), false);
+    assert.equal(workbenchSource.includes("edges.filter((edge) => edge.target === selectedTextNode.id && isTextReferenceTargetHandle(edge.targetHandle)).length"), false);
     assert.equal(creativeBriefRouteSource.includes("getAnalysisModel"), true);
     assert.equal(creativeBriefRouteSource.includes("getImageModel"), false);
     assert.equal(routeSource.includes("buildDesignPlanPrompt"), true);
