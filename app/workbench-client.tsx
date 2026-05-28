@@ -280,6 +280,7 @@ import {
   sanitizeProjectTasks,
   serverTaskRunOutputs,
   serverTaskRunState,
+  strategyMetaFromParams,
   taskBelongsToProject,
   taskCandidateImagesFromNode,
   taskHasResultImages,
@@ -8064,21 +8065,6 @@ function missingBrandAssetWarning(profile: ProjectProfile, brandAssets: ImageAss
   return missing.length
     ? `当前项目还没有完整品牌资产，建议补充${missing.join("、")}，生成结果会更准确。缺少品牌素材时，生成结果只能作为灵感初稿，不能当正式交付稿。`
     : "";
-}
-
-function strategyMetaFromParams(params: Record<string, unknown>): Partial<TaskRecord> {
-  const meta = params.strategyMeta as Partial<TaskRecord> | undefined;
-  if (!meta || typeof meta !== "object") return {};
-  return {
-    strategyPackageId: stringParam(meta.strategyPackageId),
-    sourceStrategyTitle: stringParam(meta.sourceStrategyTitle),
-    materialPlanItemId: stringParam(meta.materialPlanItemId),
-    materialType: stringParam(meta.materialType),
-    targetSize: stringParam(meta.targetSize),
-    materialCopy: stringParam(meta.materialCopy),
-    materialScene: stringParam(meta.materialScene),
-    prompt: stringParam(meta.prompt),
-  };
 }
 
 function buildProfileProtectionContext(

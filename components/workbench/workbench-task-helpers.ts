@@ -1,6 +1,7 @@
 import { imageKey, removedFeatureTextMarkers } from "@/components/workbench/workbench-image-collection";
 import { stripImageFile } from "@/components/workbench/workbench-image-lifecycle";
 import { isDeferredQueuedTask } from "@/components/workbench/workbench-task-state";
+import { stringParam } from "@/components/workbench/workbench-utils";
 import type {
   FlowNode,
   ImageAsset,
@@ -128,6 +129,21 @@ export function buildTaskRecoveredCompletionPatch(
     progress: 100,
     error: "",
     progressLabel: "已核验：结果已在画布，任务记录已自动修正",
+  };
+}
+
+export function strategyMetaFromParams(params: Record<string, unknown>): Partial<TaskRecord> {
+  const meta = params.strategyMeta as Partial<TaskRecord> | undefined;
+  if (!meta || typeof meta !== "object") return {};
+  return {
+    strategyPackageId: stringParam(meta.strategyPackageId),
+    sourceStrategyTitle: stringParam(meta.sourceStrategyTitle),
+    materialPlanItemId: stringParam(meta.materialPlanItemId),
+    materialType: stringParam(meta.materialType),
+    targetSize: stringParam(meta.targetSize),
+    materialCopy: stringParam(meta.materialCopy),
+    materialScene: stringParam(meta.materialScene),
+    prompt: stringParam(meta.prompt),
   };
 }
 
