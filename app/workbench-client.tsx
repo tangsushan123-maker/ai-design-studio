@@ -80,7 +80,7 @@ import {
   uniqueImageAssets,
   uniqueImagesByKey,
 } from "@/components/workbench/workbench-image-collection";
-import { imageRatioStyle, largePreviewFrameStyle, pngLayerDisplayName, pngLayerPreviewImage, zoomedPreviewFrameStyle } from "@/components/workbench/workbench-image-display";
+import { largePreviewFrameStyle, pngLayerDisplayName, pngLayerPreviewImage, zoomedPreviewFrameStyle } from "@/components/workbench/workbench-image-display";
 import { findDataImagePath, imageDeletionProtection, imageForComparison, stripImageFile } from "@/components/workbench/workbench-image-lifecycle";
 import { compactThumbStyle, imageNodePreviewMetrics, shouldShowCheckerboard } from "@/components/workbench/workbench-image-metrics";
 import {
@@ -142,6 +142,7 @@ import { LightboxDeliveryPanel, type LightboxEditTool } from "@/components/workb
 import { LightboxEditPanels } from "@/components/workbench/lightbox-edit-panels";
 import { LightboxInfoPanel } from "@/components/workbench/lightbox-info-panel";
 import { LightboxPreviewToolbar } from "@/components/workbench/lightbox-preview-toolbar";
+import { LightboxVersionPanel } from "@/components/workbench/lightbox-version-panel";
 import { ImageManagerPanel } from "@/components/workbench/image-manager-panel";
 import { NodeResultsPanel } from "@/components/workbench/node-results-panel";
 import { AssetLibraryPanel } from "@/components/workbench/asset-library-panel";
@@ -168,7 +169,6 @@ import {
 } from "@/components/workbench/result-preview-tools";
 import { TaskCenter } from "@/components/workbench/task-center";
 import { TextReferenceInspector } from "@/components/workbench/text-reference-inspector";
-import { VersionStrip } from "@/components/workbench/version-strip";
 import {
   defaultParamsByKind,
   emptyProjectCreationDraft,
@@ -6793,50 +6793,12 @@ function ImageLightbox({
                 />
               ) : null}
 
-              {branchLatestVariants.length > 1 ? (
-                <section className="apple-surface-section p-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="apple-section-title">同任务方案</div>
-                    <div className="apple-caption">{branchLatestVariants.length} 张</div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {branchLatestVariants.map((variantImage, index) => (
-                      <button
-                        className={`overflow-hidden rounded-[16px] border text-left transition ${imageBranchId(variantImage) === imageBranchId(image) ? "border-[#8fa7ff]/55 bg-[#8fa7ff]/12" : "border-white/10 bg-white/[0.04] hover:bg-white/[0.07]"}`}
-                        key={imageKey(variantImage)}
-                        onClick={() => onOpenVersion(variantImage)}
-                        type="button"
-                      >
-	                        <ImageFrame alt={variantImage.fileName || variantImage.id || `方案 ${index + 1}`} className="rounded-none border-0" fit="contain" image={variantImage} preserveRatio={false} variant="thumbnail" style={{ height: 68 }} />
-                        <div className="p-2">
-                          <div className="truncate text-[11px] font-semibold text-white/80">{variantImage.branchLabel || `方案 ${variantImage.variant || index + 1}`}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-
-              {branchVersions.length > 1 ? (
-                <section className="apple-surface-section p-3">
-                  <VersionStrip
-                    accentClassName="border-[#74e3c5]/48 bg-[#74e3c5]/10"
-                    items={branchVersions.map((version, index) => ({
-                      id: imageKey(version),
-                      image: version,
-                      ratioStyle: imageRatioStyle(version),
-                      selected: imageKey(version) === imageKey(image),
-                      subtitle: formatGeneratedAt(version.generatedAt),
-                      title: `版本 ${index + 1}`,
-                    }))}
-                    label="当前方案版本"
-                    onSelect={(itemId) => {
-                      const target = branchVersions.find((version) => imageKey(version) === itemId);
-                      if (target) onOpenVersion(target);
-                    }}
-                  />
-                </section>
-              ) : null}
+              <LightboxVersionPanel
+                currentImage={image}
+                latestVariants={branchLatestVariants}
+                versions={branchVersions}
+                onOpenVersion={onOpenVersion}
+              />
 
               {sidebarTab === "actions" ? (
                 <>
