@@ -605,6 +605,19 @@ describe("Image size requests", () => {
   });
 });
 
+describe("Generated image serving", () => {
+  it("uses conditional cache headers to avoid rereading unchanged images", async () => {
+    const routeSource = await readFile(new URL("../app/generated/[...path]/route.ts", import.meta.url), "utf8");
+
+    assert.equal(routeSource.includes("generatedFileEtag"), true);
+    assert.equal(routeSource.includes('request.headers.get("if-none-match")'), true);
+    assert.equal(routeSource.includes('request.headers.get("if-modified-since")'), true);
+    assert.equal(routeSource.includes("status: 304"), true);
+    assert.equal(routeSource.includes('"Content-Length": String(fileStat.size)'), true);
+    assert.equal(routeSource.includes('"Last-Modified": lastModified'), true);
+  });
+});
+
 describe("Remote image import security", () => {
   it("blocks local and private image URLs before server-side fetches", async () => {
     const routeSource = await readFile(new URL("../app/api/import-image/route.ts", import.meta.url), "utf8");

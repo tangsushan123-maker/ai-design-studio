@@ -13,7 +13,7 @@ const contentTypes: Record<string, string> = {
   ".json": "application/json; charset=utf-8",
 };
 
-export async function GET(_request: Request, context: { params: Promise<{ path?: string[] }> }) {
+export async function GET(request: Request, context: { params: Promise<{ path?: string[] }> }) {
   const params = await context.params;
   const segments = params.path || [];
   if (!segments.length || segments.some((segment) => segment === ".." || segment.includes("/") || segment.includes("\\"))) {
@@ -29,15 +29,37 @@ export async function GET(_request: Request, context: { params: Promise<{ path?:
   try {
     const fileStat = await stat(filePath);
     if (!fileStat.isFile()) return new NextResponse("Not found", { status: 404 });
-    const body = await readFile(filePath);
     const ext = path.extname(filePath).toLowerCase();
+    const etag = generatedFileEtag(fileStat);
+    const lastModified = fileStat.mtime.toUTCString();
+    const headers = {
+      "Cache-Control": "public, max-age=604800",
+      "Content-Length": String(fileStat.size),
+      "Content-Type": contentTypes[ext] || "application/octet-stream",
+      "ETag": etag,
+      "Last-Modified": lastModified,
+    };
+    if (requestMatchesGeneratedFile(request, etag, Number(fileStat.mtimeMs))) {
+      return new NextResponse(null, { status: 304, headers });
+    }
+    const body = await readFile(filePath);
     return new NextResponse(body, {
-      headers: {
-        "Content-Type": contentTypes[ext] || "application/octet-stream",
-        "Cache-Control": "public, max-age=604800",
-      },
+      headers,
     });
   } catch {
     return new NextResponse("Not found", { status: 404 });
   }
+}
+
+function generatedFileEtag(fileStat: { size: number | bigint; mtimeMs: number | bigint }) {
+  return `"${Number(fileStat.size)}-${Math.trunc(Number(fileStat.mtimeMs))}"`;
+}
+
+function requestMatchesGeneratedFile(request: Request, etag: string, mtimeMs: number) {
+  const ifNoneMatch = request.headers.get("if-none-match");
+  if (ifNoneMatch?.split(",").map((item) => item.trim()).includes(etag)) return true;
+  const ifModifiedSince = request.headers.get("if-modified-since");
+  if (!ifModifiedSince) return false;
+  const modifiedSinceTime = new Date(ifModifiedSince).getTime();
+  return Number.isFinite(modifiedSinceTime) && modifiedSinceTime >= Math.trunc(mtimeMs / 1000) * 1000;
 }
