@@ -83,10 +83,13 @@ export async function POST(request: Request) {
     const responsePrompt = promptVariants.join("\n\n---\n\n");
 
     const openai = getOpenAI();
+    const brandFilesPromise = Promise.all(brandReferenceImages.map((item, index) => (
+      toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType })
+    )));
     const createFuseRequestWithSize = async (requestPrompt: string, requestSize: string) => {
       const imageA = await toFile(first.buffer, first.fileName, { type: first.mimeType });
       const imageB = await toFile(preparedSceneCanvas || second.buffer, preparedSceneCanvas ? "target-ratio-scene.png" : second.fileName, { type: preparedSceneCanvas ? "image/png" : second.mimeType });
-      const brandFiles = await Promise.all(brandReferenceImages.map((item, index) => toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType })));
+      const brandFiles = await brandFilesPromise;
       const result = await runQueuedImageModelRequestWithRetry(
         { label: `AI合成/${imageModel}` },
         () => openai.images.edit({

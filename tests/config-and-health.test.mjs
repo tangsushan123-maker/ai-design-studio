@@ -1147,6 +1147,9 @@ describe("Image-to-image creative redesign", () => {
     assert.equal(routeSource.includes("sanitizeLegacyImageToImagePrompt"), true);
     assert.equal(routeSource.includes("wantsMultipleImageOutputs(promptText)"), true);
     assert.equal(routeSource.includes("resultItems.slice(0, targetCount)"), true);
+    assert.equal(routeSource.includes("const brandFilesPromise = Promise.all"), true);
+    assert.equal(routeSource.includes("const brandFiles = await brandFilesPromise"), true);
+    assert.equal(routeSource.includes("const brandFiles = await Promise.all(brandReferenceImages.map"), false);
     assert.equal(routeSource.includes("IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST"), true);
     assert.equal(routeSource.includes('fitMode === "pad" ? "pad" : "crop"'), true);
     assert.equal(routeSource.includes("isSmartResize"), true);
@@ -1905,6 +1908,9 @@ describe("AI compositing", () => {
     assert.equal(routeSource.includes('readImageInput(formData, "imageA", "sourceUrlA", "subject-source.png")'), true);
     assert.equal(routeSource.includes('readImageInput(formData, "imageB", "sourceUrlB", "scene-source.png")'), true);
     assert.equal(routeSource.includes('const first = await readImageInput(formData, "imageA"'), false);
+    assert.equal(routeSource.includes("const brandFilesPromise = Promise.all"), true);
+    assert.equal(routeSource.includes("const brandFiles = await brandFilesPromise"), true);
+    assert.equal(routeSource.includes("const brandFiles = await Promise.all(brandReferenceImages.map"), false);
     assert.equal(routeSource.includes("wantsMultipleImageOutputs"), true);
     assert.equal(routeSource.includes("getImageRatio(second.buffer)"), true);
     assert.equal(routeSource.includes('mode: "AI合成"'), true);

@@ -218,10 +218,13 @@ export async function POST(request: Request) {
       creativeEditFallbackSummary ||= summarizeCreativeEditSourceImage(openai, imageBuffer, mimeType, userPrompt);
       return creativeEditFallbackSummary;
     };
+    const brandFilesPromise = Promise.all(brandReferenceImages.map((item, index) => (
+      toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType })
+    )));
     const createEditRequestWithSize = async (requestPrompt: string, requestSize: string) => {
       const editImageBuffer = preparedTargetCanvas?.image ?? imageBuffer;
       const file = await toFile(editImageBuffer, preparedTargetCanvas ? "target-ratio-canvas.png" : fileName, { type: preparedTargetCanvas ? "image/png" : mimeType });
-      const brandFiles = await Promise.all(brandReferenceImages.map((item, index) => toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType })));
+      const brandFiles = await brandFilesPromise;
       const mask = shouldUseAiOutpaint && preparedTargetCanvas ? await toFile(preparedTargetCanvas.mask, "outpaint-mask.png", { type: "image/png" }) : undefined;
       const inputFidelity = (isCreativeImageToImage || isSmartResize) ? "low" : "high";
       const runEditRequest = () => runQueuedImageModelRequestWithRetry(
