@@ -60,7 +60,7 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
 
     const images = await Promise.all(
       pagedEntries.map(async ({ fileName, fullPath, fileStat, savedMetadata }) => {
-        const metadata = await sharp(fullPath).metadata();
+        const metadata = historyImageMetadataFromSaved(savedMetadata) || await sharp(fullPath).metadata();
         const quality = inferQuality(fileName);
         const aspectRatio = inferRatio(fileName, metadata.width, metadata.height);
         const outputSize =
@@ -208,6 +208,18 @@ function numberValue(value: unknown) {
 
 function objectValue(value: unknown) {
   return value && typeof value === "object" ? value : undefined;
+}
+
+function historyImageMetadataFromSaved(savedMetadata: Record<string, unknown>) {
+  const outputSize = objectValue(savedMetadata.outputSize) as { width?: unknown; height?: unknown } | undefined;
+  const width = numberValue(outputSize?.width) || numberValue(savedMetadata.width);
+  const height = numberValue(outputSize?.height) || numberValue(savedMetadata.height);
+  if (!width || !height) return null;
+  return {
+    width,
+    height,
+    format: stringValue(savedMetadata.format),
+  };
 }
 
 function qualityCheckValue(value: unknown): ImageQualityCheck | undefined {

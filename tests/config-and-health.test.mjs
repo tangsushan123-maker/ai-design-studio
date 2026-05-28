@@ -1614,6 +1614,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(generatedImagesRouteSource.includes("restoreGeneratedImage"), true);
     assert.equal(generatedHistorySource.includes("trashOnly?: boolean"), true);
     assert.equal(generatedHistorySource.includes('entry.name === generatedTrashDirName && !options.includeTrash'), true);
+    assert.equal(generatedHistorySource.includes("historyImageMetadataFromSaved(savedMetadata) || await sharp(fullPath).metadata()"), true);
+    assert.equal(generatedHistorySource.includes("numberValue(outputSize?.width) || numberValue(savedMetadata.width)"), true);
     assert.equal(workbenchSource.includes("imageMatchesGeneratedFile"), true);
     assert.equal(workbenchSource.includes("applyHistoryFavoriteState"), true);
     assert.equal(workbenchSource.includes("favorite: nextFavorite"), true);
