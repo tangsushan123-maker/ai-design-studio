@@ -12,6 +12,14 @@ import { imageManagerMatchesSearch, imageManagerSearchText } from "../lib/workbe
 import { imageSourceDetailLines, imageSourceSummary, shortImageTraceId } from "../lib/workbench-image-source.ts";
 import { taskMatchesSearch, taskSearchText } from "../lib/workbench-tasks.ts";
 
+async function readWorkbenchSource() {
+  const [clientSource, configSource] = await Promise.all([
+    readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/workbench/workbench-config.ts", import.meta.url), "utf8"),
+  ]);
+  return `${clientSource}\n${configSource}`;
+}
+
 describe("OpenAI defaults", () => {
   it("keeps the official provider aligned with shared defaults", () => {
     const officialProvider = providerPresets.find((provider) => provider.id === "openai");
@@ -633,7 +641,7 @@ describe("Quality enhance mode", () => {
   it("routes 4K export through AI quality enhancement by default", async () => {
     const [aiRouteSource, workbenchSource, resultPreviewSource, localRouteExists] = await Promise.all([
       readFile(new URL("../app/api/redraw-upscale-image/route.ts", import.meta.url), "utf8"),
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
       readFile(new URL("../components/workbench/result-preview-tools.tsx", import.meta.url), "utf8"),
       access(new URL("../app/api/upscale-image/route.ts", import.meta.url)).then(() => true, () => false),
     ]);
@@ -680,7 +688,7 @@ describe("Quality enhance mode", () => {
     const [qualitySource, routeSource, workbenchSource] = await Promise.all([
       readFile(new URL("../lib/image-quality.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/redraw-upscale-image/route.ts", import.meta.url), "utf8"),
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
     ]);
 
     assert.equal(qualitySource.includes("ImageDeliverabilityStatus"), true);
@@ -704,7 +712,7 @@ describe("Controlled local mask editing", () => {
   it("keeps local edits mask-bound with a simplified generative-fill UI", async () => {
     const [routeSource, workbenchSource, maskEditorSource, maskEditingSource] = await Promise.all([
       readFile(new URL("../app/api/mask-edit-image/route.ts", import.meta.url), "utf8"),
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
       readFile(new URL("../components/workbench/mask-editor-modal.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/mask-editing.ts", import.meta.url), "utf8"),
     ]);
@@ -806,7 +814,7 @@ describe("Controlled local mask editing", () => {
 describe("Removed image workflows", () => {
   it("removes transparent cutout and poster layer extraction from routes and UI", async () => {
     const [workbenchSource, historySource, taskCenterSource] = await Promise.all([
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
       readFile(new URL("../components/workbench/history-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
     ]);
@@ -835,7 +843,7 @@ describe("PNG three-layer export", () => {
   it("exports same-canvas transparent PNG layers with in-preview single-layer downloads", async () => {
     const [routeSource, workbenchSource, resultPreviewSource, ledgerSource] = await Promise.all([
       readFile(new URL("../app/api/export-png-layers/route.ts", import.meta.url), "utf8"),
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
       readFile(new URL("../components/workbench/result-preview-tools.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/task-run-ledger.ts", import.meta.url), "utf8"),
     ]);
@@ -927,7 +935,7 @@ describe("Image-to-image creative redesign", () => {
     const [promptSource, routeSource, workbenchSource, imageUtilsSource] = await Promise.all([
       readFile(new URL("../lib/prompt.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/edit-image/route.ts", import.meta.url), "utf8"),
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
       readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8"),
     ]);
 
@@ -1017,7 +1025,7 @@ describe("Text-to-image references", () => {
     const [promptSource, routeSource, workbenchSource, optionsSource, creativeBriefSource, creativeBriefRouteSource, queueSource, deliverySource, designPlanSource] = await Promise.all([
       readFile(new URL("../lib/prompt.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/generate-image/route.ts", import.meta.url), "utf8"),
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
       readFile(new URL("../lib/design-options.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/creative-brief.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/creative-brief/route.ts", import.meta.url), "utf8"),
@@ -1193,7 +1201,7 @@ describe("Text-to-image references", () => {
   it("keeps plain creative prompts gated away from project brand/contact context", async () => {
     const [promptSource, workbenchSource] = await Promise.all([
       readFile(new URL("../lib/prompt.ts", import.meta.url), "utf8"),
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
     ]);
 
     assert.equal(promptSource.includes("function wantsProjectOutputContext"), true);
@@ -1222,7 +1230,7 @@ describe("Text-to-image references", () => {
 describe("Workflow canvas performance", () => {
   it("degrades node, edge, and portal-heavy UI during canvas interactions", async () => {
     const [workbenchSource, workbenchTypesSource, globalsSource] = await Promise.all([
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
       readFile(new URL("../components/workbench/workbench-types.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     ]);
@@ -1285,7 +1293,7 @@ describe("Workflow canvas performance", () => {
 describe("Project stability and task tracing", () => {
   it("keeps local snapshots and explicit task run traces", async () => {
     const [workbenchSource, workbenchTypesSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, projectCreationSource, assetLibraryPanelSource, imageUtilsSource, imageQualitySource, imageResourceRouteSource, projectRouteSource, editRouteSource, redrawRouteSource, imageSourceSource, materialLibrariesRouteSource] = await Promise.all([
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
       readFile(new URL("../components/workbench/workbench-types.ts", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/task-run-ledger.ts", import.meta.url), "utf8"),
@@ -1660,7 +1668,7 @@ describe("AI compositing", () => {
     const [promptSource, routeSource, workbenchSource] = await Promise.all([
       readFile(new URL("../lib/prompt.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/fuse-images/route.ts", import.meta.url), "utf8"),
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
     ]);
 
     assert.equal(promptSource.includes("任务类型：AI合成。不是简单融合两张图，而是把图1的主体自然合成到图2的场景里。"), true);
@@ -1697,7 +1705,7 @@ describe("Reference remake", () => {
   it("adds a standalone reference remake node and API route", async () => {
     const [routeSource, workbenchSource] = await Promise.all([
       readFile(new URL("../app/api/reference-remake/route.ts", import.meta.url), "utf8"),
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
     ]);
 
     assert.equal(workbenchSource.includes('"reference_remake"'), true);
@@ -1773,7 +1781,7 @@ describe("Design optimization", () => {
   it("adds a standalone design optimization node and modular industry-aware API route", async () => {
     const [routeSource, workbenchSource] = await Promise.all([
       readFile(new URL("../app/api/design-optimize/route.ts", import.meta.url), "utf8"),
-      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readWorkbenchSource(),
     ]);
 
     assert.equal(workbenchSource.includes('"design_optimize"'), true);
