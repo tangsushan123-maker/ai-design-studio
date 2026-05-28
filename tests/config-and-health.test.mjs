@@ -751,6 +751,10 @@ describe("Bounded local IO", () => {
     assert.equal(materialLibrariesSource.includes("mapWithConcurrency(users, projectLibraryReadConcurrency"), true);
     assert.equal(projectRouteSource.includes("ownerProjectStoreReadConcurrency = 8"), true);
     assert.equal(projectRouteSource.includes("mapWithConcurrency("), true);
+    assert.equal(projectRouteSource.includes('import { readJsonWithBackup, writeJsonAtomic } from "@/lib/local-json-store"'), true);
+    assert.equal(projectRouteSource.includes("readJsonWithBackup<ProjectStore | null>(filePath, null)"), true);
+    assert.equal(projectRouteSource.includes("readJsonWithBackup<StoredProject | null>(filePath, null)"), true);
+    assert.equal(projectRouteSource.includes('readFile(filePath, "utf-8")'), false);
     assert.equal(adminAccountsSource.includes("Promise.all(users.map"), false);
     assert.equal(materialLibrariesSource.includes("Promise.all(users.map"), false);
     assert.equal(projectRouteSource.includes("Promise.all(\n    orderedUsers.map"), false);

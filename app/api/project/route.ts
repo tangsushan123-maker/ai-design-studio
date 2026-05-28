@@ -1,9 +1,9 @@
-import { access, readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { mapWithConcurrency } from "@/lib/async-utils";
 import { listAuthUsers, requireCurrentUser, userDataPath } from "@/lib/auth";
-import { writeJsonAtomic } from "@/lib/local-json-store";
+import { readJsonWithBackup, writeJsonAtomic } from "@/lib/local-json-store";
 import {
   createDefaultProjectKnowledge,
   normalizeProjectKnowledge,
@@ -572,26 +572,17 @@ function findDataImagePath(value: unknown, pathLabel = "project"): string {
 }
 
 async function readProjectStoreFile(filePath: string): Promise<ProjectStore | null> {
-  try {
-    const content = await readFile(filePath, "utf-8");
-    const store = JSON.parse(content) as ProjectStore;
-    if (!Array.isArray(store.projects) || !store.projects.length) return null;
-    const projects = store.projects.map(normalizeStoredProject);
-    const activeProjectId = projects.some((project) => project.id === store.activeProjectId)
-      ? store.activeProjectId
-      : projects[0].id;
-    return { activeProjectId, projects };
-  } catch {
-    return null;
-  }
+  const store = await readJsonWithBackup<ProjectStore | null>(filePath, null);
+  if (!store || !Array.isArray(store.projects) || !store.projects.length) return null;
+  const projects = store.projects.map(normalizeStoredProject);
+  const activeProjectId = projects.some((project) => project.id === store.activeProjectId)
+    ? store.activeProjectId
+    : projects[0].id;
+  return { activeProjectId, projects };
 }
 
 async function readProjectFile(filePath: string): Promise<StoredProject | null> {
-  try {
-    return JSON.parse(await readFile(filePath, "utf-8")) as StoredProject;
-  } catch {
-    return null;
-  }
+  return readJsonWithBackup<StoredProject | null>(filePath, null);
 }
 
 function getProjectCover(project: StoredProject) {
