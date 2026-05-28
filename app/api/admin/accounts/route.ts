@@ -1,9 +1,8 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { mapWithConcurrency } from "@/lib/async-utils";
 import { adminDeleteAuthUser, adminUpsertAuthUser, AuthInputError, listAuthUsers, requireCurrentUser, userDataPath, type AuthUser } from "@/lib/auth";
-import { writeJsonAtomic } from "@/lib/local-json-store";
+import { readJsonWithBackup, writeJsonAtomic } from "@/lib/local-json-store";
 import { maskApiKey } from "@/lib/local-config";
 
 export const runtime = "nodejs";
@@ -127,7 +126,7 @@ async function buildAccountSummary(user: AuthUser, currentUser: AuthUser, reveal
 }
 
 async function readProjectStats(userId: string) {
-  const store = await readJsonFile<ProjectStore>(userDataPath(userId, "projects.local.json"), { projects: [] });
+  const store = await readJsonWithBackup<ProjectStore>(userDataPath(userId, "projects.local.json"), { projects: [] });
   const projects = Array.isArray(store.projects) ? store.projects : [];
   return projects.reduce((stats, project) => {
     const nodes = Array.isArray(project.nodes) ? project.nodes : [];
@@ -149,9 +148,9 @@ async function readProjectStats(userId: string) {
 
 async function readAccountConfig(user: AuthUser) {
   const scopedPath = userDataPath(user.id, "config.local.json");
-  const scoped = await readJsonFile<UserConfig>(scopedPath, {});
+  const scoped = await readJsonWithBackup<UserConfig>(scopedPath, {});
   const legacyPath = path.join(process.cwd(), "config.local.json");
-  const legacy = user.role === "owner" ? await readJsonFile<UserConfig>(legacyPath, {}) : {};
+  const legacy = user.role === "owner" ? await readJsonWithBackup<UserConfig>(legacyPath, {}) : {};
   const config = Object.keys(scoped).length ? scoped : legacy;
   const scopedKey = scoped.openaiApiKey || scoped.apiKey || "";
   const legacyKey = legacy.openaiApiKey || legacy.apiKey || "";
@@ -167,16 +166,8 @@ async function readAccountConfig(user: AuthUser) {
 
 async function clearAccountApiKey(userId: string) {
   const scopedPath = userDataPath(userId, "config.local.json");
-  const scoped = await readJsonFile<UserConfig>(scopedPath, {});
+  const scoped = await readJsonWithBackup<UserConfig>(scopedPath, {});
   await writeJsonAtomic(scopedPath, { ...scoped, openaiApiKey: "", apiKey: "" });
-}
-
-async function readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
-  try {
-    return JSON.parse(await readFile(filePath, "utf-8")) as T;
-  } catch {
-    return fallback;
-  }
 }
 
 function maxIsoDate(left: string, right: string) {

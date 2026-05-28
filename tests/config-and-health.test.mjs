@@ -710,6 +710,8 @@ describe("Bounded local IO", () => {
     assert.equal(generatedHistorySource.includes('import { mapWithConcurrency } from "./async-utils"'), true);
     assert.equal(adminAccountsSource.includes("accountSummaryReadConcurrency = 8"), true);
     assert.equal(adminAccountsSource.includes("mapWithConcurrency(users, accountSummaryReadConcurrency"), true);
+    assert.equal(adminAccountsSource.includes("readJsonWithBackup"), true);
+    assert.equal(adminAccountsSource.includes("async function readJsonFile"), false);
     assert.equal(materialLibrariesSource.includes("projectLibraryReadConcurrency = 8"), true);
     assert.equal(materialLibrariesSource.includes("mapWithConcurrency(users, projectLibraryReadConcurrency"), true);
     assert.equal(projectRouteSource.includes("ownerProjectStoreReadConcurrency = 8"), true);
