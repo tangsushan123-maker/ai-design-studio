@@ -1358,30 +1358,6 @@ textarea:focus-visible {
   bottom: calc(100% + 8px);
 }
 
-.account-menu__identity {
-  border-bottom: 1px solid var(--separator);
-  margin-bottom: 5px;
-  padding: 8px 9px 10px;
-}
-
-.account-menu__name {
-  display: block;
-  overflow: hidden;
-  color: var(--label-primary);
-  font-size: 12px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.account-menu__role {
-  display: block;
-  margin-top: 3px;
-  color: var(--label-tertiary);
-  font-size: 11px;
-  font-weight: 700;
-}
-
 .account-menu__item {
   display: flex;
   width: 100%;

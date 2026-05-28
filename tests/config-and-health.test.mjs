@@ -1860,6 +1860,26 @@ describe("Workbench compact typography", () => {
   });
 });
 
+describe("Account navigation", () => {
+  it("keeps account actions separate from API settings", async () => {
+    const [accountSwitcherSource, accountsPageSource, settingsPageSource, globalsSource] = await Promise.all([
+      readFile(new URL("../components/account-switcher.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/accounts/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(accountSwitcherSource.includes("子账号管理"), true);
+    assert.equal(accountSwitcherSource.includes("切换账号"), true);
+    assert.equal(accountSwitcherSource.includes('href="/accounts"'), true);
+    assert.equal(accountSwitcherSource.includes("account-menu__identity"), false);
+    assert.equal(accountSwitcherSource.includes("displayName"), false);
+    assert.equal(accountsPageSource.includes("<AdminAccountsManager />"), true);
+    assert.equal(settingsPageSource.includes("AdminAccountsManager"), false);
+    assert.equal(globalsSource.includes("account-menu__identity"), false);
+  });
+});
+
 describe("Design optimization", () => {
   it("adds a standalone design optimization node and modular industry-aware API route", async () => {
     const [routeSource, workbenchSource] = await Promise.all([

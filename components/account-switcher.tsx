@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Repeat2, UserCog, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 type AccountMenuUser = { email?: string; name?: string; role?: "owner" | "user" };
 type AccountSwitcherProps = {
@@ -60,7 +60,6 @@ export function AccountSwitcher({ compact = false, expanded = false }: AccountSw
   }, [open]);
 
   const isAdmin = user?.role === "owner";
-  const displayName = useMemo(() => user?.name || user?.email || "账号", [user?.email, user?.name]);
 
   async function switchAccount() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
@@ -90,10 +89,6 @@ export function AccountSwitcher({ compact = false, expanded = false }: AccountSw
       </button>
       {open ? (
         <div className={panelClassName} role="menu">
-          <div className="account-menu__identity">
-            <span className="account-menu__name">{displayName}</span>
-            <span className="account-menu__role">{isAdmin ? "管理员" : "普通账号"}</span>
-          </div>
           {isAdmin ? (
             <Link className="account-menu__item" href="/accounts" role="menuitem" onClick={() => setOpen(false)}>
               <Users size={14} aria-hidden="true" />
