@@ -607,29 +607,34 @@ describe("Image size requests", () => {
 
 describe("Generated image serving", () => {
   it("uses conditional cache headers to avoid rereading unchanged images", async () => {
-    const routeSource = await readFile(new URL("../app/generated/[...path]/route.ts", import.meta.url), "utf8");
+    const [routeSource, cacheSource] = await Promise.all([
+      readFile(new URL("../app/generated/[...path]/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/http-file-cache.ts", import.meta.url), "utf8"),
+    ]);
 
-    assert.equal(routeSource.includes("generatedFileEtag"), true);
-    assert.equal(routeSource.includes('request.headers.get("if-none-match")'), true);
-    assert.equal(routeSource.includes('request.headers.get("if-modified-since")'), true);
+    assert.equal(routeSource.includes("fileCacheHeaders(fileStat"), true);
+    assert.equal(routeSource.includes("requestMatchesFileCache(request"), true);
+    assert.equal(cacheSource.includes('request.headers.get("if-none-match")'), true);
+    assert.equal(cacheSource.includes('request.headers.get("if-modified-since")'), true);
     assert.equal(routeSource.includes("status: 304"), true);
-    assert.equal(routeSource.includes('"Content-Length": String(fileStat.size)'), true);
-    assert.equal(routeSource.includes('"Last-Modified": lastModified'), true);
+    assert.equal(cacheSource.includes('"Content-Length": String(fileStat.size)'), true);
+    assert.equal(cacheSource.includes('"Last-Modified": fileStat.mtime.toUTCString()'), true);
   });
 
   it("serves previews with cheap existence checks and conditional cache hits", async () => {
-    const [previewRouteSource, imageUtilsSource] = await Promise.all([
+    const [previewRouteSource, imageUtilsSource, cacheSource] = await Promise.all([
       readFile(new URL("../app/api/image-preview/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/http-file-cache.ts", import.meta.url), "utf8"),
     ]);
 
     assert.equal(imageUtilsSource.includes("stat(variantPath).then((fileStat) => fileStat.isFile())"), true);
     assert.equal(imageUtilsSource.includes("readFile(variantPath).then(() => true)"), false);
-    assert.equal(previewRouteSource.includes("imagePreviewEtag"), true);
-    assert.equal(previewRouteSource.includes("requestMatchesImagePreview"), true);
-    assert.equal(previewRouteSource.includes('request.headers.get("if-none-match")'), true);
+    assert.equal(previewRouteSource.includes('fileCacheHeaders(fileStat, "image/webp", "public, max-age=31536000, immutable", "preview")'), true);
+    assert.equal(previewRouteSource.includes("requestMatchesFileCache(request"), true);
+    assert.equal(cacheSource.includes('request.headers.get("if-none-match")'), true);
     assert.equal(previewRouteSource.includes("status: 304"), true);
-    assert.equal(previewRouteSource.includes('"Cache-Control": "public, max-age=31536000, immutable"'), true);
+    assert.equal(cacheSource.includes('"Cache-Control": cacheControl'), true);
   });
 });
 

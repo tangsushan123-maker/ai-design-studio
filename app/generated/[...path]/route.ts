@@ -1,6 +1,7 @@
 import { readFile, stat } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
+import { fileCacheHeaders, requestMatchesFileCache } from "@/lib/http-file-cache";
 
 const generatedRoot = path.join(process.cwd(), "public", "generated");
 const contentTypes: Record<string, string> = {
@@ -30,16 +31,8 @@ export async function GET(request: Request, context: { params: Promise<{ path?: 
     const fileStat = await stat(filePath);
     if (!fileStat.isFile()) return new NextResponse("Not found", { status: 404 });
     const ext = path.extname(filePath).toLowerCase();
-    const etag = generatedFileEtag(fileStat);
-    const lastModified = fileStat.mtime.toUTCString();
-    const headers = {
-      "Cache-Control": "public, max-age=604800",
-      "Content-Length": String(fileStat.size),
-      "Content-Type": contentTypes[ext] || "application/octet-stream",
-      "ETag": etag,
-      "Last-Modified": lastModified,
-    };
-    if (requestMatchesGeneratedFile(request, etag, Number(fileStat.mtimeMs))) {
+    const headers = fileCacheHeaders(fileStat, contentTypes[ext] || "application/octet-stream", "public, max-age=604800");
+    if (requestMatchesFileCache(request, headers.ETag, fileStat.mtimeMs)) {
       return new NextResponse(null, { status: 304, headers });
     }
     const body = await readFile(filePath);
@@ -49,17 +42,4 @@ export async function GET(request: Request, context: { params: Promise<{ path?: 
   } catch {
     return new NextResponse("Not found", { status: 404 });
   }
-}
-
-function generatedFileEtag(fileStat: { size: number | bigint; mtimeMs: number | bigint }) {
-  return `"${Number(fileStat.size)}-${Math.trunc(Number(fileStat.mtimeMs))}"`;
-}
-
-function requestMatchesGeneratedFile(request: Request, etag: string, mtimeMs: number) {
-  const ifNoneMatch = request.headers.get("if-none-match");
-  if (ifNoneMatch?.split(",").map((item) => item.trim()).includes(etag)) return true;
-  const ifModifiedSince = request.headers.get("if-modified-since");
-  if (!ifModifiedSince) return false;
-  const modifiedSinceTime = new Date(ifModifiedSince).getTime();
-  return Number.isFinite(modifiedSinceTime) && modifiedSinceTime >= Math.trunc(mtimeMs / 1000) * 1000;
 }
