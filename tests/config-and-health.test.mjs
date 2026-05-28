@@ -501,6 +501,9 @@ describe("health mode helpers", () => {
     assert.equal(diagnostics.runtime, "nodejs");
     assert.match(diagnostics.serverTime, /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(routeSource.includes("diagnostics: buildRuntimeDiagnostics()"), true);
+    assert.equal(routeSource.includes("const [textResult, imageResult, videoResult] = await Promise.all"), true);
+    assert.equal(routeSource.includes('mode === "full" ? testConfiguredModel("image", imageModel) : Promise.resolve(null)'), true);
+    assert.equal(routeSource.includes("const textResult = await testConfiguredModel"), false);
     assert.equal(deploySource.includes("diagnostics.nodeVersion"), true);
   });
 });

@@ -72,9 +72,11 @@ export async function POST(request: Request) {
     });
   }
 
-  const textResult = await testConfiguredModel("text", analysisModel);
-  const imageResult = mode === "full" ? await testConfiguredModel("image", imageModel) : null;
-  const videoResult = mode === "full" && videoModel ? await testConfiguredModel("video", videoModel) : null;
+  const [textResult, imageResult, videoResult] = await Promise.all([
+    testConfiguredModel("text", analysisModel),
+    mode === "full" ? testConfiguredModel("image", imageModel) : Promise.resolve(null),
+    mode === "full" && videoModel ? testConfiguredModel("video", videoModel) : Promise.resolve(null),
+  ]);
   const analysis = toModelCheck(textResult);
   const image = imageResult ? toModelCheck(imageResult) : skippedImageCheck();
   const video = videoResult ? toModelCheck(videoResult) : { ok: true, message: videoModel ? "完整测试才会验证视频模型。" : "未配置视频模型，已跳过。" };
