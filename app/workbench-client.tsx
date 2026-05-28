@@ -55,6 +55,26 @@ import { historyMatchesFilter, historyMatchesQuery } from "@/lib/workbench-histo
 import { IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST } from "@/lib/prompt";
 import { buildCreativeBriefFallback, type CreativeBrief, type CreativeBriefInput, type CreativeDirection } from "@/lib/creative-brief";
 import { imageSourceDetailLines, imageSourceSummary } from "@/lib/workbench-image-source";
+import {
+  createResultLineage,
+  generatedFileNameForImage,
+  imageBranchId,
+  imageKey,
+  imageMatchesGeneratedFile,
+  imageReferencesMatch,
+  isPngLayerPackImage,
+  isUserFacingResultImage,
+  loadFavoriteIds,
+  mergeImages,
+  nodeImageReferences,
+  removedFeatureTextMarkers,
+  removeImageFromNode,
+  saveFavoriteIds,
+  sortImagesByGeneratedAt,
+  sortImagesByRecency,
+  sortResultImagesForDisplay,
+  uniqueImagesByKey,
+} from "@/components/workbench/workbench-image-collection";
 import { imageRatioStyle, largePreviewFrameStyle, pngLayerDisplayName, pngLayerPreviewImage, zoomedPreviewFrameStyle } from "@/components/workbench/workbench-image-display";
 import {
   createDefaultProjectKnowledge,
@@ -97,7 +117,6 @@ import {
   defaultParamsByKind,
   emptyProjectCreationDraft,
   emptyProjectProfile,
-  favoriteStorageKey,
   flowAriaLabelConfig,
   imageTaskTimeoutMs,
   inputHandlesByKind,
@@ -9137,56 +9156,6 @@ async function readResponseErrorMessage(response: Response, fallback: string) {
   }
 }
 
-function createResultLineage(image: ImageAsset | null | undefined, taskId: string, variant: number) {
-  const normalizedVariant = Math.max(1, variant);
-  if (!image) {
-    return {
-      parentImageId: undefined,
-      rootImageId: "",
-      branchId: `${taskId}_branch_${normalizedVariant}`,
-      branchLabel: `方案 ${normalizedVariant}`,
-      resultGroupId: taskId,
-      variant: normalizedVariant,
-    };
-  }
-
-  const rootImageId = imageRootId(image);
-  const branchId = image.branchId || `${image.resultGroupId || image.sourceTaskId || rootImageId}_branch_${image.variant || normalizedVariant}`;
-  const branchLabel = image.branchLabel || `方案 ${image.variant || normalizedVariant}`;
-  return {
-    parentImageId: image.id || image.fileName || image.url,
-    rootImageId,
-    branchId,
-    branchLabel,
-    resultGroupId: image.resultGroupId || image.sourceTaskId || taskId,
-    variant: image.variant || normalizedVariant,
-  };
-}
-
-function mergeImages(incoming: ImageAsset[], current: ImageAsset[]) {
-  const seen = new Set<string>();
-  const merged: ImageAsset[] = [];
-  for (const image of [...incoming, ...current]) {
-    const key = image.fileName || image.id || image.url;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(image);
-  }
-  return sortImagesByRecency(merged);
-}
-
-function uniqueImagesByKey(images: ImageAsset[]) {
-  const seen = new Set<string>();
-  const unique: ImageAsset[] = [];
-  for (const image of images) {
-    const key = imageKey(image);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    unique.push(image);
-  }
-  return unique;
-}
-
 function NodeErrorNotice({ className = "", compact = false, error }: { className?: string; compact?: boolean; error: string }) {
   const message = friendlyDisplayError(error);
   const tips = errorRecoveryTips(error);
@@ -9364,162 +9333,6 @@ function layoutHandlePriority(handle?: string | null) {
 function imageVariantForLayout(node: FlowNode) {
   const image = (node.data.output || node.data.image || node.data.outputs?.[0] || null) as ImageAsset | null;
   return image?.variant || variantNumberFromLabel(image?.branchLabel || node.data.title || "") || 0;
-}
-
-function imageKey(image: Pick<ImageAsset, "fileName" | "id" | "url">) {
-  return image.fileName || image.id || image.url;
-}
-
-function imageReferenceTokens(image: Pick<ImageAsset, "fileName" | "id" | "url">) {
-  const tokens = new Set<string>();
-  const add = (value?: string) => {
-    const clean = value?.trim();
-    if (clean) tokens.add(clean);
-  };
-  add(image.fileName);
-  add(image.id);
-  add(image.url);
-  const generatedFileName = generatedFileNameForImage(image);
-  add(generatedFileName);
-  if (image.url?.startsWith("/generated/")) add(decodeURIComponent(image.url.replace(/^\/generated\//, "")));
-  return tokens;
-}
-
-function imageReferencesMatch(
-  a: Pick<ImageAsset, "fileName" | "id" | "url">,
-  b: Pick<ImageAsset, "fileName" | "id" | "url">,
-) {
-  const aTokens = imageReferenceTokens(a);
-  const bTokens = imageReferenceTokens(b);
-  for (const token of aTokens) {
-    if (bTokens.has(token)) return true;
-  }
-  return false;
-}
-
-function generatedFileNameForImage(image: Pick<ImageAsset, "fileName" | "id" | "url">) {
-  const fromFileName = image.fileName && /\.(png|jpe?g|webp)$/i.test(image.fileName) ? image.fileName : "";
-  if (fromFileName) return fromFileName;
-  if (image.url?.startsWith("/generated/")) return decodeURIComponent(image.url.replace(/^\/generated\//, ""));
-  return image.id && /\.(png|jpe?g|webp)$/i.test(image.id) ? image.id : "";
-}
-
-function imageMatchesGeneratedFile(image: ImageAsset | null | undefined, fileName: string) {
-  if (!image || !fileName) return false;
-  return imageReferencesMatch(image, { id: fileName, fileName, url: `/generated/${fileName}` });
-}
-
-function nodeImageReferences(node: FlowNode) {
-  return [
-    node.data.image,
-    node.data.output,
-    ...(node.data.outputs || []),
-  ].filter((image): image is ImageAsset => Boolean(image));
-}
-
-function isPngLayerPackImage(image: ImageAsset) {
-  const fields = [
-    image.nodeOperation,
-    image.sourceNodeKind,
-    image.materialType,
-    image.mode,
-    image.fileName,
-    image.id,
-  ].filter(Boolean).join(" ");
-  return Boolean(image.pngLayerExport || /png[_\s-]*layers|PNG分层|分层包|layer-packs/i.test(fields));
-}
-
-function imageBranchId(image: Pick<ImageAsset, "branchId" | "resultGroupId" | "sourceTaskId" | "variant" | "id" | "fileName" | "url">) {
-  return image.branchId || `${image.resultGroupId || image.sourceTaskId || imageKey(image)}_branch_${image.variant || 1}`;
-}
-
-function imageRootId(image: Pick<ImageAsset, "rootImageId" | "parentImageId" | "id" | "fileName" | "url">) {
-  return image.rootImageId || image.parentImageId || imageKey(image);
-}
-
-function sortImagesByRecency(images: ImageAsset[]) {
-  return [...images].sort((a, b) => compareImagesByRecency(a, b));
-}
-
-function sortResultImagesForDisplay(images: ImageAsset[]) {
-  return sortImagesByRecency(images);
-}
-
-function isUserFacingResultImage(image: ImageAsset) {
-  if (isRemovedFeatureImage(image)) return false;
-  const fileName = image.fileName || image.id || image.url || "";
-  if (/\/(?:full-preview|text-mask|text-layer-cropped|original|text_alpha_mask|repair_mask|text_cropped|background_first_pass)\.png$/i.test(fileName)) return false;
-  if (image.materialType === "原图" || image.materialType === "文字蒙版" || image.materialType === "文字Alpha蒙版" || image.materialType === "背景修复蒙版" || image.materialType === "背景首轮修复" || image.materialType === "文字裁剪PNG") return false;
-  return true;
-}
-
-function isRemovedFeatureImage(image: ImageAsset) {
-  const fields = [
-    image.nodeOperation,
-    image.sourceNodeKind,
-    image.materialType,
-    image.mode,
-    image.branchLabel,
-    image.fileName,
-  ].filter(Boolean).join(" ");
-  return /remove_background|layer_output/.test(fields) || removedFeatureTextMarkers().some((marker) => fields.includes(marker));
-}
-
-function removedFeatureTextMarkers() {
-  return [
-    "透明" + "抠图",
-    "透明" + "扣图",
-    "分层" + "拆图",
-    "文字" + "透明PNG",
-    "文字" + "透明 PNG",
-    "无文字" + "背景",
-  ];
-}
-
-function sortImagesByGeneratedAt(images: ImageAsset[]) {
-  return [...images].sort((a, b) => new Date(a.generatedAt || 0).getTime() - new Date(b.generatedAt || 0).getTime());
-}
-
-function compareImagesByRecency(a: ImageAsset, b: ImageAsset) {
-  const generatedDiff = new Date(b.generatedAt || 0).getTime() - new Date(a.generatedAt || 0).getTime();
-  if (generatedDiff) return generatedDiff;
-  const variantDiff = (a.variant || 0) - (b.variant || 0);
-  if (variantDiff) return variantDiff;
-  return imageKey(a).localeCompare(imageKey(b));
-}
-
-function removeImageFromNode(node: FlowNode, fileName: string): FlowNode {
-  const nextOutputs = (node.data.outputs || []).filter((image) => !imageMatchesGeneratedFile(image, fileName));
-  const imageRemoved = imageMatchesGeneratedFile(node.data.image, fileName);
-  const outputRemoved = imageMatchesGeneratedFile(node.data.output, fileName);
-  if (!imageRemoved && !outputRemoved && nextOutputs.length === (node.data.outputs || []).length) return node;
-  return {
-    ...node,
-    data: {
-      ...node.data,
-      image: imageRemoved ? undefined : node.data.image,
-      output: outputRemoved ? nextOutputs[0] || null : node.data.output,
-      outputs: nextOutputs,
-      resultCount: nextOutputs.length,
-      status: nextOutputs.length ? node.data.status : outputRemoved || imageRemoved ? "idle" : node.data.status,
-    },
-  };
-}
-
-function loadFavoriteIds() {
-  if (typeof window === "undefined") return new Set<string>();
-  try {
-    const raw = window.localStorage.getItem(favoriteStorageKey);
-    const parsed = raw ? JSON.parse(raw) as string[] : [];
-    return new Set(parsed.filter(Boolean));
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function saveFavoriteIds(ids: Set<string>) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(favoriteStorageKey, JSON.stringify(Array.from(ids)));
 }
 
 function isComposerDrivenNode(kind: NodeKind) {
