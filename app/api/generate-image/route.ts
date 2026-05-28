@@ -679,6 +679,11 @@ function buildTextReferenceSummaryGenerationPrompt(
     "【用户需求与设计约束】",
     compactReferenceImagePrompt(prompt, 2400),
     "",
+    "【文字上屏边界】",
+    "用户需求里的操作词、审美词和改版方向只作为设计指令，不能作为海报可见文字。",
+    "不要把“修改一下设计、优化设计、品牌感、设计感、科技感、专业、高级、参考图、图1、改版方向”等原始提示词写到画面上。",
+    "只有明确写成“标题：...”“主标题：...”“副标题：...”“写上...”“把文字改成...”的内容，才允许作为可见文案。",
+    "",
     "【参考图角色】",
     manifest.length
       ? manifest.map((item, index) => `参考图${index + 1}：${item.label || item.fileName || item.id}，用途：${textReferenceRoleText(item.role)}，权重：${textReferenceWeightText(item.weight)}`).join("\n")

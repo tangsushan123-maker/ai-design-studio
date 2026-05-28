@@ -395,7 +395,9 @@ export function buildDesignDirectorImagePrompt(
   return [
     promptSection("Task", [
       `Draw a professional commercial visual design for: ${brief.title}.`,
-      `User request: ${compactPromptText(request.prompt, 520)}`,
+      hasExplicitCopy
+        ? `User request with possible visible copy: ${compactPromptText(request.prompt, 520)}`
+        : `Non-visible design instruction from user: ${compactPromptText(request.prompt, 520)}. Treat this as art direction only, never as poster headline, subtitle, label, badge, or body copy.`,
       `Purpose/audience: ${brief.communicationGoal}; ${brief.audience}.`,
     ]),
     promptSection("Structured poster planning", [
@@ -417,6 +419,9 @@ export function buildDesignDirectorImagePrompt(
       `Typography tone: ${brief.typographyTone}; ${direction.typography}.`,
       `Whitespace/safety: ${brief.whitespaceAndSafety}.`,
       "Do not merely draw words from the user request; execute the planned copy, visual elements, layout zones, palette, and commercial hierarchy above.",
+      hasExplicitCopy
+        ? "Only user text that is clearly introduced as a title/copy to be written may appear as visible typography."
+        : "The raw user instruction must not appear anywhere in the image. Do not render words like optimize design, brand feeling, design feeling, professional, technology feeling, reference image, modify, improve, or similar request phrases.",
     ]),
     promptSection("Selected design direction", [
       `${direction.name} - ${direction.concept}`,
@@ -437,6 +442,9 @@ export function buildDesignDirectorImagePrompt(
         : wantsProjectContext
           ? "Minimal text only; avoid fake Chinese and tiny unreadable text; long copy, phone, address, QR code are reserved for real-font layout later."
           : "Minimal text only; avoid fake text and tiny unreadable text; detailed copy is reserved for real-font layout later.",
+      hasExplicitCopy
+        ? "Visible text source: planned visible copy and explicitly requested real copy only."
+        : "Visible text source: planned visible copy only. Never use raw operation words from the user prompt as design text.",
       "AI 只生成极少文字或无字背景；真实长文后期用真实字体排版。",
     ]),
     shouldIncludeProtection ? promptSection("Protected source facts", [compactPromptText(buildProtectionPrompt(protectionContext), 560)]) : "",
@@ -1201,7 +1209,7 @@ function buildCopyPolicy(prompt: string, hasExplicitCopy: boolean) {
       ? wantsProjectContext
         ? "文字策略：用户明确给出的文案、标题、电话、地址、品牌名尽量按原文呈现。"
         : "文字策略：用户明确给出的标题或短文案尽量按原文呈现；不要额外添加未要求的信息。"
-      : "文字策略：没有明确文案时少字或无字；不要编造未提供的真实信息或宣传语。",
+      : "文字策略：没有明确文案时少字或无字；用户输入只是设计指令，绝不能把原始提示词、操作词、审美词写到画面上；不要编造未提供的真实信息或宣传语。",
     keepContent ? "内容不减：所有可见文字、关键信息和品牌资产必须尽量保留，不要删减。" : "",
   ]
     .filter(Boolean)
@@ -1210,9 +1218,12 @@ function buildCopyPolicy(prompt: string, hasExplicitCopy: boolean) {
 
 function hasExplicitCopyInstruction(prompt: string) {
   if (resolveNoVisibleOutputPolicy(prompt).noText) return false;
-  return /文案|文字|标题|主标题|副标题|标语|slogan|电话|地址|医院|品牌名|写上|改成|主题[:：]|内容不(少|减|变)|保留全部|全部保留/i.test(
-    prompt,
-  );
+  const text = prompt || "";
+  if (/标题\s*[:：]|主标题\s*[:：]|副标题\s*[:：]|文案\s*[:：]|标语\s*[:：]|slogan\s*[:：]/i.test(text)) return true;
+  if (/(写上|加上文字|添加文字|放上文字|显示文字|文字改成|文案改成|标题改成|改成\s*[“"「『《]?[^，。,.；;]{2,24})/i.test(text)) return true;
+  if (/(电话|地址|联系方式|二维码|QR|qr)/i.test(text) && /(写上|加上|加入|显示|展示|放上|要有|包含|使用)/i.test(text)) return true;
+  if (/内容不(少|减|变)|保留全部|全部保留/i.test(text)) return true;
+  return false;
 }
 
 function resizeModeInstruction(input: ReturnType<typeof normalizePromptInput>) {
