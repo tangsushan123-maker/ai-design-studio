@@ -1,6 +1,6 @@
 import "server-only";
 
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -41,7 +41,6 @@ async function readJsonFile<T>(filePath: string): Promise<T | null> {
 }
 
 function readJsonFileSync<T>(filePath: string): T | null {
-  if (!existsSync(filePath)) return null;
   try {
     return JSON.parse(readFileSync(filePath, "utf8")) as T;
   } catch {

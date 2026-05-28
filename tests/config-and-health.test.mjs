@@ -646,6 +646,16 @@ describe("Generated image serving", () => {
   });
 });
 
+describe("Local JSON storage", () => {
+  it("avoids duplicate sync existence checks when reading config files", async () => {
+    const storeSource = await readFile(new URL("../lib/local-json-store.ts", import.meta.url), "utf8");
+
+    assert.equal(storeSource.includes("readJsonWithBackupSync"), true);
+    assert.equal(storeSource.includes("readFileSync(filePath"), true);
+    assert.equal(storeSource.includes("existsSync"), false);
+  });
+});
+
 describe("Remote image import security", () => {
   it("blocks local and private image URLs before server-side fetches", async () => {
     const routeSource = await readFile(new URL("../app/api/import-image/route.ts", import.meta.url), "utf8");
