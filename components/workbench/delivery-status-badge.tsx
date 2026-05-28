@@ -17,7 +17,7 @@ export function DeliveryStatusBadge({
   fallbackLabel?: string;
 }) {
   return (
-    <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] ${deliveryStatusClass(image)}`}>
+    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] leading-5 ${deliveryStatusClass(image)}`}>
       {deliveryStatusLabel(image, fallbackLabel)}
     </span>
   );

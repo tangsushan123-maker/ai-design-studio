@@ -1712,11 +1712,12 @@ describe("Workbench compact typography", () => {
   });
 
   it("keeps result and task status cards readable in dense panels", async () => {
-    const [resultCardSource, taskCenterSource, nodeResultsSource, resultPreviewSource] = await Promise.all([
+    const [resultCardSource, taskCenterSource, nodeResultsSource, resultPreviewSource, deliveryBadgeSource] = await Promise.all([
       readFile(new URL("../components/workbench/result-variant-card.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/node-results-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/result-preview-tools.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/delivery-status-badge.tsx", import.meta.url), "utf8"),
     ]);
 
     assert.equal(resultCardSource.includes("text-[10px]"), false);
@@ -1727,6 +1728,8 @@ describe("Workbench compact typography", () => {
     assert.equal(taskCenterSource.includes("rounded-[14px] border px-3 py-2 text-[11px] leading-5"), true);
     assert.equal(nodeResultsSource.includes("text-[10px]"), false);
     assert.equal(resultPreviewSource.includes("px-2.5 py-1 text-[10px] font-semibold"), false);
+    assert.equal(deliveryBadgeSource.includes("text-[8px]"), false);
+    assert.equal(deliveryBadgeSource.includes("px-2 py-0.5 text-[11px] leading-5"), true);
   });
 });
 
