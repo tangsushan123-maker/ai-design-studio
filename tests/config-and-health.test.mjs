@@ -824,6 +824,9 @@ describe("Quality enhance mode", () => {
     assert.equal(routeSource.includes("webp"), true);
     assert.equal(routeSource.includes("runQueuedImageModelRequestWithRetry"), true);
     assert.equal(routeSource.includes("imageRequestOptions()"), true);
+    assert.equal(routeSource.includes("const [file, brandFiles] = await Promise.all"), true);
+    assert.equal(routeSource.includes("const file = await toFile(input.imageBuffer"), false);
+    assert.equal(routeSource.includes("const brandFiles = await Promise.all((input.brandReferenceImages || []).map"), false);
     assert.equal(routeSource.includes("retryTransientImageRequest"), false);
     assert.equal(routeSource.includes('"center_crop"'), false);
   });
@@ -1154,7 +1157,9 @@ describe("Image-to-image creative redesign", () => {
     assert.equal(routeSource.includes("wantsMultipleImageOutputs(promptText)"), true);
     assert.equal(routeSource.includes("resultItems.slice(0, targetCount)"), true);
     assert.equal(routeSource.includes("const brandFilesPromise = Promise.all"), true);
-    assert.equal(routeSource.includes("const brandFiles = await brandFilesPromise"), true);
+    assert.equal(routeSource.includes("const [file, brandFiles, mask] = await Promise.all"), true);
+    assert.equal(routeSource.includes("shouldUseAiOutpaint && preparedTargetCanvas ? toFile(preparedTargetCanvas.mask"), true);
+    assert.equal(routeSource.includes("const brandFiles = await brandFilesPromise"), false);
     assert.equal(routeSource.includes("const brandFiles = await Promise.all(brandReferenceImages.map"), false);
     assert.equal(routeSource.includes("IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST"), true);
     assert.equal(routeSource.includes('fitMode === "pad" ? "pad" : "crop"'), true);
@@ -1915,7 +1920,8 @@ describe("AI compositing", () => {
     assert.equal(routeSource.includes('readImageInput(formData, "imageB", "sourceUrlB", "scene-source.png")'), true);
     assert.equal(routeSource.includes('const first = await readImageInput(formData, "imageA"'), false);
     assert.equal(routeSource.includes("const brandFilesPromise = Promise.all"), true);
-    assert.equal(routeSource.includes("const brandFiles = await brandFilesPromise"), true);
+    assert.equal(routeSource.includes("const [imageA, imageB, brandFiles] = await Promise.all"), true);
+    assert.equal(routeSource.includes("const brandFiles = await brandFilesPromise"), false);
     assert.equal(routeSource.includes("const brandFiles = await Promise.all(brandReferenceImages.map"), false);
     assert.equal(routeSource.includes("wantsMultipleImageOutputs"), true);
     assert.equal(routeSource.includes("getImageRatio(second.buffer)"), true);
@@ -1976,6 +1982,9 @@ describe("Reference remake", () => {
     assert.equal(routeSource.includes("Flat artwork asset policy"), true);
     assert.equal(routeSource.includes("buildReferenceRemakeProtectionContext"), true);
     assert.equal(routeSource.includes("protectionContext: buildReferenceRemakeProtectionContext(effectiveAnalysis)"), true);
+    assert.equal(routeSource.includes("const [canvasFile, referenceFile] = await Promise.all"), true);
+    assert.equal(routeSource.includes("const canvasFile = await toFile(canvas"), false);
+    assert.equal(routeSource.includes("const referenceFile = await toFile(input.imageBuffer"), false);
     assert.equal(routeSource.includes("wooden door"), true);
     assert.equal(routeSource.includes("fitImageOnCleanWhiteCanvas"), true);
     assert.equal(routeSource.includes('background: "#ffffff"'), true);

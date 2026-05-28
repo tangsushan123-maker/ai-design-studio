@@ -100,8 +100,10 @@ export async function POST(request: Request) {
 
     const openai = getOpenAI();
     const officialSize = requestedOfficialSize;
-    const file = await toFile(input.imageBuffer, input.fileName, { type: input.mimeType });
-    const brandFiles = await Promise.all((input.brandReferenceImages || []).map((item, index) => toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType })));
+    const [file, brandFiles] = await Promise.all([
+      toFile(input.imageBuffer, input.fileName, { type: input.mimeType }),
+      Promise.all((input.brandReferenceImages || []).map((item, index) => toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType }))),
+    ]);
     const result = await runQueuedImageModelRequestWithRetry(
       { label: `画质增强/${imageModel}` },
       () => openai.images.edit({

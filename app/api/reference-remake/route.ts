@@ -378,8 +378,10 @@ async function createReferenceRemakeImage(input: {
 }) {
   const openai = getOpenAI();
   const canvas = await createTargetCanvas(input.outputSize);
-  const canvasFile = await toFile(canvas, `target-canvas-${input.outputSize.width}x${input.outputSize.height}.png`, { type: "image/png" });
-  const referenceFile = await toFile(input.imageBuffer, input.sourceFileName || "reference.png", { type: input.mimeType || "image/png" });
+  const [canvasFile, referenceFile] = await Promise.all([
+    toFile(canvas, `target-canvas-${input.outputSize.width}x${input.outputSize.height}.png`, { type: "image/png" }),
+    toFile(input.imageBuffer, input.sourceFileName || "reference.png", { type: input.mimeType || "image/png" }),
+  ]);
   const requestedSize = getOpenAIRequestedSize(input.sourceRatio, input.quality, input.imageModel);
   const response = await runQueuedImageModelRequestWithRetry(
     { label: `参考图重制/${referenceRemakeModeLabel(input.mode)}/${input.imageModel}` },

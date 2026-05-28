@@ -223,9 +223,11 @@ export async function POST(request: Request) {
     )));
     const createEditRequestWithSize = async (requestPrompt: string, requestSize: string) => {
       const editImageBuffer = preparedTargetCanvas?.image ?? imageBuffer;
-      const file = await toFile(editImageBuffer, preparedTargetCanvas ? "target-ratio-canvas.png" : fileName, { type: preparedTargetCanvas ? "image/png" : mimeType });
-      const brandFiles = await brandFilesPromise;
-      const mask = shouldUseAiOutpaint && preparedTargetCanvas ? await toFile(preparedTargetCanvas.mask, "outpaint-mask.png", { type: "image/png" }) : undefined;
+      const [file, brandFiles, mask] = await Promise.all([
+        toFile(editImageBuffer, preparedTargetCanvas ? "target-ratio-canvas.png" : fileName, { type: preparedTargetCanvas ? "image/png" : mimeType }),
+        brandFilesPromise,
+        shouldUseAiOutpaint && preparedTargetCanvas ? toFile(preparedTargetCanvas.mask, "outpaint-mask.png", { type: "image/png" }) : Promise.resolve(undefined),
+      ]);
       const inputFidelity = (isCreativeImageToImage || isSmartResize) ? "low" : "high";
       const runEditRequest = () => runQueuedImageModelRequestWithRetry(
         { label: `${modeLabel}/${imageModel}` },
