@@ -55,6 +55,7 @@ import { historyMatchesFilter, historyMatchesQuery } from "@/lib/workbench-histo
 import { IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST } from "@/lib/prompt";
 import { buildCreativeBriefFallback, type CreativeBrief, type CreativeBriefInput, type CreativeDirection } from "@/lib/creative-brief";
 import { imageSourceDetailLines, imageSourceSummary } from "@/lib/workbench-image-source";
+import { imageRatioStyle, largePreviewFrameStyle, pngLayerDisplayName, pngLayerPreviewImage, zoomedPreviewFrameStyle } from "@/components/workbench/workbench-image-display";
 import {
   createDefaultProjectKnowledge,
   normalizeProjectKnowledge,
@@ -9134,55 +9135,6 @@ async function readResponseErrorMessage(response: Response, fallback: string) {
   } catch {
     return `${fallback}（HTTP ${response.status}）：${text.slice(0, 180) || "接口没有返回错误详情"}`;
   }
-}
-
-function imageRatioStyle(image: Pick<ImageAsset, "outputSize" | "width" | "height"> | null | undefined) {
-  const width = image?.outputSize?.width || image?.width || 1;
-  const height = image?.outputSize?.height || image?.height || 1;
-  return {
-    aspectRatio: `${Math.max(1, width)} / ${Math.max(1, height)}`,
-  };
-}
-
-function largePreviewFrameStyle(image: Pick<ImageAsset, "outputSize" | "width" | "height"> | null | undefined) {
-  const width = image?.outputSize?.width || image?.width || 1;
-  const height = image?.outputSize?.height || image?.height || 1;
-  const ratio = Math.max(0.18, Math.min(8, width / Math.max(1, height)));
-  const heightBudget = ratio < 0.76 ? "(94vh - 220px)" : ratio > 2.4 ? "(94vh - 260px)" : "(94vh - 240px)";
-  const maxWidth = ratio < 0.76 ? 460 : ratio > 2.4 ? 920 : ratio > 1.18 ? 840 : 640;
-  return {
-    aspectRatio: `${Math.max(1, width)} / ${Math.max(1, height)}`,
-    width: `min(100%, ${maxWidth}px, calc(${heightBudget} * ${ratio}))`,
-    maxWidth: "100%",
-    maxHeight: `calc${heightBudget}`,
-  };
-}
-
-function zoomedPreviewFrameStyle(image: Pick<ImageAsset, "outputSize" | "width" | "height"> | null | undefined, zoom: number) {
-  const width = Math.max(1, image?.outputSize?.width || image?.width || 1);
-  const height = Math.max(1, image?.outputSize?.height || image?.height || 1);
-  return {
-    aspectRatio: `${width} / ${height}`,
-    width: `${Math.round(width * zoom)}px`,
-    maxWidth: "none",
-    maxHeight: "none",
-  };
-}
-
-function pngLayerPreviewImage(layer: PngLayerExportLayer) {
-  return {
-    url: layer.url,
-    originalUrl: layer.url,
-    previewUrl: layer.url,
-    thumbnailUrl: layer.url,
-  };
-}
-
-function pngLayerDisplayName(layer: Pick<PngLayerExportLayer, "filename" | "kind" | "name">) {
-  if (layer.kind === "background" || layer.filename.includes("background")) return "背景层";
-  if (layer.kind === "text" || layer.filename.includes("text")) return "文字层";
-  if (layer.kind === "person" || layer.kind === "subject" || layer.filename.includes("person") || layer.filename.includes("subject")) return "人物层";
-  return layer.name || layer.filename;
 }
 
 function createResultLineage(image: ImageAsset | null | undefined, taskId: string, variant: number) {
