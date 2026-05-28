@@ -21,6 +21,7 @@ import { inspectImageQuality } from "@/lib/image-quality";
 import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
 import sharp from "sharp";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
+import { readBrandReferenceImages } from "@/lib/brand-reference-images";
 
 export const runtime = "nodejs";
 
@@ -405,36 +406,6 @@ export async function POST(request: Request) {
   }
 
   });
-}
-
-async function readBrandReferenceImages(formData: FormData) {
-  const refs: Array<{ buffer: Buffer; fileName: string; mimeType: string }> = [];
-  for (let index = 1; index <= 3; index += 1) {
-    const item = await readBrandReferenceImage(formData, index);
-    if (item) refs.push(item);
-  }
-  return refs;
-}
-
-async function readBrandReferenceImage(formData: FormData, index: number) {
-  const file = formData.get(`brandAsset_${index}`);
-  const sourceUrl = String(formData.get(`brandAssetUrl_${index}`) ?? "");
-  if (file instanceof File) {
-    assertSupportedImage(file);
-    return {
-      buffer: Buffer.from(await file.arrayBuffer()),
-      fileName: file.name || `brand-asset-${index}.png`,
-      mimeType: file.type || "image/png",
-    };
-  }
-  if (sourceUrl) {
-    return {
-      buffer: await readPublicImageUrl(sourceUrl),
-      fileName: `brand-asset-${index}.png`,
-      mimeType: "image/png",
-    };
-  }
-  return null;
 }
 
 async function imageResultToBuffer(base64?: string | null, url?: string | null) {

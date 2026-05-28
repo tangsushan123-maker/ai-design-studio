@@ -25,6 +25,7 @@ import { buildFuseImagesPrompt } from "@/lib/prompt";
 import { inspectImageQuality } from "@/lib/image-quality";
 import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
+import { readBrandReferenceImages } from "@/lib/brand-reference-images";
 
 export const runtime = "nodejs";
 
@@ -382,15 +383,6 @@ function fuseRiskValue(qualityCheck: Awaited<ReturnType<typeof inspectImageQuali
     (qualityCheck.ratioMatched === false ? 1 : 0) +
     (qualityCheck.suspectedBlurredPadding ? 1 : 0) +
     maxEdgeRatio;
-}
-
-async function readBrandReferenceImages(formData: FormData) {
-  const refs: Array<{ buffer: Buffer; fileName: string; mimeType: string }> = [];
-  for (let index = 1; index <= 3; index += 1) {
-    const item = await readImageInput(formData, `brandAsset_${index}`, `brandAssetUrl_${index}`, `brand-asset-${index}.png`);
-    if (item) refs.push(item);
-  }
-  return refs;
 }
 
 async function readImageInput(formData: FormData, fileKey: string, urlKey: string, fallbackName: string) {
