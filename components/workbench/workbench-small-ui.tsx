@@ -78,3 +78,60 @@ export function EmptyPanel({ description, icon, title }: { description: string; 
     </div>
   );
 }
+
+export function InspectorSection({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <section className="apple-surface-section space-y-2 p-3">
+      <div className="apple-section-title text-[12px] text-white/72">{title}</div>
+      {children}
+    </section>
+  );
+}
+
+export function InspectorInput({
+  label,
+  onChange,
+  placeholder,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  value: string;
+}) {
+  return (
+    <label className="block">
+      <span className="apple-field-label mb-1 block">{label}</span>
+      <input
+        className="apple-input h-9 w-full px-3 text-[11px] text-white/76 outline-none placeholder:text-white/28"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        value={value}
+      />
+    </label>
+  );
+}
+
+export function InspectorTextarea({
+  label,
+  onChange,
+  placeholder,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  value: string;
+}) {
+  return (
+    <label className="apple-surface-section block p-3">
+      <span className="apple-field-label mb-1.5 block">{label}</span>
+      <textarea
+        className="min-h-[104px] w-full resize-none bg-transparent text-[12px] leading-5 text-white/80 outline-none placeholder:text-white/28"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        value={value}
+      />
+    </label>
+  );
+}
