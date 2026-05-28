@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { mkdir, readFile, rename, stat, unlink } from "node:fs/promises";
+import { mkdir, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { requireCurrentUser } from "@/lib/auth";
 import { listGeneratedImages } from "@/lib/generated-history";
 import { getGeneratedDir } from "@/lib/image-utils";
-import { writeJsonAtomic } from "@/lib/local-json-store";
+import { readJsonWithBackup, writeJsonAtomic } from "@/lib/local-json-store";
 
 export const runtime = "nodejs";
 
@@ -223,13 +223,8 @@ async function fileExists(filePath: string) {
 }
 
 async function readGeneratedMetadata(metadataPath: string) {
-  const raw = await readFile(metadataPath, "utf8").catch(() => "{}");
-  try {
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
-  } catch {
-    return {};
-  }
+  const parsed = await readJsonWithBackup<unknown>(metadataPath, {});
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
 }
 
 function canManageGeneratedImage(user: { id: string; role: "owner" | "user" }, metadata: Record<string, unknown>) {

@@ -688,6 +688,9 @@ describe("Generated image serving", () => {
     assert.equal(generatedImagesRouteSource.includes("rename(sourceImagePath, restoredImagePath)"), true);
     assert.equal(generatedImagesRouteSource.includes("return (await stat(filePath)).isFile()"), true);
     assert.equal(generatedImagesRouteSource.includes("await readFile(filePath);"), false);
+    assert.equal(generatedImagesRouteSource.includes("readJsonWithBackup<unknown>(metadataPath, {})"), true);
+    assert.equal(generatedImagesRouteSource.includes('readFile(metadataPath, "utf8")'), false);
+    assert.equal(generatedImagesRouteSource.includes("JSON.parse(raw)"), false);
   });
 });
 
