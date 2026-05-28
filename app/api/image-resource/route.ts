@@ -32,13 +32,13 @@ export async function POST(request: Request) {
     }
 
     const extension = extensionFromMime(file.type);
-    const saved = await saveImageBuffer(buffer, extension, {
-      ratioLabel: materialType || "asset",
-      quality: "standard",
-      projectId,
-      storageKind: file.name?.startsWith("mask-") ? "masks" : "uploads",
-    });
-    const [metadata, alphaCheck] = await Promise.all([
+    const [saved, metadata, alphaCheck] = await Promise.all([
+      saveImageBuffer(buffer, extension, {
+        ratioLabel: materialType || "asset",
+        quality: "standard",
+        projectId,
+        storageKind: file.name?.startsWith("mask-") ? "masks" : "uploads",
+      }),
       readImageMetadata(buffer),
       inspectPngAlpha(buffer).catch(() => ({
         hasAlphaChannel: false,
