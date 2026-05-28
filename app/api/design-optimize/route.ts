@@ -105,13 +105,15 @@ export async function POST(request: Request) {
     });
     const raw = await imageResultToBuffer(item.b64_json, item.url);
     const finalPng = await processToExactSize(raw, outputSize, "png", "safe_full_bleed");
-    const actual = await readImageMetadata(finalPng);
-    const saved = await saveImageBuffer(finalPng, "png", {
-      ratioLabel: outputRatioLabel,
-      quality: input.quality,
-      projectId: taskTrace?.projectId,
-      storageKind: "results",
-    });
+    const [actual, saved] = await Promise.all([
+      readImageMetadata(finalPng),
+      saveImageBuffer(finalPng, "png", {
+        ratioLabel: outputRatioLabel,
+        quality: input.quality,
+        projectId: taskTrace?.projectId,
+        storageKind: "results",
+      }),
+    ]);
     const qualityCheck = await inspectImageQuality(saved.path, {
       quality: input.quality,
       ratio: sourceRatio,
@@ -172,13 +174,15 @@ export async function POST(request: Request) {
         mode: input.comparisonMode,
         sourceRatio,
       });
-      const comparisonSaved = await saveImageBuffer(comparisonPng, "png", {
-        ratioLabel: input.comparisonMode === "stacked" ? "compare-stacked" : "compare-side",
-        quality: input.quality,
-        projectId: taskTrace?.projectId,
-        storageKind: "results",
-      });
-      const comparisonMeta = await readImageMetadata(comparisonPng);
+      const [comparisonSaved, comparisonMeta] = await Promise.all([
+        saveImageBuffer(comparisonPng, "png", {
+          ratioLabel: input.comparisonMode === "stacked" ? "compare-stacked" : "compare-side",
+          quality: input.quality,
+          projectId: taskTrace?.projectId,
+          storageKind: "results",
+        }),
+        readImageMetadata(comparisonPng),
+      ]);
       const comparisonPayload = {
         id: comparisonSaved.fileName,
         url: comparisonSaved.url,

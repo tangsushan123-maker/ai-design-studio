@@ -1985,6 +1985,9 @@ describe("Reference remake", () => {
     assert.equal(routeSource.includes("const [canvasFile, referenceFile] = await Promise.all"), true);
     assert.equal(routeSource.includes("const canvasFile = await toFile(canvas"), false);
     assert.equal(routeSource.includes("const referenceFile = await toFile(input.imageBuffer"), false);
+    assert.equal(routeSource.includes("const [actual, saved] = await Promise.all"), true);
+    assert.equal(routeSource.includes("const actual = await readImageMetadata(finalPng)"), false);
+    assert.equal(routeSource.includes("const saved = await saveImageBuffer(finalPng"), false);
     assert.equal(routeSource.includes("wooden door"), true);
     assert.equal(routeSource.includes("fitImageOnCleanWhiteCanvas"), true);
     assert.equal(routeSource.includes('background: "#ffffff"'), true);
@@ -2074,6 +2077,12 @@ describe("Design optimization", () => {
     assert.equal(routeSource.includes("buildComparisonPrompt"), true);
     assert.equal(routeSource.includes("buildDesignOptimizationProtectionContext"), true);
     assert.equal(routeSource.includes("protectionContext: buildDesignOptimizationProtectionContext(analysis)"), true);
+    assert.equal(routeSource.includes("const [actual, saved] = await Promise.all"), true);
+    assert.equal(routeSource.includes("const [comparisonSaved, comparisonMeta] = await Promise.all"), true);
+    assert.equal(routeSource.includes("const actual = await readImageMetadata(finalPng)"), false);
+    assert.equal(routeSource.includes("const saved = await saveImageBuffer(finalPng"), false);
+    assert.equal(routeSource.includes("const comparisonSaved = await saveImageBuffer(comparisonPng"), false);
+    assert.equal(routeSource.includes("const comparisonMeta = await readImageMetadata(comparisonPng)"), false);
     assert.equal(routeSource.includes("medical/health"), true);
     assert.equal(routeSource.includes("beauty/cosmetics"), true);
     assert.equal(routeSource.includes("beer/beverage"), true);

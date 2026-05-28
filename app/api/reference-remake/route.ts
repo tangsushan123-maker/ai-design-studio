@@ -144,13 +144,15 @@ export async function POST(request: Request) {
     const finalPng = input.mode === "precise"
       ? await compositeDetectedText(assetNormalized, outputSize, effectiveAnalysis.text_layers)
       : assetNormalized;
-    const actual = await readImageMetadata(finalPng);
-    const saved = await saveImageBuffer(finalPng, "png", {
-      ratioLabel: outputRatioLabel,
-      quality: input.quality,
-      projectId: taskTrace?.projectId,
-      storageKind: "results",
-    });
+    const [actual, saved] = await Promise.all([
+      readImageMetadata(finalPng),
+      saveImageBuffer(finalPng, "png", {
+        ratioLabel: outputRatioLabel,
+        quality: input.quality,
+        projectId: taskTrace?.projectId,
+        storageKind: "results",
+      }),
+    ]);
     const qualityCheck = await inspectImageQuality(saved.path, {
       quality: input.quality,
       ratio: targetDesignRatio,
