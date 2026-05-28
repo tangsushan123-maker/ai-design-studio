@@ -135,10 +135,15 @@ function addCandidate(
 }
 
 function extractValues(text: string, pattern: RegExp) {
-  return [...text.matchAll(pattern)]
-    .map((match) => cleanText(match[1] || ""))
-    .filter(Boolean)
-    .filter((value, index, array) => array.indexOf(value) === index);
+  const values: string[] = [];
+  const seen = new Set<string>();
+  for (const match of text.matchAll(pattern)) {
+    const value = cleanText(match[1] || "");
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    values.push(value);
+  }
+  return values;
 }
 
 function sourceUrlForValue(results: SearchResult[], value: string) {

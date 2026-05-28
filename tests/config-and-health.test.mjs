@@ -1472,6 +1472,7 @@ describe("Text-to-image references", () => {
     assert.equal(promptSource.includes("promptSection(\"Task\""), true);
     assert.equal(promptSource.includes("promptSection(\"Canvas\""), true);
     assert.equal(promptSource.includes("buildContextAwareAvoidLine(request.prompt)"), true);
+    assert.equal(promptSource.includes("arr.indexOf(item)"), false);
     assert.equal(promptSource.includes("shouldIncludeProtection ? promptSection(\"Protected source facts\", [compactPromptText(buildProtectionPrompt(protectionContext), 560)]) : \"\""), true);
     assert.equal(promptSource.includes("通用商业设计规则：紧扣用户当前主题，不要串用无关行业或历史任务元素。"), true);
     assert.equal(workbenchSource.includes("function shouldUseProjectPromptContext"), true);
@@ -1483,6 +1484,15 @@ describe("Text-to-image references", () => {
     assert.equal(workbenchSource.includes("const shouldProtectContact = !hiddenRequests.noText && !hiddenRequests.noContact && contactExplicitlyRequested"), true);
     assert.equal(workbenchSource.includes("shouldForbidInventedContact"), true);
     assert.equal(workbenchSource.includes("用户只要求品牌、Logo 或 IP 时，只放对应素材"), true);
+  });
+});
+
+describe("Project public info extraction", () => {
+  it("deduplicates discovered facts in one pass", async () => {
+    const routeSource = await readFile(new URL("../app/api/project-public-info/route.ts", import.meta.url), "utf8");
+
+    assert.equal(routeSource.includes("for (const match of text.matchAll(pattern))"), true);
+    assert.equal(routeSource.includes("array.indexOf(value)"), false);
   });
 });
 

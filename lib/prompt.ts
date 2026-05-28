@@ -361,9 +361,10 @@ function normalizeBriefVisibleCopy(source: Partial<DesignDirectorBrief>, fallbac
   const title = isUsablePosterCopy(sourceTitle, "title", allowPromotionCopy) ? sourceTitle : fallback.title;
   const subtitle = isUsablePosterCopy(sourceSubtitle, "subtitle", allowPromotionCopy) ? sourceSubtitle : fallback.subtitle;
   const sourcePoints = Array.isArray(source.sellingPoints) ? source.sellingPoints.map(cleanPromptText).filter(Boolean) : [];
-  const sellingPoints = [...sourcePoints.filter((item) => isUsablePosterCopy(item, "label", allowPromotionCopy)), ...fallback.sellingPoints]
-    .filter((item, index, arr) => arr.indexOf(item) === index)
-    .slice(0, 3);
+  const sellingPoints = Array.from(new Set([
+    ...sourcePoints.filter((item) => isUsablePosterCopy(item, "label", allowPromotionCopy)),
+    ...fallback.sellingPoints,
+  ])).slice(0, 3);
   return { title, subtitle, sellingPoints: sellingPoints.length ? sellingPoints : fallback.sellingPoints };
 }
 
