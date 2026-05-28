@@ -116,6 +116,32 @@ export function filterEdgesForNodes(edges: FlowEdge[], nodes: FlowNode[]) {
   return edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target));
 }
 
+export function normalizeRestoredCanvasPositions(nodes: FlowNode[]) {
+  if (!nodes.length) return nodes;
+  const positions = nodes.map((node) => node.position).filter((position) => Number.isFinite(position?.x) && Number.isFinite(position?.y));
+  if (!positions.length) return nodes;
+  const minX = Math.min(...positions.map((position) => position.x));
+  const minY = Math.min(...positions.map((position) => position.y));
+  const maxX = Math.max(...positions.map((position) => position.x));
+  const maxY = Math.max(...positions.map((position) => position.y));
+  const needsNormalize = Math.max(Math.abs(minX), Math.abs(minY), Math.abs(maxX), Math.abs(maxY)) > 6000;
+  if (!needsNormalize) return nodes;
+  const offsetX = minX - 120;
+  const offsetY = minY - 120;
+  return nodes.map((node, index) => {
+    const position = Number.isFinite(node.position?.x) && Number.isFinite(node.position?.y)
+      ? node.position
+      : { x: 120 + index * 80, y: 120 + index * 40 };
+    return {
+      ...node,
+      position: {
+        x: Math.round((position.x - offsetX) * 100) / 100,
+        y: Math.round((position.y - offsetY) * 100) / 100,
+      },
+    };
+  });
+}
+
 export function estimateWorkflowNodeHeight(node: FlowNode) {
   if (node.data.kind === "image_input") {
     const image = (node.data.image || node.data.output || null) as ImageAsset | null;

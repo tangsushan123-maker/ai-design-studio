@@ -85,7 +85,13 @@ import {
 import { imageRatioStyle, largePreviewFrameStyle, pngLayerDisplayName, pngLayerPreviewImage, zoomedPreviewFrameStyle } from "@/components/workbench/workbench-image-display";
 import { findDataImagePath, imageDeletionProtection, imageForComparison, sanitizeSerializableImageUrl, stripImageFile } from "@/components/workbench/workbench-image-lifecycle";
 import { compactThumbStyle, imageNodePreviewMetrics, shouldShowCheckerboard } from "@/components/workbench/workbench-image-metrics";
-import { arrangeWorkflowNodes, estimateWorkflowNodeHeight, filterEdgesForNodes, nodeAutoSpacingX } from "@/components/workbench/workbench-layout";
+import {
+  arrangeWorkflowNodes,
+  estimateWorkflowNodeHeight,
+  filterEdgesForNodes,
+  nodeAutoSpacingX,
+  normalizeRestoredCanvasPositions,
+} from "@/components/workbench/workbench-layout";
 import {
   designComparisonModeLabel,
   designComparisonModeParam,
@@ -7706,32 +7712,6 @@ function migrateLegacyNodeParams(kind: NodeKind, originalKind: unknown, params: 
     prompt: stringParam(params.prompt) || qualityEnhanceDefaultPrompt(enhancementMode),
     model: stringParam(params.model),
   };
-}
-
-function normalizeRestoredCanvasPositions(nodes: FlowNode[]) {
-  if (!nodes.length) return nodes;
-  const positions = nodes.map((node) => node.position).filter((position) => Number.isFinite(position?.x) && Number.isFinite(position?.y));
-  if (!positions.length) return nodes;
-  const minX = Math.min(...positions.map((position) => position.x));
-  const minY = Math.min(...positions.map((position) => position.y));
-  const maxX = Math.max(...positions.map((position) => position.x));
-  const maxY = Math.max(...positions.map((position) => position.y));
-  const needsNormalize = Math.max(Math.abs(minX), Math.abs(minY), Math.abs(maxX), Math.abs(maxY)) > 6000;
-  if (!needsNormalize) return nodes;
-  const offsetX = minX - 120;
-  const offsetY = minY - 120;
-  return nodes.map((node, index) => {
-    const position = Number.isFinite(node.position?.x) && Number.isFinite(node.position?.y)
-      ? node.position
-      : { x: 120 + index * 80, y: 120 + index * 40 };
-    return {
-      ...node,
-      position: {
-        x: Math.round((position.x - offsetX) * 100) / 100,
-        y: Math.round((position.y - offsetY) * 100) / 100,
-      },
-    };
-  });
 }
 
 function stripProjectRuntimeState<T extends ProjectPayload & { setActive?: boolean }>(project: T): T {
