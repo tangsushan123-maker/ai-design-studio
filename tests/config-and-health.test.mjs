@@ -637,6 +637,17 @@ describe("Generated image serving", () => {
     assert.equal(cacheSource.includes('"Cache-Control": cacheControl'), true);
   });
 
+  it("does not block image responses on preview variant generation", async () => {
+    const imageUtilsSource = await readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8");
+
+    assert.equal(imageUtilsSource.includes("void ensureImageVariants(fileName, buffer).catch(() => null)"), true);
+    assert.equal(imageUtilsSource.includes("const variants = {"), true);
+    assert.equal(imageUtilsSource.includes('thumbnailUrl: getImageVariantApiUrl(publicUrl, "thumbnail")'), true);
+    assert.equal(imageUtilsSource.includes('previewUrl: getImageVariantApiUrl(publicUrl, "preview")'), true);
+    assert.equal(imageUtilsSource.includes("const variants = await ensureImageVariants"), false);
+    assert.equal(imageUtilsSource.includes("getImageVariantUrl("), false);
+  });
+
   it("checks generated image restore conflicts without reading image files", async () => {
     const generatedImagesRouteSource = await readFile(new URL("../app/api/generated-images/route.ts", import.meta.url), "utf8");
 

@@ -53,10 +53,6 @@ export function getImageVariantFileName(fileName: string, kind: ImageVariantKind
   return path.join("_variants", kind, `${relativeDir}${parsed.name}.webp`);
 }
 
-export function getImageVariantUrl(fileName: string, kind: ImageVariantKind) {
-  return getGeneratedUrl(getImageVariantFileName(fileName, kind));
-}
-
 export function getImageVariantApiUrl(publicUrl: string, kind: ImageVariantKind) {
   return `/api/image-preview?kind=${kind}&src=${encodeURIComponent(publicUrl)}`;
 }
@@ -91,17 +87,19 @@ export async function saveImageBuffer(
   const baseFileName = `design-${dateText}-${ratioText}-${qualityText}-${randomUUID().slice(0, 8)}.${extension}`;
   const fileName = getGeneratedProjectRelativePath(options?.projectId, options?.storageKind || "results", baseFileName);
   const fullPath = getGeneratedPath(fileName);
+  const publicUrl = getGeneratedUrl(fileName);
   await mkdir(path.dirname(fullPath), { recursive: true });
   await writeBufferAtomic(fullPath, buffer);
-  const variants = await ensureImageVariants(fileName, buffer).catch(() => ({
-    thumbnailUrl: getImageVariantApiUrl(getGeneratedUrl(fileName), "thumbnail"),
-    previewUrl: getImageVariantApiUrl(getGeneratedUrl(fileName), "preview"),
-  }));
+  const variants = {
+    thumbnailUrl: getImageVariantApiUrl(publicUrl, "thumbnail"),
+    previewUrl: getImageVariantApiUrl(publicUrl, "preview"),
+  };
+  void ensureImageVariants(fileName, buffer).catch(() => null);
   return {
     fileName,
     path: fullPath,
-    url: getGeneratedUrl(fileName),
-    originalUrl: getGeneratedUrl(fileName),
+    url: publicUrl,
+    originalUrl: publicUrl,
     thumbnailUrl: variants.thumbnailUrl,
     previewUrl: variants.previewUrl,
   };
@@ -127,8 +125,8 @@ export async function saveImageMetadata(fileName: string, metadata: Record<strin
     fileName,
     savedPath: getGeneratedPath(fileName),
     originalUrl: typeof metadata.originalUrl === "string" ? metadata.originalUrl : getGeneratedUrl(fileName),
-    thumbnailUrl: typeof metadata.thumbnailUrl === "string" ? metadata.thumbnailUrl : getImageVariantUrl(fileName, "thumbnail"),
-    previewUrl: typeof metadata.previewUrl === "string" ? metadata.previewUrl : getImageVariantUrl(fileName, "preview"),
+    thumbnailUrl: typeof metadata.thumbnailUrl === "string" ? metadata.thumbnailUrl : getImageVariantApiUrl(getGeneratedUrl(fileName), "thumbnail"),
+    previewUrl: typeof metadata.previewUrl === "string" ? metadata.previewUrl : getImageVariantApiUrl(getGeneratedUrl(fileName), "preview"),
   });
 }
 
