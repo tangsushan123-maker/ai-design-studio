@@ -129,7 +129,7 @@ function normalizeLocalConfig(parsed: RawLocalOpenAIConfig): Partial<LocalOpenAI
     textModel: typeof parsed.textModel === "string" ? parsed.textModel.trim() : typeof parsed.analysisModel === "string" ? parsed.analysisModel.trim() : "",
     imageModel: typeof parsed.imageModel === "string" ? parsed.imageModel.trim() : "",
     videoModel: typeof parsed.videoModel === "string" ? parsed.videoModel.trim() : undefined,
-    modelsCache: Array.isArray(parsed.modelsCache) ? parsed.modelsCache.filter(isModelCatalogItem).map(normalizeModelCatalogItem) : [],
+    modelsCache: normalizeModelCache(parsed.modelsCache),
     modelsUpdatedAt: typeof parsed.modelsUpdatedAt === "string" ? parsed.modelsUpdatedAt : "",
     supportsModelsList: typeof parsed.supportsModelsList === "boolean" ? parsed.supportsModelsList : undefined,
     supportsResponses: typeof parsed.supportsResponses === "boolean" ? parsed.supportsResponses : undefined,
@@ -220,6 +220,7 @@ export async function saveLocalConfig(input: {
   const provider = findProviderPreset(providerId);
   const providerSiteUrl = normalizeSiteUrl(input.providerSiteUrl?.trim() || input.websiteUrl?.trim() || siteUrlFromApiBaseUrl(input.apiBaseUrl) || provider.siteUrl || "");
   const rawBaseUrl = input.apiBaseUrl?.trim() || provider.apiBaseUrl || providerSiteUrl || defaultOpenAIConfig.apiBaseUrl;
+  const normalizedModelCache = input.modelsCache === undefined ? null : normalizeModelCache(input.modelsCache);
   const config: LocalOpenAIConfig = {
     openaiApiKey: input.apiKey?.trim() || "",
     providerName: input.providerName?.trim() || provider.label,
@@ -233,8 +234,8 @@ export async function saveLocalConfig(input: {
     modelReasoningEffort: input.modelReasoningEffort || provider.modelReasoningEffort || defaultOpenAIConfig.modelReasoningEffort,
     modelsCache: input.modelsCache === undefined
       ? provider.models
-      : input.modelsCache.filter(isModelCatalogItem).length
-        ? input.modelsCache.filter(isModelCatalogItem).map(normalizeModelCatalogItem)
+      : normalizedModelCache?.length
+        ? normalizedModelCache
         : provider.models,
     modelsUpdatedAt: input.modelsUpdatedAt || "",
     supportsModelsList: input.supportsModelsList ?? false,
@@ -416,6 +417,12 @@ function isModelCatalogItem(item: unknown): item is ModelCatalogItem {
   if (!item || typeof item !== "object") return false;
   const candidate = item as Partial<ModelCatalogItem>;
   return typeof candidate.id === "string" && typeof candidate.label === "string" && Array.isArray(candidate.capabilities);
+}
+
+function normalizeModelCache(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter(isModelCatalogItem).map(normalizeModelCatalogItem)
+    : [];
 }
 
 function normalizeModelCatalogItem(item: ModelCatalogItem): ModelCatalogItem {

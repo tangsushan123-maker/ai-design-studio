@@ -719,6 +719,10 @@ describe("Local JSON storage", () => {
     assert.equal(configSource.includes("function normalizeLocalConfig"), true);
     assert.equal(configSource.includes("return normalizeLocalConfig(readActiveLocalConfig())"), true);
     assert.equal(configSource.includes("function configPathForUser"), true);
+    assert.equal(configSource.includes("function normalizeModelCache"), true);
+    assert.equal(configSource.includes("modelsCache: normalizeModelCache(parsed.modelsCache)"), true);
+    assert.equal(configSource.includes("const normalizedModelCache = input.modelsCache === undefined ? null : normalizeModelCache(input.modelsCache)"), true);
+    assert.equal(configSource.includes("input.modelsCache.filter(isModelCatalogItem).length"), false);
   });
 });
 
