@@ -13,7 +13,7 @@ import { imageSourceDetailLines, imageSourceSummary, shortImageTraceId } from ".
 import { taskMatchesSearch, taskSearchText } from "../lib/workbench-tasks.ts";
 
 async function readWorkbenchSource() {
-  const [clientSource, configSource, nodeCatalogSource, labelSource, imageCollectionSource, composerHelperSource, operationParamSource, textReferenceSource, upscaleSource, nodePromptSource, projectHelperSource, promptPolicySource, imageLifecycleSource, nodeUiSource, imageRequestSource, brandContextSource, taskHelperSource, fileActionSource, projectStorageSource] = await Promise.all([
+  const [clientSource, configSource, nodeCatalogSource, labelSource, imageCollectionSource, composerHelperSource, operationParamSource, textReferenceSource, upscaleSource, nodePromptSource, projectHelperSource, promptPolicySource, imageLifecycleSource, nodeUiSource, imageRequestSource, brandContextSource, taskHelperSource, fileActionSource, projectStorageSource, projectCapacitySource] = await Promise.all([
     readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-config.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-node-catalog.tsx", import.meta.url), "utf8"),
@@ -33,8 +33,9 @@ async function readWorkbenchSource() {
     readFile(new URL("../components/workbench/workbench-task-helpers.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-file-actions.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-project-storage.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/workbench/workbench-project-capacity.ts", import.meta.url), "utf8"),
   ]);
-  return `${clientSource}\n${configSource}\n${nodeCatalogSource}\n${labelSource}\n${imageCollectionSource}\n${composerHelperSource}\n${operationParamSource}\n${textReferenceSource}\n${upscaleSource}\n${nodePromptSource}\n${projectHelperSource}\n${promptPolicySource}\n${imageLifecycleSource}\n${nodeUiSource}\n${imageRequestSource}\n${brandContextSource}\n${taskHelperSource}\n${fileActionSource}\n${projectStorageSource}`;
+  return `${clientSource}\n${configSource}\n${nodeCatalogSource}\n${labelSource}\n${imageCollectionSource}\n${composerHelperSource}\n${operationParamSource}\n${textReferenceSource}\n${upscaleSource}\n${nodePromptSource}\n${projectHelperSource}\n${promptPolicySource}\n${imageLifecycleSource}\n${nodeUiSource}\n${imageRequestSource}\n${brandContextSource}\n${taskHelperSource}\n${fileActionSource}\n${projectStorageSource}\n${projectCapacitySource}`;
 }
 
 describe("OpenAI defaults", () => {
