@@ -271,6 +271,7 @@ import {
 } from "@/components/workbench/workbench-node-ui";
 import { appendDataUrlToForm, appendImageToForm, imageFromSingleResponse, imageSourcePayloadForPngLayerExport, imagesFromResponse } from "@/components/workbench/workbench-image-requests";
 import { copyImageToClipboard, copyTextToClipboard, downloadImageFile, downloadRemoteFile } from "@/components/workbench/workbench-file-actions";
+import { readResponseErrorMessage } from "@/components/workbench/workbench-response";
 import {
   buildTaskRecoveredCompletionPatch,
   hasTaskResultNodesOnCanvasFromNodes,
@@ -7971,16 +7972,6 @@ function persistProjectPayloadForLifecycleExit(payloadText: string) {
       keepalive: canUseKeepalive,
     }).catch(() => {});
   } catch {}
-}
-
-async function readResponseErrorMessage(response: Response, fallback: string) {
-  const text = await response.text().catch(() => "");
-  try {
-    const data = text ? JSON.parse(text) as { error?: string; message?: string } : {};
-    return data.error || data.message || `${fallback}（HTTP ${response.status}）。`;
-  } catch {
-    return `${fallback}（HTTP ${response.status}）：${text.slice(0, 180) || "接口没有返回错误详情"}`;
-  }
 }
 
 function NodeErrorNotice({ className = "", compact = false, error }: { className?: string; compact?: boolean; error: string }) {
