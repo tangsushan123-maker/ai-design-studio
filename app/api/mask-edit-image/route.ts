@@ -118,7 +118,6 @@ export async function POST(request: Request) {
     const clientMaskPixelCount = Math.max(0, Number(formData.get("maskPixelCount") || 0) || 0);
     const clientMaskCoverage = clamp(Number(formData.get("maskCoverage") || 0) || 0, 0, 1);
     const protectionContext = parseProtectionContext(formData.get("protectionContext"));
-    const brandReferenceImages = await readBrandReferenceImages(formData);
 
     if (requiresSpecificInstruction(taskMode) && !promptText.trim()) {
       await recordTaskRunFailed(taskTrace, taskMode === "replace" ? "请写清楚要替换成什么；具体产品建议先上传参考图。" : "请写清楚要替换/修复的新文字内容。");
@@ -130,25 +129,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "请先涂抹要修改的区域。" }, { status: 400 });
     }
 
-    let imageBuffer: Buffer;
+    let imageBufferPromise: Promise<Buffer>;
     let fileName = "design.png";
     let mimeType = "image/png";
 
     if (uploadedImage instanceof File) {
       assertSupportedImage(uploadedImage);
-      imageBuffer = Buffer.from(await uploadedImage.arrayBuffer());
+      imageBufferPromise = uploadedImage.arrayBuffer().then((buffer) => Buffer.from(buffer));
       fileName = uploadedImage.name || fileName;
       mimeType = uploadedImage.type || mimeType;
     } else if (sourceUrl) {
-      imageBuffer = await readPublicImageUrl(sourceUrl);
+      imageBufferPromise = readPublicImageUrl(sourceUrl);
     } else {
       await recordTaskRunFailed(taskTrace, "请选择要局部修改的图片。");
       return NextResponse.json({ error: "请选择要局部修改的图片。" }, { status: 400 });
     }
 
-    const originalMeta = await readImageMetadata(imageBuffer);
-    const maskBuffer = mask instanceof File ? Buffer.from(await mask.arrayBuffer()) : await readPublicImageUrl(maskUrl);
-    const maskMeta = await readImageMetadata(maskBuffer);
+    const maskBufferPromise = mask instanceof File
+      ? mask.arrayBuffer().then((buffer) => Buffer.from(buffer))
+      : readPublicImageUrl(maskUrl);
+    const [imageBuffer, maskBuffer] = await Promise.all([imageBufferPromise, maskBufferPromise]);
+    const [originalMeta, maskMeta] = await Promise.all([
+      readImageMetadata(imageBuffer),
+      readImageMetadata(maskBuffer),
+    ]);
     if (maskMeta.width !== originalMeta.width || maskMeta.height !== originalMeta.height) {
       await recordTaskRunFailed(taskTrace, "蒙版尺寸必须和原图一致，请重新涂抹后再试。");
       return NextResponse.json({ error: "蒙版尺寸必须和原图一致，请重新涂抹后再试。" }, { status: 400 });
@@ -187,8 +191,12 @@ export async function POST(request: Request) {
     });
 
     const openai = getOpenAI();
-    const imageFile = await toFile(imageBuffer, fileName, { type: mimeType });
-    const brandFiles = await Promise.all(brandReferenceImages.map((item, index) => toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType })));
+    const [imageFile, brandFiles] = await Promise.all([
+      toFile(imageBuffer, fileName, { type: mimeType }),
+      readBrandReferenceImages(formData).then((brandReferenceImages) => (
+        Promise.all(brandReferenceImages.map((item, index) => toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType })))
+      )),
+    ]);
     const runAttempt = async (attemptMask: PreparedMask, attemptPrompt: string, attemptProtectionStrength: MaskProtectionStrength) => {
       const maskFile = await toFile(attemptMask.editMaskPng, "controlled-mask.png", { type: "image/png" });
       const result = await runQueuedImageModelRequestWithRetry(

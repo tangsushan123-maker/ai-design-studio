@@ -918,6 +918,12 @@ describe("Controlled local mask editing", () => {
     assert.equal(routeSource.includes("coverageDrift"), true);
     assert.equal(routeSource.includes("shouldUseRawMaskForCoverageDrift"), true);
     assert.equal(routeSource.includes("toSingleChannelMaskBuffer"), true);
+    assert.equal(routeSource.includes("let imageBufferPromise: Promise<Buffer>"), true);
+    assert.equal(routeSource.includes("const [imageBuffer, maskBuffer] = await Promise.all([imageBufferPromise, maskBufferPromise])"), true);
+    assert.equal(routeSource.includes("const [originalMeta, maskMeta] = await Promise.all"), true);
+    assert.equal(routeSource.includes("const [imageFile, brandFiles] = await Promise.all"), true);
+    assert.equal(routeSource.includes("const brandReferenceImages = await readBrandReferenceImages(formData)"), false);
+    assert.equal(routeSource.includes("const maskBuffer = mask instanceof File ? Buffer.from(await mask.arrayBuffer()) : await readPublicImageUrl(maskUrl)"), false);
     assert.equal(routeSource.includes("red_paint"), true);
     assert.equal(routeSource.includes("nearFullWhiteMask"), true);
     assert.equal(routeSource.includes("tinyBlackResidue"), true);
