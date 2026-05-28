@@ -357,23 +357,6 @@ describe("Workbench image source trace", () => {
   });
 });
 
-describe("Workbench result cards", () => {
-  it("renders result badge, metadata, and description instead of dropping props", async () => {
-    const resultCardSource = await readFile(new URL("../components/workbench/result-variant-card.tsx", import.meta.url), "utf8");
-
-    assert.equal(resultCardSource.includes("void badgeLabel"), false);
-    assert.equal(resultCardSource.includes("void description"), false);
-    assert.equal(resultCardSource.includes("void meta"), false);
-    assert.equal(resultCardSource.includes("{badgeLabel}"), true);
-    assert.equal(resultCardSource.includes("{meta}"), true);
-    assert.equal(resultCardSource.includes("{description}"), true);
-    assert.equal(resultCardSource.includes("px-2 py-0.5 text-[11px] font-semibold"), true);
-    assert.equal(resultCardSource.includes("mt-1 truncate text-[11px] text-white/38"), true);
-    assert.equal(resultCardSource.includes("confirmDelete"), true);
-    assert.equal(resultCardSource.includes("确认删除"), true);
-  });
-});
-
 describe("Workbench node result panel", () => {
   it("surfaces quality review actions directly on result thumbnails", async () => {
     const nodeResultsSource = await readFile(new URL("../components/workbench/node-results-panel.tsx", import.meta.url), "utf8");
@@ -822,9 +805,8 @@ describe("Controlled local mask editing", () => {
 
 describe("Removed image workflows", () => {
   it("removes transparent cutout and poster layer extraction from routes and UI", async () => {
-    const [workbenchSource, resultCardSource, historySource, taskCenterSource] = await Promise.all([
+    const [workbenchSource, historySource, taskCenterSource] = await Promise.all([
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
-      readFile(new URL("../components/workbench/result-variant-card.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/history-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
     ]);
@@ -835,7 +817,7 @@ describe("Removed image workflows", () => {
     await assert.rejects(readFile(new URL("../app/api/layer-output-regression/route.ts", import.meta.url), "utf8"));
     await assert.rejects(readFile(new URL("../lib/layer-output-regression.ts", import.meta.url), "utf8"));
 
-    for (const source of [workbenchSource, resultCardSource, historySource, taskCenterSource]) {
+    for (const source of [workbenchSource, historySource, taskCenterSource]) {
       for (const label of removedUiLabels) {
         assert.equal(source.includes(label), false);
       }
@@ -845,7 +827,6 @@ describe("Removed image workflows", () => {
     assert.equal(workbenchSource.includes("layer_output"), true);
     assert.equal(workbenchSource.includes("removedFeatureTextMarkers"), true);
     assert.equal(workbenchSource.includes("filterEdgesForNodes"), true);
-    assert.equal(resultCardSource.includes("onLayerOutputNode"), false);
     assert.equal(historySource.includes("canLayerOutput"), false);
   });
 });
@@ -1766,16 +1747,13 @@ describe("Workbench compact typography", () => {
   });
 
   it("keeps result and task status cards readable in dense panels", async () => {
-    const [resultCardSource, taskCenterSource, nodeResultsSource, resultPreviewSource, deliveryBadgeSource] = await Promise.all([
-      readFile(new URL("../components/workbench/result-variant-card.tsx", import.meta.url), "utf8"),
+    const [taskCenterSource, nodeResultsSource, resultPreviewSource, deliveryBadgeSource] = await Promise.all([
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/node-results-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/result-preview-tools.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/delivery-status-badge.tsx", import.meta.url), "utf8"),
     ]);
 
-    assert.equal(resultCardSource.includes("text-[10px]"), false);
-    assert.equal(resultCardSource.includes("leading-4"), false);
     assert.equal(taskCenterSource.includes("rounded-full px-2.5 py-1 text-[10px]"), false);
     assert.equal(taskCenterSource.includes("rounded-[14px] border px-3 py-2 text-[10px] leading-4"), false);
     assert.equal(taskCenterSource.includes("rounded-full px-2.5 py-1 text-[11px]"), true);
