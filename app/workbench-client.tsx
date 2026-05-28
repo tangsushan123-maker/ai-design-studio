@@ -140,6 +140,7 @@ import { ImageFrame } from "@/components/workbench/image-frame";
 import { LightboxActionPanel } from "@/components/workbench/lightbox-action-panel";
 import { LightboxDeliveryPanel, type LightboxEditTool } from "@/components/workbench/lightbox-delivery-panel";
 import { LightboxEditPanels } from "@/components/workbench/lightbox-edit-panels";
+import { LightboxHeader } from "@/components/workbench/lightbox-header";
 import { LightboxInfoPanel } from "@/components/workbench/lightbox-info-panel";
 import { LightboxPreviewPanel } from "@/components/workbench/lightbox-preview-panel";
 import { LightboxVersionPanel } from "@/components/workbench/lightbox-version-panel";
@@ -6706,20 +6707,7 @@ function ImageLightbox({
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(7,11,18,0.82)] p-2 sm:p-5" onClick={onClose}>
       <div className="apple-panel-strong flex max-h-[94vh] w-[min(1280px,97vw)] flex-col overflow-hidden rounded-[22px] shadow-[0_30px_100px_rgba(0,0,0,0.34)] sm:rounded-[28px]" onClick={(event) => event.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <div className="min-w-0">
-            <div className="mb-1 flex items-center gap-2">
-              <button className="apple-button rounded-full px-2.5 py-1 text-[11px]" onClick={onClose} type="button">返回结果</button>
-            </div>
-            <div className="truncate text-[14px] font-semibold text-white/88">{lightboxTitle}</div>
-            {lightboxMeta ? <div className="apple-meta mt-0.5">{lightboxMeta}</div> : null}
-          </div>
-          <div className="flex items-center gap-2">
-            <button aria-label="关闭预览" className="apple-button flex size-8 items-center justify-center text-white/62" onClick={onClose} type="button">
-              <X className="size-4" />
-            </button>
-          </div>
-        </div>
+        <LightboxHeader meta={lightboxMeta} title={lightboxTitle} onClose={onClose} />
         <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-white/[0.025] lg:grid-cols-[minmax(0,1fr)_340px]">
           <LightboxPreviewPanel
             activePngLayer={activePngLayer}

@@ -13,7 +13,7 @@ import { imageSourceDetailLines, imageSourceSummary, shortImageTraceId } from ".
 import { taskMatchesSearch, taskSearchText } from "../lib/workbench-tasks.ts";
 
 async function readWorkbenchSource() {
-  const [clientSource, configSource, nodeCatalogSource, labelSource, imageCollectionSource, composerHelperSource, operationParamSource, textReferenceSource, textReferenceInspectorSource, smartRecommendationsSource, menuSource, pngLayerResultSource, lightboxActionPanelSource, lightboxDeliveryPanelSource, lightboxEditPanelSource, lightboxInfoPanelSource, lightboxPreviewPanelSource, lightboxPreviewToolbarSource, lightboxVersionPanelSource, upscaleSource, nodePromptSource, projectHelperSource, promptPolicySource, imageLifecycleSource, nodeUiSource, imageRequestSource, brandContextSource, taskHelperSource, fileActionSource, projectStorageSource, projectCapacitySource, responseSource, errorNoticeSource] = await Promise.all([
+  const [clientSource, configSource, nodeCatalogSource, labelSource, imageCollectionSource, composerHelperSource, operationParamSource, textReferenceSource, textReferenceInspectorSource, smartRecommendationsSource, menuSource, pngLayerResultSource, lightboxActionPanelSource, lightboxDeliveryPanelSource, lightboxEditPanelSource, lightboxHeaderSource, lightboxInfoPanelSource, lightboxPreviewPanelSource, lightboxPreviewToolbarSource, lightboxVersionPanelSource, upscaleSource, nodePromptSource, projectHelperSource, promptPolicySource, imageLifecycleSource, nodeUiSource, imageRequestSource, brandContextSource, taskHelperSource, fileActionSource, projectStorageSource, projectCapacitySource, responseSource, errorNoticeSource] = await Promise.all([
     readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-config.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-node-catalog.tsx", import.meta.url), "utf8"),
@@ -29,6 +29,7 @@ async function readWorkbenchSource() {
     readFile(new URL("../components/workbench/lightbox-action-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/lightbox-delivery-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/lightbox-edit-panels.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/workbench/lightbox-header.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/lightbox-info-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/lightbox-preview-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/lightbox-preview-toolbar.tsx", import.meta.url), "utf8"),
@@ -48,7 +49,7 @@ async function readWorkbenchSource() {
     readFile(new URL("../components/workbench/workbench-response.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/node-error-notice.tsx", import.meta.url), "utf8"),
   ]);
-  return `${clientSource}\n${configSource}\n${nodeCatalogSource}\n${labelSource}\n${imageCollectionSource}\n${composerHelperSource}\n${operationParamSource}\n${textReferenceSource}\n${textReferenceInspectorSource}\n${smartRecommendationsSource}\n${menuSource}\n${pngLayerResultSource}\n${lightboxActionPanelSource}\n${lightboxDeliveryPanelSource}\n${lightboxEditPanelSource}\n${lightboxInfoPanelSource}\n${lightboxPreviewPanelSource}\n${lightboxPreviewToolbarSource}\n${lightboxVersionPanelSource}\n${upscaleSource}\n${nodePromptSource}\n${projectHelperSource}\n${promptPolicySource}\n${imageLifecycleSource}\n${nodeUiSource}\n${imageRequestSource}\n${brandContextSource}\n${taskHelperSource}\n${fileActionSource}\n${projectStorageSource}\n${projectCapacitySource}\n${responseSource}\n${errorNoticeSource}`;
+  return `${clientSource}\n${configSource}\n${nodeCatalogSource}\n${labelSource}\n${imageCollectionSource}\n${composerHelperSource}\n${operationParamSource}\n${textReferenceSource}\n${textReferenceInspectorSource}\n${smartRecommendationsSource}\n${menuSource}\n${pngLayerResultSource}\n${lightboxActionPanelSource}\n${lightboxDeliveryPanelSource}\n${lightboxEditPanelSource}\n${lightboxHeaderSource}\n${lightboxInfoPanelSource}\n${lightboxPreviewPanelSource}\n${lightboxPreviewToolbarSource}\n${lightboxVersionPanelSource}\n${upscaleSource}\n${nodePromptSource}\n${projectHelperSource}\n${promptPolicySource}\n${imageLifecycleSource}\n${nodeUiSource}\n${imageRequestSource}\n${brandContextSource}\n${taskHelperSource}\n${fileActionSource}\n${projectStorageSource}\n${projectCapacitySource}\n${responseSource}\n${errorNoticeSource}`;
 }
 
 describe("OpenAI defaults", () => {
