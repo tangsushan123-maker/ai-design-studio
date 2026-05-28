@@ -720,6 +720,16 @@ const textReferenceInputHandle = "image";
 const legacyTextReferenceHandles = ["ref1", "ref2", "ref3"] as const;
 const maxTextReferenceImages = 5;
 
+const flowAriaLabelConfig = {
+  "controls.ariaLabel": "画布控制",
+  "controls.zoomIn.ariaLabel": "放大",
+  "controls.zoomOut.ariaLabel": "缩小",
+  "controls.fitView.ariaLabel": "适配视图",
+  "controls.interactive.ariaLabel": "切换交互",
+  "minimap.ariaLabel": "缩略地图",
+  "handle.ariaLabel": "连接点",
+};
+
 const textReferenceRoleOptions: Array<{ value: TextReferenceRole; label: string }> = [
   { value: "person", label: "使用人物" },
   { value: "product", label: "使用产品" },
@@ -5516,6 +5526,7 @@ function NodeWorkflowWorkbench({
 
         <ReactFlow
           className={`node-workflow-flow ${isPerformanceMode ? "is-performance-mode" : ""}`}
+          ariaLabelConfig={flowAriaLabelConfig}
           colorMode="dark"
           edges={decoratedEdges}
           maxZoom={1.8}
@@ -5587,9 +5598,10 @@ function NodeWorkflowWorkbench({
               pannable
               position="bottom-left"
               zoomable
+              ariaLabel="缩略地图"
             />
           ) : null}
-          {nodes.length ? <Controls position="bottom-left" showInteractive={false} /> : null}
+          {nodes.length ? <Controls aria-label="画布控制" position="bottom-left" showInteractive={false} /> : null}
         </ReactFlow>
 
         <ChatComposer
