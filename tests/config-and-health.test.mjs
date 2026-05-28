@@ -1233,6 +1233,11 @@ describe("Text-to-image references", () => {
     assert.equal(workbenchSource.includes("shouldUseProjectPromptContext(visibleRequestText) ? buildNodeProjectConstraintText"), true);
     assert.equal(workbenchSource.includes("requireExplicitProjectContext"), true);
     assert.equal(workbenchSource.includes("projectContext: shouldUseProjectPromptContext(prompt) ? buildCreativeProjectContext"), true);
+    assert.equal(workbenchSource.includes("visibleRequestText?: string"), true);
+    assert.equal(workbenchSource.includes("const contactExplicitlyRequested = visibleRequests.phone || visibleRequests.address || usage.useContact"), true);
+    assert.equal(workbenchSource.includes("const shouldProtectContact = !hiddenRequests.noText && !hiddenRequests.noContact && contactExplicitlyRequested"), true);
+    assert.equal(workbenchSource.includes("shouldForbidInventedContact"), true);
+    assert.equal(workbenchSource.includes("用户只要求品牌、Logo 或 IP 时，只放对应素材"), true);
   });
 });
 

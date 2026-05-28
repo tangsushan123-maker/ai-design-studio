@@ -3038,6 +3038,7 @@ function NodeWorkflowWorkbench({
       operation,
       sourceImages,
       brandAssets: getCurrentProjectBrandAssets(projectAssets, projectKnowledge),
+      visibleRequestText,
     });
     const creativeBrief = node?.data.params?.creativeBrief as CreativeBrief | undefined;
     if (!creativeBrief) return context;
@@ -11387,19 +11388,27 @@ function buildProfileProtectionContext(
     operation: string;
     sourceImages: ImageAsset[];
     brandAssets?: ImageAsset[];
+    visibleRequestText?: string;
   },
 ): ProtectionContextPayload {
   const hasSourceImage = options.sourceImages.length > 0;
   const protectVisibleProfileAssets = hasSourceImage && options.operation !== "text_to_image";
   const brandAssets = options.brandAssets || [];
   const usage = normalizeBrandAssetUsage(profile.brandAssetUsage);
+  const visibleRequestText = options.visibleRequestText || "";
+  const visibleRequests = resolveVisibleProjectInfoRequests(visibleRequestText);
+  const hiddenRequests = resolveNoVisibleProjectOutputPolicy(visibleRequestText);
+  const isProjectAwareTextToImage = options.operation === "text_to_image" && shouldUseProjectPromptContext(visibleRequestText);
+  const contactExplicitlyRequested = visibleRequests.phone || visibleRequests.address || usage.useContact;
+  const shouldProtectContact = !hiddenRequests.noText && !hiddenRequests.noContact && contactExplicitlyRequested;
+  const shouldForbidInventedContact = !hiddenRequests.noText && !hiddenRequests.noContact && isProjectAwareTextToImage && !contactExplicitlyRequested;
   const logoAssets = findBrandAssets(brandAssets, "logo");
   const ipAssets = findBrandAssets(brandAssets, "ip");
   const qrAssets = findBrandAssets(brandAssets, "qrcode");
   const protectedTexts: ProtectedTextPayload[] = [
     profile.organizationName ? protectedText("organization", profile.organizationName, "other", "normal", "机构名称来自项目记忆，仅作为项目识别和校对资料") : null,
-    usage.useContact && profile.phone ? protectedText("phone", profile.phone, "phone", "critical", "项目电话来自品牌资产包，启用后必须准确使用，不得编造") : null,
-    usage.useContact && profile.address ? protectedText("address", profile.address, "address", "critical", "项目地址来自品牌资产包，启用后必须准确使用，不得编造") : null,
+    shouldProtectContact && profile.phone ? protectedText("phone", profile.phone, "phone", "critical", "用户明确要求电话；项目电话来自品牌资产包，必须准确使用，不得编造") : null,
+    shouldProtectContact && profile.address ? protectedText("address", profile.address, "address", "critical", "用户明确要求地址；项目地址来自品牌资产包，必须准确使用，不得编造") : null,
     ...(usage.useCopy ? splitProfileLines(profile.commonCopy).map((text, index) => protectedText(`copy_${index + 1}`, text, "title", "normal", "常用文案来自项目资料库")) : []),
     ...(usage.useForbiddenRules ? splitProfileLines(profile.forbiddenContent).map((text, index) => protectedText(`forbidden_${index + 1}`, text, "other", "critical", "禁改内容来自项目资料库")) : []),
   ].filter((item): item is ProtectedTextPayload => Boolean(item && item.text.trim()));
@@ -11487,8 +11496,9 @@ function buildProfileProtectionContext(
         profile.commonSizes ? `常用尺寸：${profile.commonSizes}` : "",
         usage.useForbiddenRules && profile.forbiddenContent ? `禁改内容：${profile.forbiddenContent}` : "",
         usage.useCopy && profile.commonCopy ? `常用文案：${profile.commonCopy}` : "",
-        usage.useContact && profile.phone ? `项目电话：${profile.phone}。启用电话地址后必须准确使用。` : "未启用或未提供电话时不要自行生成电话。",
-        usage.useContact && profile.address ? `项目地址：${profile.address}。启用电话地址后必须准确使用。` : "未启用或未提供地址时不要自行生成地址。",
+        shouldProtectContact && profile.phone ? `项目真实电话：${profile.phone}。用户明确要求电话时必须准确使用。` : "未明确要求电话时不要自行生成电话。",
+        shouldProtectContact && profile.address ? `项目真实地址：${profile.address}。用户明确要求地址时必须准确使用。` : "未明确要求地址时不要自行生成地址。",
+        shouldForbidInventedContact ? "联系方式策略：用户只要求品牌、Logo 或 IP 时，只放对应素材；不要自动添加电话、地址、二维码、预约热线、医院代码、扫码区或联系卡片。" : "",
         usage.useLogo && (profile.logoName || logoAssets.length) ? `项目 Logo：${profile.logoName || assetNames(logoAssets)}。只使用当前项目品牌资产。` : "未提供或未启用 Logo 时不要自行生成，也不要强行预留占位。",
         usage.useQrCode && (profile.qrCodeNote || qrAssets.length) ? `项目二维码：${profile.qrCodeNote || assetNames(qrAssets)}。二维码必须来自原始素材，不要重绘。` : "未提供或未启用二维码时不要自行生成，也不要强行预留占位。",
         usage.useIpImage && ipAssets.length ? `项目 IP形象：${assetNames(ipAssets)}。只参考当前项目素材库。` : "",
