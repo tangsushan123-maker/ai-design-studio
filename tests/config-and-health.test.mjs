@@ -827,6 +827,9 @@ describe("Quality enhance mode", () => {
     assert.equal(routeSource.includes("const [file, brandFiles] = await Promise.all"), true);
     assert.equal(routeSource.includes("const file = await toFile(input.imageBuffer"), false);
     assert.equal(routeSource.includes("const brandFiles = await Promise.all((input.brandReferenceImages || []).map"), false);
+    assert.equal(routeSource.includes("const [actual, saved] = await Promise.all"), true);
+    assert.equal(routeSource.includes("const actual = await readImageMetadata(output)"), false);
+    assert.equal(routeSource.includes("const saved = await saveImageBuffer(output"), false);
     assert.equal(routeSource.includes("retryTransientImageRequest"), false);
     assert.equal(routeSource.includes('"center_crop"'), false);
   });

@@ -126,13 +126,15 @@ export async function POST(request: Request) {
 
     const raw = await imageResultToBuffer(item.b64_json, item.url);
     const output = await encodeQualityEnhanceOutput(raw, input.format);
-    const actual = await readImageMetadata(output);
-    const saved = await saveImageBuffer(output, input.format, {
-      ratioLabel: outputRatioLabel,
-      quality: effectiveQuality,
-      projectId: input.protectionContext?.version?.projectId || taskTrace?.projectId,
-      storageKind: "results",
-    });
+    const [actual, saved] = await Promise.all([
+      readImageMetadata(output),
+      saveImageBuffer(output, input.format, {
+        ratioLabel: outputRatioLabel,
+        quality: effectiveQuality,
+        projectId: input.protectionContext?.version?.projectId || taskTrace?.projectId,
+        storageKind: "results",
+      }),
+    ]);
     const qualityCheck = await inspectImageQuality(saved.path, {
       quality: effectiveQuality,
       ratio,
