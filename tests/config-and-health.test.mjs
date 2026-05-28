@@ -1616,6 +1616,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(generatedHistorySource.includes('entry.name === generatedTrashDirName && !options.includeTrash'), true);
     assert.equal(generatedHistorySource.includes("historyImageMetadataFromSaved(savedMetadata) || await sharp(fullPath).metadata()"), true);
     assert.equal(generatedHistorySource.includes("numberValue(outputSize?.width) || numberValue(savedMetadata.width)"), true);
+    assert.equal(generatedHistorySource.includes("sortTime: historyMetadataSortTime(savedMetadata)"), true);
+    assert.equal(generatedHistorySource.includes("cachedFileStat || await stat(fullPath)"), true);
+    assert.equal(generatedHistorySource.includes("historySortTime(metadata"), false);
     assert.equal(workbenchSource.includes("imageMatchesGeneratedFile"), true);
     assert.equal(workbenchSource.includes("applyHistoryFavoriteState"), true);
     assert.equal(workbenchSource.includes("favorite: nextFavorite"), true);

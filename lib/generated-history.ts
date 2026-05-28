@@ -29,11 +29,8 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
     const fileEntries = await Promise.all(
       files.map(async (fileName) => {
         const fullPath = path.join(dir, fileName);
-        const [fileStat, savedMetadata] = await Promise.all([
-          stat(fullPath),
-          readSavedMetadata(dir, fileName),
-        ]);
-        return { fileName, fullPath, fileStat, savedMetadata };
+        const savedMetadata = await readSavedMetadata(dir, fileName);
+        return { fileName, fullPath, savedMetadata, sortTime: historyMetadataSortTime(savedMetadata) };
       }),
     );
     const requestIdSet = new Set((options.requestIds || []).map((item) => item.trim()).filter(Boolean));
@@ -54,12 +51,20 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
         (resultGroupId && taskIdSet.has(resultGroupId)),
       );
     });
-    scopedEntries.sort((a, b) => historySortTime(b.savedMetadata, b.fileStat) - historySortTime(a.savedMetadata, a.fileStat));
-    const total = scopedEntries.length;
-    const pagedEntries = scopedEntries.slice(offset, offset + limit);
+    const sortableEntries = await Promise.all(scopedEntries.map(async (entry) => {
+      if (typeof entry.sortTime === "number") return { ...entry, sortTime: entry.sortTime };
+      const fileStat = await stat(entry.fullPath);
+      return { ...entry, fileStat, sortTime: fileStat.mtime.getTime() };
+    }));
+    sortableEntries.sort((a, b) => b.sortTime - a.sortTime);
+    const total = sortableEntries.length;
+    const pagedEntries = sortableEntries.slice(offset, offset + limit);
 
     const images = await Promise.all(
-      pagedEntries.map(async ({ fileName, fullPath, fileStat, savedMetadata }) => {
+      pagedEntries.map(async (entry) => {
+        const { fileName, fullPath, savedMetadata } = entry;
+        const cachedFileStat = "fileStat" in entry ? entry.fileStat : undefined;
+        const fileStat = cachedFileStat || await stat(fullPath);
         const metadata = historyImageMetadataFromSaved(savedMetadata) || await sharp(fullPath).metadata();
         const quality = inferQuality(fileName);
         const aspectRatio = inferRatio(fileName, metadata.width, metadata.height);
@@ -160,11 +165,11 @@ async function readSavedMetadata(dir: string, fileName: string) {
   return readJsonWithBackup<Record<string, unknown>>(path.join(dir, `${fileName}.json`), {});
 }
 
-function historySortTime(metadata: Record<string, unknown>, fileStat: { mtime: Date }) {
+function historyMetadataSortTime(metadata: Record<string, unknown>) {
   const generatedAt = stringValue(metadata.generatedAt);
   const updatedAt = stringValue(metadata.updatedAt);
   const metadataTime = new Date(generatedAt || updatedAt || 0).getTime();
-  return Number.isFinite(metadataTime) && metadataTime > 0 ? metadataTime : fileStat.mtime.getTime();
+  return Number.isFinite(metadataTime) && metadataTime > 0 ? metadataTime : undefined;
 }
 
 async function listGeneratedImageFiles(dir: string, base = "", options: { includeTrash?: boolean } = {}): Promise<string[]> {
