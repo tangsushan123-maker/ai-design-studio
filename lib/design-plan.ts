@@ -401,23 +401,33 @@ function extractRepeatedLabeledCopy(text: string, labels: string[]) {
 
 function extractQuotedCopyAfterVerb(text: string) {
   if (!/(写上|文字为|内容为|文案为|改成|显示|放上)/.test(text)) return [];
-  return [...text.matchAll(/[“"「『](.*?)[”"」』]/g)].map((match) => match[1]).filter(Boolean);
+  const copies: string[] = [];
+  for (const match of text.matchAll(/[“"「『](.*?)[”"」』]/g)) {
+    if (match[1]) copies.push(match[1]);
+  }
+  return copies;
 }
 
 function splitPosterCopy(text: string) {
-  return clean(text)
+  const items = clean(text)
     .replace(/[「」"“”]/g, " ")
     .replace(/(主标题|标题|副标题|正文|文案|辅助文案|卖点|活动信息|医生信息|文字|海报文字)\s*[:：]/g, "；")
-    .split(/(?:\s*[\/｜|]\s*|\s{2,}|[，。；;]\s*)/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+    .split(/(?:\s*[\/｜|]\s*|\s{2,}|[，。；;]\s*)/);
+  const copy: string[] = [];
+  for (const item of items) {
+    const value = item.trim();
+    if (value) copy.push(value);
+  }
+  return copy;
 }
 
 function sanitizePosterCopyArray(value: unknown, fallback: string[]) {
   const items = Array.isArray(value) ? value : [];
-  const cleaned = items
-    .map((item) => sanitizePosterCopy(item, "", "body"))
-    .filter(Boolean);
+  const cleaned: string[] = [];
+  for (const item of items) {
+    const copy = sanitizePosterCopy(item, "", "body");
+    if (copy) cleaned.push(copy);
+  }
   return cleaned.length ? cleaned : fallback;
 }
 
@@ -468,7 +478,11 @@ function sanitizeImagePrompt(prompt: string) {
 
 function normalizeStringArray(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) return fallback;
-  const items = value.map(clean).filter(Boolean);
+  const items: string[] = [];
+  for (const item of value) {
+    const text = clean(item);
+    if (text) items.push(text);
+  }
   return items.length ? items : fallback;
 }
 

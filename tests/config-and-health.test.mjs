@@ -1373,6 +1373,9 @@ describe("Text-to-image references", () => {
     assert.equal(designPlanSource.includes("出图规则：本系统不再后期盖字"), true);
     assert.equal(designPlanSource.includes("imagePrompt 只允许使用你分析后的设计方案和 copywriting"), true);
     assert.equal(designPlanSource.includes("sanitizePosterCopy"), true);
+    assert.equal(designPlanSource.includes("for (const match of text.matchAll"), true);
+    assert.equal(designPlanSource.includes(".map((match) => match[1]).filter(Boolean)"), false);
+    assert.equal(designPlanSource.includes("value.map(clean).filter(Boolean)"), false);
     assert.equal(routeSource.includes("applyDesignPlanTextOverlay"), false);
     assert.equal(routeSource.includes("Generate the final complete poster directly"), true);
     assert.equal(routeSource.includes('const textToImageFitMode = "strict_full_bleed"'), true);
