@@ -670,11 +670,18 @@ describe("Generated image serving", () => {
 
 describe("Local JSON storage", () => {
   it("avoids duplicate sync existence checks when reading config files", async () => {
-    const storeSource = await readFile(new URL("../lib/local-json-store.ts", import.meta.url), "utf8");
+    const [storeSource, configSource] = await Promise.all([
+      readFile(new URL("../lib/local-json-store.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/local-config.ts", import.meta.url), "utf8"),
+    ]);
 
     assert.equal(storeSource.includes("readJsonWithBackupSync"), true);
     assert.equal(storeSource.includes("readFileSync(filePath"), true);
     assert.equal(storeSource.includes("existsSync"), false);
+    assert.equal(configSource.includes("function readActiveLocalConfig"), true);
+    assert.equal(configSource.includes("function normalizeLocalConfig"), true);
+    assert.equal(configSource.includes("return normalizeLocalConfig(readActiveLocalConfig())"), true);
+    assert.equal(configSource.includes("function configPathForUser"), true);
   });
 });
 

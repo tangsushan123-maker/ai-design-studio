@@ -72,6 +72,11 @@ type ConfigUser = {
   role: "owner" | "user";
 };
 
+type RawLocalOpenAIConfig = Partial<LocalOpenAIConfig> & {
+  analysisModel?: string;
+  apiKey?: string;
+};
+
 const legacyConfigPath = path.join(process.cwd(), "config.local.json");
 const configUserStorage = new AsyncLocalStorage<ConfigUser | null>();
 
@@ -85,42 +90,54 @@ export function getConfigUser() {
 
 export function readLocalConfig(): Partial<LocalOpenAIConfig> {
   try {
-    const configPath = activeConfigPath();
-    const parsed = readJsonWithBackupSync<Partial<LocalOpenAIConfig> & {
-      analysisModel?: string;
-      apiKey?: string;
-    }>(configPath, {});
-    const providerSiteUrl = typeof parsed.providerSiteUrl === "string"
-      ? parsed.providerSiteUrl.trim()
-      : typeof parsed.websiteUrl === "string"
-        ? parsed.websiteUrl.trim()
-        : "";
-    return {
-      openaiApiKey: typeof parsed.openaiApiKey === "string" ? parsed.openaiApiKey.trim() : typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : "",
-      providerName: typeof parsed.providerName === "string" ? parsed.providerName.trim() : "",
-      providerId: typeof parsed.providerId === "string" ? parsed.providerId.trim() : "",
-      websiteUrl: typeof parsed.websiteUrl === "string" ? parsed.websiteUrl.trim() : providerSiteUrl,
-      providerSiteUrl,
-      apiBaseUrl: typeof parsed.apiBaseUrl === "string" ? parsed.apiBaseUrl.trim() : "",
-      wireApi: isWireApi(parsed.wireApi) ? parsed.wireApi : undefined,
-      requiresOpenAIAuth: typeof parsed.requiresOpenAIAuth === "boolean" ? parsed.requiresOpenAIAuth : undefined,
-      disableResponseStorage: typeof parsed.disableResponseStorage === "boolean" ? parsed.disableResponseStorage : undefined,
-      modelReasoningEffort: isReasoningEffort(parsed.modelReasoningEffort) ? parsed.modelReasoningEffort : undefined,
-      textModel: typeof parsed.textModel === "string" ? parsed.textModel.trim() : typeof parsed.analysisModel === "string" ? parsed.analysisModel.trim() : "",
-      imageModel: typeof parsed.imageModel === "string" ? parsed.imageModel.trim() : "",
-      videoModel: typeof parsed.videoModel === "string" ? parsed.videoModel.trim() : undefined,
-      modelsCache: Array.isArray(parsed.modelsCache) ? parsed.modelsCache.filter(isModelCatalogItem).map(normalizeModelCatalogItem) : [],
-      modelsUpdatedAt: typeof parsed.modelsUpdatedAt === "string" ? parsed.modelsUpdatedAt : "",
-      supportsModelsList: typeof parsed.supportsModelsList === "boolean" ? parsed.supportsModelsList : undefined,
-      supportsResponses: typeof parsed.supportsResponses === "boolean" ? parsed.supportsResponses : undefined,
-      supportsChatCompletions: typeof parsed.supportsChatCompletions === "boolean" ? parsed.supportsChatCompletions : undefined,
-      supportsImageGeneration: typeof parsed.supportsImageGeneration === "boolean" ? parsed.supportsImageGeneration : undefined,
-      lastTestedAt: typeof parsed.lastTestedAt === "string" ? parsed.lastTestedAt : "",
-      isDefault: typeof parsed.isDefault === "boolean" ? parsed.isDefault : undefined,
-    };
+    return normalizeLocalConfig(readActiveLocalConfig());
   } catch {
     return {};
   }
+}
+
+function readActiveLocalConfig(): RawLocalOpenAIConfig {
+  const user = getConfigUser();
+  if (!user) return readRawLocalConfig(legacyConfigPath);
+  const userConfigPath = configPathForUser(user.id);
+  const userConfig = readRawLocalConfig(userConfigPath);
+  if (user.role !== "owner" || Object.keys(userConfig).length) return userConfig;
+  return readRawLocalConfig(legacyConfigPath);
+}
+
+function readRawLocalConfig(configPath: string): RawLocalOpenAIConfig {
+  return readJsonWithBackupSync<RawLocalOpenAIConfig>(configPath, {});
+}
+
+function normalizeLocalConfig(parsed: RawLocalOpenAIConfig): Partial<LocalOpenAIConfig> {
+  const providerSiteUrl = typeof parsed.providerSiteUrl === "string"
+    ? parsed.providerSiteUrl.trim()
+    : typeof parsed.websiteUrl === "string"
+      ? parsed.websiteUrl.trim()
+      : "";
+  return {
+    openaiApiKey: typeof parsed.openaiApiKey === "string" ? parsed.openaiApiKey.trim() : typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : "",
+    providerName: typeof parsed.providerName === "string" ? parsed.providerName.trim() : "",
+    providerId: typeof parsed.providerId === "string" ? parsed.providerId.trim() : "",
+    websiteUrl: typeof parsed.websiteUrl === "string" ? parsed.websiteUrl.trim() : providerSiteUrl,
+    providerSiteUrl,
+    apiBaseUrl: typeof parsed.apiBaseUrl === "string" ? parsed.apiBaseUrl.trim() : "",
+    wireApi: isWireApi(parsed.wireApi) ? parsed.wireApi : undefined,
+    requiresOpenAIAuth: typeof parsed.requiresOpenAIAuth === "boolean" ? parsed.requiresOpenAIAuth : undefined,
+    disableResponseStorage: typeof parsed.disableResponseStorage === "boolean" ? parsed.disableResponseStorage : undefined,
+    modelReasoningEffort: isReasoningEffort(parsed.modelReasoningEffort) ? parsed.modelReasoningEffort : undefined,
+    textModel: typeof parsed.textModel === "string" ? parsed.textModel.trim() : typeof parsed.analysisModel === "string" ? parsed.analysisModel.trim() : "",
+    imageModel: typeof parsed.imageModel === "string" ? parsed.imageModel.trim() : "",
+    videoModel: typeof parsed.videoModel === "string" ? parsed.videoModel.trim() : undefined,
+    modelsCache: Array.isArray(parsed.modelsCache) ? parsed.modelsCache.filter(isModelCatalogItem).map(normalizeModelCatalogItem) : [],
+    modelsUpdatedAt: typeof parsed.modelsUpdatedAt === "string" ? parsed.modelsUpdatedAt : "",
+    supportsModelsList: typeof parsed.supportsModelsList === "boolean" ? parsed.supportsModelsList : undefined,
+    supportsResponses: typeof parsed.supportsResponses === "boolean" ? parsed.supportsResponses : undefined,
+    supportsChatCompletions: typeof parsed.supportsChatCompletions === "boolean" ? parsed.supportsChatCompletions : undefined,
+    supportsImageGeneration: typeof parsed.supportsImageGeneration === "boolean" ? parsed.supportsImageGeneration : undefined,
+    lastTestedAt: typeof parsed.lastTestedAt === "string" ? parsed.lastTestedAt : "",
+    isDefault: typeof parsed.isDefault === "boolean" ? parsed.isDefault : undefined,
+  };
 }
 
 export function getOpenAIConfig(): ResolvedOpenAIConfig {
@@ -452,11 +469,15 @@ async function writeConfigAtomic(config: LocalOpenAIConfig) {
 function activeConfigPath(options?: { forWrite?: boolean }) {
   const user = getConfigUser();
   if (!user) return legacyConfigPath;
-  const userConfigPath = path.join(process.cwd(), "data", "users", safePathPart(user.id), "config.local.json");
+  const userConfigPath = configPathForUser(user.id);
   if (options?.forWrite || user.role !== "owner") return userConfigPath;
 
   const userConfig = readJsonWithBackupSync<Partial<LocalOpenAIConfig>>(userConfigPath, {});
   return Object.keys(userConfig).length ? userConfigPath : legacyConfigPath;
+}
+
+function configPathForUser(userId: string) {
+  return path.join(process.cwd(), "data", "users", safePathPart(userId), "config.local.json");
 }
 
 function safePathPart(value: string) {
