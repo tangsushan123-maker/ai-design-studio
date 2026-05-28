@@ -3,6 +3,18 @@ import { imageRatio } from "@/components/workbench/workbench-image-metrics";
 import type { ImageAsset } from "@/components/workbench/workbench-types";
 import { parseTargetSize, qualityParam, stringParam } from "@/components/workbench/workbench-utils";
 
+function uniqueMappedValues<T, Value>(items: T[], mapValue: (item: T) => Value) {
+  const seen = new Set<Value>();
+  const values: Value[] = [];
+  for (const item of items) {
+    const value = mapValue(item);
+    if (seen.has(value)) continue;
+    seen.add(value);
+    values.push(value);
+  }
+  return values;
+}
+
 export function inferTargetSizeFromImage(image: ImageAsset, longEdge = 3840) {
   const target = fitImageToLongEdge(image, longEdge);
   return `${target.width}x${target.height}`;
@@ -48,9 +60,7 @@ export function qualityEnhanceDefaultTargetForImage(image: ImageAsset | null, im
 
 export function qualityEnhanceTargetOptionsForImage(image: ImageAsset | null, imageModel = "") {
   const edges = officialQualityEnhanceLongEdges(image, imageModel);
-  return edges
-    .map((edge) => image ? inferTargetSizeFromImage(image, edge) : `长边${edge}`)
-    .filter((value, index, items) => items.indexOf(value) === index);
+  return uniqueMappedValues(edges, (edge) => image ? inferTargetSizeFromImage(image, edge) : `长边${edge}`);
 }
 
 export function officialQualityEnhanceLongEdges(image: ImageAsset | null, imageModel = "") {
@@ -66,8 +76,7 @@ export function officialQualityEnhanceLongEdges(image: ImageAsset | null, imageM
 }
 
 export function qualityEnhanceQualityOptionsForTargets(targets: string[]) {
-  const qualities = targets.map(qualityForQualityEnhanceTarget);
-  return qualities.filter((value, index, items) => items.indexOf(value) === index);
+  return uniqueMappedValues(targets, qualityForQualityEnhanceTarget);
 }
 
 export function qualityEnhanceTargetForQuality(targets: string[], quality: QualityValue) {

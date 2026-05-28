@@ -908,6 +908,7 @@ describe("Quality enhance mode", () => {
     assert.equal(workbenchSource.includes("8K长边7680"), false);
     assert.equal(workbenchSource.includes("qualityEnhanceTargetOptionsForImage"), true);
     assert.equal(workbenchSource.includes("qualityForQualityEnhanceTarget"), true);
+    assert.equal(workbenchSource.includes("items.indexOf(value)"), false);
     assert.equal(workbenchSource.includes("standard_enhance"), true);
     assert.equal(workbenchSource.includes("plus_enhance"), true);
     assert.equal(workbenchSource.includes("creative_redraw"), true);
