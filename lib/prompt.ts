@@ -174,6 +174,7 @@ function sanitizedReferenceAnalysisForPrompt(sourceAnalysis: string | undefined,
 
 export function buildDesignDirectorBriefRequestPrompt(request: DesignRequest, ratioText: string) {
   const wantsProjectContext = wantsProjectOutputContext(request.prompt);
+  const personIntent = inferPersonIntent(request.prompt);
   return [
     "你是 AI 海报策划总监和商业视觉设计总监。请先把用户的一句话需求整理成结构化 Design Brief，再给出 3 个可落地设计方案。",
     "只输出合法 JSON，不要 Markdown。",
@@ -184,6 +185,9 @@ export function buildDesignDirectorBriefRequestPrompt(request: DesignRequest, ra
     "除非用户明确写了活动、优惠、促销、福利、礼品、领取、报名、套餐、买赠，否则节日品牌海报不要出现“好礼、礼遇、福利、钜惠、限时、转化、到店”等促销文案。",
     "如果识别到具体行业，节日文案要按行业改写：例如科技馆/科普活动端午海报可用 title=科技里的端午 或 端午奇妙游，subtitle=传统文化与科学探索的奇妙相遇。",
     "节日海报要像真实商业活动主视觉：主标题可读、元素强相关、配色有节日气质、版式有明确标题区/主体区/信息区，不要只堆素材。",
+    personIntent
+      ? `用户要求加入人物时，人物是画面主体/辅助主体，不是文案；请自动判断人物类型、姿态、服装、景别和情绪。当前人物意图：${personIntent}。人物必须自然融入场景，不能像硬贴素材。`
+      : "用户未明确要求人物时，不要为了填满画面硬加无关人物。",
     wantsProjectContext
       ? "规则：不要把用户所有文字都塞进图里；提炼 1 个主标题、1 个副标题、最多 3 个卖点；电话、地址、二维码、长段文字建议后期真实字体排版。"
       : "规则：不要把用户所有文字都塞进图里；只提炼必要主视觉和极少标题；长段文字与细节信息后期真实字体排版。",
@@ -390,6 +394,7 @@ export function buildDesignDirectorImagePrompt(
   const wantsProjectContext = wantsProjectOutputContext(request.prompt);
   const shouldIncludeProtection = !noVisiblePolicy.noText && (wantsProjectContext || hasProtectionPromptContent(protectionContext));
   const hasExplicitCopy = hasExplicitCopyInstruction(request.prompt);
+  const personIntent = inferPersonIntent(request.prompt);
   const ratio = resolveDesignRequestRatio(request);
   const sanitizedSourceAnalysis = sanitizedReferenceAnalysisForPrompt(request.sourceAnalysis, request.prompt);
   return [
@@ -414,6 +419,7 @@ export function buildDesignDirectorImagePrompt(
     ]),
     promptSection("Scene and layout execution", [
       `Primary visual elements: ${direction.mainVisual || brief.mainVisualConcept}.`,
+      personIntent ? `Person direction: ${personIntent}; the person must be complete, natural, commercially lit, and integrated with the poster theme.` : "",
       `Layout zones: ${direction.layout || brief.layout}.`,
       `Color/style system: ${direction.palette || brief.colorSystem}.`,
       `Typography tone: ${brief.typographyTone}; ${direction.typography}.`,
@@ -691,24 +697,55 @@ function inferDirectorIndustry(text: string) {
 }
 
 function inferDirectorTitle(prompt: string) {
-  const normalized = cleanPromptText(prompt).replace(/[。.!！?？].*$/, "");
+  const normalized = cleanUserDesignIntent(prompt).replace(/[。.!！?？].*$/, "");
   const titleMatch = normalized.match(/(?:主标题|标题|主题)[:：]\s*([^，,；;\n]+)/);
   if (titleMatch?.[1]) return titleMatch[1].slice(0, 18);
-  return normalized.slice(0, 18) || "商业主题视觉";
+  const posterTheme = normalized.match(/([\u4e00-\u9fa5A-Za-z0-9·]{2,16})(?:海报|广告|宣传图|视觉|主视觉|封面)/);
+  if (posterTheme?.[1]) return posterTheme[1].slice(0, 18);
+  const cleanTheme = normalized
+    .replace(/(?:海报|广告|宣传图|视觉|主视觉|封面|图片|设计图)$/g, "")
+    .replace(/^(?:一张|一个|一版|一套)/, "")
+    .trim();
+  if (cleanTheme && !/^(帮我|生成|设计|制作|做|来个|想要|需要)$/.test(cleanTheme)) return cleanTheme.slice(0, 18);
+  return "商业主题视觉";
 }
 
 function inferDirectorSellingPoints(text: string) {
-  const points = text
+  const points = cleanUserDesignIntent(text)
     .split(/[，,；;\n]/)
     .map((item) => item.trim())
     .filter((item) => item.length >= 2 && item.length <= 24)
-    .filter((item) => !/海报|详情页|尺寸|比例|生成|设计|图片/.test(item))
+    .filter((item) => !/海报|详情页|尺寸|比例|生成|设计|图片|帮我|做一张|来一张|文生图|提示词/.test(item))
     .slice(0, 3);
   if (points.length) return points;
   if (/医疗|医生|患者/.test(text)) return ["专业可信", "舒适安心", "流程清晰"];
   if (/产品|包装|商品/.test(text)) return ["品质感", "核心卖点", "清晰转化"];
   if (/科普|科技/.test(text)) return ["探索感", "互动感", "知识传播"];
   return ["主题清晰", "视觉完整", "信息克制"];
+}
+
+function cleanUserDesignIntent(prompt: string) {
+  return cleanPromptText(prompt)
+    .replace(/^(?:请|麻烦|帮我|给我|帮忙|我要|想要|需要|帮我生成|帮我设计|生成|设计|制作|做|做一张|来一张|出一张|出个|来个)\s*/g, "")
+    .replace(/(?:一下|看看|试试|可以吗|谢谢)$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function inferPersonIntent(prompt: string) {
+  const text = prompt || "";
+  if (!/(人物|人像|真人|模特|医生|专家|老师|学生|儿童|孩子|家庭|老人|年轻|女性|男性|男士|女士|主持人|讲解员|IP形象|吉祥物|卡通形象|全身|半身|头像|肖像|person|portrait|model)/i.test(text)) return "";
+  const explicitAdd = /(加|加入|添加|放入|放上|出现|使用|带|要有|需要|包含|安排|突出|换成|替换)/.test(text);
+  if (!explicitAdd && !/(人物|人像|真人|模特|医生|专家|IP形象|吉祥物|卡通形象)/.test(text)) return "";
+  const type =
+    /医生|专家|主任|护士/.test(text) ? "professional medical staff, trustworthy and friendly"
+      : /老师|讲师|学生|儿童|孩子|亲子|家庭/.test(text) ? "education/family friendly people, natural interaction"
+        : /IP形象|吉祥物|卡通形象/.test(text) ? "brand IP mascot character, recognizable and complete"
+          : /女性|女士|女/.test(text) ? "female model, natural expression"
+            : /男性|男士|男/.test(text) ? "male model, natural expression"
+              : "suitable commercial poster person";
+  const framing = /全身/.test(text) ? "full body" : /头像|肖像|人像/.test(text) ? "portrait or bust" : /半身/.test(text) ? "half body" : "medium shot or full figure as layout requires";
+  return `${type}; ${framing}; complete head, hands, body edges inside safe margins; do not invent identity-sensitive uniforms, badges, hospital/company names, phone numbers, or addresses.`;
 }
 
 function inferFestivalPoster(text: string) {
@@ -1220,7 +1257,9 @@ function hasExplicitCopyInstruction(prompt: string) {
   if (resolveNoVisibleOutputPolicy(prompt).noText) return false;
   const text = prompt || "";
   if (/标题\s*[:：]|主标题\s*[:：]|副标题\s*[:：]|文案\s*[:：]|标语\s*[:：]|slogan\s*[:：]/i.test(text)) return true;
-  if (/(写上|加上文字|添加文字|放上文字|显示文字|文字改成|文案改成|标题改成|改成\s*[“"「『《]?[^，。,.；;]{2,24})/i.test(text)) return true;
+  if (/(写上|加上文字|添加文字|放上文字|显示文字|文字改成|文案改成|标题改成)[“"「『《]?[^，。,.；;]{2,32}/i.test(text)) return true;
+  if (/把(?:标题|主标题|副标题|文案|标语|slogan|文字)\s*改成\s*[“"「『《]?[^，。,.；;]{2,32}/i.test(text)) return true;
+  if (/[“"「『《][^”"」』》]{2,32}[”"」』》]\s*(?:这句|这几个字|作为|当作)?\s*(?:标题|主标题|副标题|文案|标语|slogan|文字)/i.test(text)) return true;
   if (/(电话|地址|联系方式|二维码|QR|qr)/i.test(text) && /(写上|加上|加入|显示|展示|放上|要有|包含|使用)/i.test(text)) return true;
   if (/内容不(少|减|变)|保留全部|全部保留/i.test(text)) return true;
   return false;

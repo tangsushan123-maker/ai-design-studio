@@ -10563,7 +10563,7 @@ function composerTitleForNode(node: FlowNode) {
 }
 
 function composerPlaceholderForNode(node: FlowNode) {
-  if (node.data.kind === "text_to_image") return "输入提示词";
+  if (node.data.kind === "text_to_image") return "例如：端午节品牌海报，加入一位年轻女性，青绿色国风，少字高级";
   if (node.data.kind === "image_to_image") return "写改版方向";
   if (node.data.kind === "fuse_images") return "写合成要求";
   if (node.data.kind === "resize") return "写适配要求";
@@ -10578,7 +10578,7 @@ function composerPlaceholderForNode(node: FlowNode) {
 }
 
 function composerHelperTextForNode(node: FlowNode) {
-  if (node.data.kind === "text_to_image") return textReferenceNodeItems(node.data).length ? `已连接 ${textReferenceNodeItems(node.data).length} 张图片参考，默认生成 2 个方案。` : "默认生成 2 个方案：信息清晰版和视觉创意版。";
+  if (node.data.kind === "text_to_image") return textReferenceNodeItems(node.data).length ? `已连接 ${textReferenceNodeItems(node.data).length} 张图片参考，可在右侧设为使用人物/产品/Logo。` : "可直接写“加入人物/医生/模特/IP”，或上传人物图后在右侧选使用人物。";
   if (node.data.kind === "image_to_image") return "默认生成 2 个创意改版方案，核心识别保留，版式明显不同。";
   if (node.data.kind === "fuse_images") return "图1主体放入图2场景，生成自然版和广告版。";
   if (node.data.kind === "resize") return "尺寸在右侧，底部写保留重点。";
