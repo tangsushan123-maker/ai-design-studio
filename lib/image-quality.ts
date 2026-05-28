@@ -118,14 +118,24 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
   const ratioMatched = targetRatio ? Math.abs(ratio - targetRatio) / targetRatio <= 0.018 : true;
   const reachedTargetSize = target ? width >= Math.round(target.width * 0.98) && height >= Math.round(target.height * 0.98) : true;
   const is4kTarget = options.quality === "4k" || Boolean(target && Math.max(target.width, target.height) >= 3840);
-  const border = await detectWhiteBorder(input);
-  const composition = await detectCompositionRisk(input, options.safeMarginPercent || 10);
-  const rawBlurredPadding = await detectBlurredPaddingComposition(input);
-  const sourceBlurredPadding = options.sourceImage ? await detectBlurredPaddingComposition(options.sourceImage) : null;
+  const [
+    border,
+    composition,
+    rawBlurredPadding,
+    sourceBlurredPadding,
+    detailScore,
+    sourceDetailScore,
+  ] = await Promise.all([
+    detectWhiteBorder(input),
+    detectCompositionRisk(input, options.safeMarginPercent || 10),
+    detectBlurredPaddingComposition(input),
+    options.sourceImage ? detectBlurredPaddingComposition(options.sourceImage) : Promise.resolve(null),
+    estimateDetailScore(input),
+    options.sourceImage ? estimateDetailScore(options.sourceImage) : Promise.resolve(undefined),
+  ]);
   const blurredPadding = normalizeBlurredPaddingRisk(rawBlurredPadding, sourceBlurredPadding, options.operation);
   const protection = summarizeProtection(options.protectionContext);
-  const detailScore = await estimateDetailScore(input);
-  const clarityComparison = options.sourceImage ? await compareImageClarity(options.sourceImage, input) : undefined;
+  const clarityComparison = sourceDetailScore === undefined ? undefined : buildClarityComparison(sourceDetailScore, detailScore);
   const textDetailRecovery = options.textDetailRecovery;
   const megapixels = (width * height) / 1_000_000;
   const bytesPerMegapixel = fileSizeBytes ? fileSizeBytes / Math.max(0.1, megapixels) : undefined;
@@ -274,6 +284,10 @@ export async function compareImageClarity(beforeInput: Buffer | string, afterInp
     estimateDetailScore(beforeInput),
     estimateDetailScore(afterInput),
   ]);
+  return buildClarityComparison(before, after);
+}
+
+function buildClarityComparison(before: number, after: number) {
   const gain = Number((after - before).toFixed(2));
   const relativeGain = before > 0 ? gain / before : after > 0 ? 1 : 0;
   const improved = gain >= 0.6 || relativeGain >= 0.08;

@@ -1938,6 +1938,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(imageResourceRouteSource.includes("const [saved, metadata, alphaCheck] = await Promise.all"), true);
     assert.equal(imageResourceRouteSource.includes("const saved = await saveImageBuffer"), false);
     assert.equal(imageResourceRouteSource.includes('storageKind: file.name?.startsWith("mask-") ? "masks" : "uploads"'), true);
+    assert.equal(imageQualitySource.includes("sourceDetailScore"), true);
+    assert.equal(imageQualitySource.includes("buildClarityComparison(sourceDetailScore, detailScore)"), true);
+    assert.equal(imageQualitySource.includes("const detailScore = await estimateDetailScore(input)"), false);
     assert.equal(imageQualitySource.includes("包含项目真实文字、Logo、二维码或联系方式"), true);
     assert.equal(imageQualitySource.includes("逐项核对项目真实信息"), true);
   });
