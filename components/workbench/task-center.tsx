@@ -98,33 +98,21 @@ export function TaskCenter({
   }
 
   const matchedTasks = tasks.filter((task) => taskMatchesSearch(task, normalizedQuery));
-  const deferredTasks = matchedTasks.filter(isDeferredQueuedTask);
-  const timelineTasks = matchedTasks.filter((task) => !isDeferredQueuedTask(task));
-  const visibleTimelineTasks = timelineTasks.slice(0, visibleCount);
-  const finishedTasks = matchedTasks.filter(isFinishedTask);
-  const finishedCount = finishedTasks.length;
-  const runningCount = matchedTasks.filter((task) => !isDeferredQueuedTask(task) && (task.status === "queued" || task.status === "running" || task.status === "saving")).length;
-  const successCount = matchedTasks.filter((task) => !taskIsPartialSuccess(task) && !taskHasQualityConcern(task) && ((task.status === "completed" && task.resultOnCanvas) || taskHasVisibleResult(task))).length;
-  const failedCount = matchedTasks.filter((task) => task.status === "failed" && !taskHasAnyResult(task)).length;
-  const cancelledCount = matchedTasks.filter((task) => task.status === "cancelled").length;
-  const attentionTasks = visibleTimelineTasks.filter((task) =>
-    (task.status === "failed" && !taskHasAnyResult(task)) ||
-    taskIsPartialSuccess(task) ||
-    taskHasQualityConcern(task) ||
-    task.status === "cancelled" ||
-    isTaskPossiblyStuck(task) ||
-    (task.status === "completed" && !task.resultOnCanvas));
-  const attentionIds = new Set(attentionTasks.map((task) => task.id));
-  const runningTasks = visibleTimelineTasks.filter((task) =>
-    !attentionIds.has(task.id) && (task.status === "queued" || task.status === "running" || task.status === "saving"));
-  const completedTasks = visibleTimelineTasks.filter((task) => !attentionIds.has(task.id) && ((task.status === "completed" && task.resultOnCanvas) || taskHasVisibleResult(task)));
-  const attentionCount = timelineTasks.filter((task) =>
-    (task.status === "failed" && !taskHasAnyResult(task)) ||
-    taskIsPartialSuccess(task) ||
-    taskHasQualityConcern(task) ||
-    task.status === "cancelled" ||
-    isTaskPossiblyStuck(task) ||
-    (task.status === "completed" && !task.resultOnCanvas)).length;
+  const {
+    attentionCount,
+    attentionTasks,
+    cancelledCount,
+    completedTasks,
+    deferredTasks,
+    failedCount,
+    finishedCount,
+    finishedTasks,
+    runningCount,
+    runningTasks,
+    successCount,
+    timelineTasks,
+    visibleTimelineTasks,
+  } = buildTaskCenterGroups(matchedTasks, visibleCount, isDeferredQueuedTask, isTaskPossiblyStuck);
 
   async function runTaskAction(label: string, key: string, action: () => void | Promise<unknown>) {
     const actionKey = `${label}:${key}`;
@@ -401,6 +389,78 @@ export function TaskCenter({
 
 function isFinishedTask(task: TaskCenterTask) {
   return task.status === "completed" || task.status === "failed" || task.status === "cancelled";
+}
+
+function buildTaskCenterGroups(
+  tasks: TaskCenterTask[],
+  visibleCount: number,
+  isDeferredQueuedTask: (task: TaskCenterTask) => boolean,
+  isTaskPossiblyStuck: (task: TaskCenterTask) => boolean,
+) {
+  const deferredTasks: TaskCenterTask[] = [];
+  const timelineTasks: TaskCenterTask[] = [];
+  const finishedTasks: TaskCenterTask[] = [];
+  let runningCount = 0;
+  let successCount = 0;
+  let failedCount = 0;
+  let cancelledCount = 0;
+  let attentionCount = 0;
+
+  for (const task of tasks) {
+    const deferred = isDeferredQueuedTask(task);
+    if (deferred) deferredTasks.push(task);
+    else timelineTasks.push(task);
+
+    if (isFinishedTask(task)) finishedTasks.push(task);
+    if (!deferred && taskIsRunningStatus(task)) runningCount += 1;
+    if (taskIsSuccessful(task)) successCount += 1;
+    if (task.status === "failed" && !taskHasAnyResult(task)) failedCount += 1;
+    if (task.status === "cancelled") cancelledCount += 1;
+    if (!deferred && taskNeedsAttention(task, isTaskPossiblyStuck)) attentionCount += 1;
+  }
+
+  const visibleTimelineTasks = timelineTasks.slice(0, visibleCount);
+  const attentionTasks: TaskCenterTask[] = [];
+  const runningTasks: TaskCenterTask[] = [];
+  const completedTasks: TaskCenterTask[] = [];
+  for (const task of visibleTimelineTasks) {
+    if (taskNeedsAttention(task, isTaskPossiblyStuck)) attentionTasks.push(task);
+    else if (taskIsRunningStatus(task)) runningTasks.push(task);
+    else if (taskIsSuccessful(task)) completedTasks.push(task);
+  }
+
+  return {
+    attentionCount,
+    attentionTasks,
+    cancelledCount,
+    completedTasks,
+    deferredTasks,
+    failedCount,
+    finishedCount: finishedTasks.length,
+    finishedTasks,
+    runningCount,
+    runningTasks,
+    successCount,
+    timelineTasks,
+    visibleTimelineTasks,
+  };
+}
+
+function taskIsRunningStatus(task: TaskCenterTask) {
+  return task.status === "queued" || task.status === "running" || task.status === "saving";
+}
+
+function taskIsSuccessful(task: TaskCenterTask) {
+  return !taskIsPartialSuccess(task) && !taskHasQualityConcern(task) && ((task.status === "completed" && task.resultOnCanvas) || taskHasVisibleResult(task));
+}
+
+function taskNeedsAttention(task: TaskCenterTask, isTaskPossiblyStuck: (task: TaskCenterTask) => boolean) {
+  return (task.status === "failed" && !taskHasAnyResult(task)) ||
+    taskIsPartialSuccess(task) ||
+    taskHasQualityConcern(task) ||
+    task.status === "cancelled" ||
+    isTaskPossiblyStuck(task) ||
+    (task.status === "completed" && !task.resultOnCanvas);
 }
 
 function taskImageLabel(image: TaskCenterImage) {
