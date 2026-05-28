@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
@@ -149,7 +149,7 @@ export async function ensureImageVariant(fileName: string, kind: ImageVariantKin
   const variantFileName = getImageVariantFileName(fileName, kind);
   const variantPath = getGeneratedPath(variantFileName);
   const variantUrl = getGeneratedUrl(variantFileName);
-  const exists = await readFile(variantPath).then(() => true).catch(() => false);
+  const exists = await stat(variantPath).then((fileStat) => fileStat.isFile()).catch(() => false);
   if (exists) return { fileName: variantFileName, path: variantPath, url: variantUrl };
 
   const source = inputBuffer || await readFile(getGeneratedPath(fileName));

@@ -616,6 +616,21 @@ describe("Generated image serving", () => {
     assert.equal(routeSource.includes('"Content-Length": String(fileStat.size)'), true);
     assert.equal(routeSource.includes('"Last-Modified": lastModified'), true);
   });
+
+  it("serves previews with cheap existence checks and conditional cache hits", async () => {
+    const [previewRouteSource, imageUtilsSource] = await Promise.all([
+      readFile(new URL("../app/api/image-preview/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(imageUtilsSource.includes("stat(variantPath).then((fileStat) => fileStat.isFile())"), true);
+    assert.equal(imageUtilsSource.includes("readFile(variantPath).then(() => true)"), false);
+    assert.equal(previewRouteSource.includes("imagePreviewEtag"), true);
+    assert.equal(previewRouteSource.includes("requestMatchesImagePreview"), true);
+    assert.equal(previewRouteSource.includes('request.headers.get("if-none-match")'), true);
+    assert.equal(previewRouteSource.includes("status: 304"), true);
+    assert.equal(previewRouteSource.includes('"Cache-Control": "public, max-age=31536000, immutable"'), true);
+  });
 });
 
 describe("Remote image import security", () => {
