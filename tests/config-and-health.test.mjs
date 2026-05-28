@@ -1695,6 +1695,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(taskCenterSource.includes("buildTaskCenterGroups(matchedTasks, visibleCount, isDeferredQueuedTask, isTaskPossiblyStuck)"), true);
     assert.equal(taskCenterSource.includes("function buildTaskCenterGroups"), true);
     assert.equal(taskCenterSource.includes("for (const task of tasks)"), true);
+    assert.equal(workbenchSource.includes("let running = 0"), true);
+    assert.equal(workbenchSource.includes("tasks.filter(isTaskActivelyRunning).length"), false);
+    assert.equal(workbenchSource.includes("tasks.filter(isDeferredQueuedTask).length"), false);
     assert.equal(taskCenterSource.includes("function taskNeedsAttention"), true);
     assert.equal(taskCenterSource.includes("const finishedTasks = matchedTasks.filter(isFinishedTask)"), false);
     assert.equal(taskCenterSource.includes("onDeleteFinished(finishedTasks.map((task) => task.id))"), true);

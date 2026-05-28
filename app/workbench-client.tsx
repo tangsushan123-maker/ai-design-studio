@@ -6096,11 +6096,17 @@ function RightPanel({
   );
   const [tab, setTab] = useState<RightPanelTab>("tasks");
   const selectedPanelNodeId = selectedNode?.id;
-  const taskCounts = useMemo(() => ({
-    running: tasks.filter(isTaskActivelyRunning).length,
-    deferred: tasks.filter(isDeferredQueuedTask).length,
-    failed: tasks.filter((task) => task.status === "failed" && !taskHasResultImages(task) && !task.resultCount).length,
-  }), [tasks]);
+  const taskCounts = useMemo(() => {
+    let running = 0;
+    let deferred = 0;
+    let failed = 0;
+    for (const task of tasks) {
+      if (isTaskActivelyRunning(task)) running += 1;
+      if (isDeferredQueuedTask(task)) deferred += 1;
+      if (task.status === "failed" && !taskHasResultImages(task) && !task.resultCount) failed += 1;
+    }
+    return { running, deferred, failed };
+  }, [tasks]);
   const runningTaskCount = taskCounts.running;
   const deferredTaskCount = taskCounts.deferred;
   const failedTaskCount = taskCounts.failed;
