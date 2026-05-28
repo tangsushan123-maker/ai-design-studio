@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { toFile } from "openai/uploads";
 import { randomUUID } from "node:crypto";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { toApiError } from "@/lib/api-errors";
@@ -129,7 +129,6 @@ export async function POST(request: Request) {
       }
       const layerPath = path.join(absoluteRoot, spec.filename);
       await writeFile(layerPath, png);
-      const layerStat = await stat(layerPath);
       const url = getGeneratedUrl(path.join(relativeRoot, spec.filename));
       manifest.push({
         filename: spec.filename,
@@ -145,7 +144,7 @@ export async function POST(request: Request) {
         note: renderResult.warning ? `${spec.note} ${renderResult.warning}` : spec.note,
         kind: spec.kind,
         url,
-        fileSizeBytes: layerStat.size,
+        fileSizeBytes: png.byteLength,
         hasAlpha: validation.hasAlpha,
         transparentPixelRatio: validation.transparentPixelRatio,
       });

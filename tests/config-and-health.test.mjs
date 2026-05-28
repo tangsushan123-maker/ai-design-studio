@@ -1080,6 +1080,9 @@ describe("PNG three-layer export", () => {
     assert.equal(routeSource.includes("07_title_text.png"), false);
     assert.equal(routeSource.includes("PNG 三层已生成"), true);
     assert.equal(routeSource.includes("pngLayerExport: layerResult"), true);
+    assert.equal(routeSource.includes("fileSizeBytes: png.byteLength"), true);
+    assert.equal(routeSource.includes("layerStat"), false);
+    assert.equal(routeSource.includes('import { mkdir, stat, writeFile } from "node:fs/promises"'), false);
     assert.equal(ledgerSource.includes("pngLayerExport?: unknown"), true);
     assert.equal(ledgerSource.includes("pngLayerExport: objectValue(source.pngLayerExport)"), true);
 
