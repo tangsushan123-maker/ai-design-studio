@@ -5,8 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
-  CircleAlert,
-  CircleDashed,
   DatabaseZap,
   Film,
   Globe2,
@@ -27,6 +25,14 @@ import {
   type ModelReasoningEffort,
   type ModelWireApi,
 } from "@/lib/openai-defaults";
+import {
+  SettingsMiniMetric,
+  SettingsPanel,
+  SettingsResultLine,
+  SettingsStatusBanner,
+  SettingsStatusIcon,
+  SettingsStatusRow,
+} from "@/components/settings/settings-status-ui";
 
 type SettingsResponse = {
   hasApiKey: boolean;
@@ -572,11 +578,11 @@ export default function SettingsPage() {
           </div>
         </header>
 
-        <StatusBanner status={status} />
+        <SettingsStatusBanner status={status} />
 
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-4">
-            <Panel title="供应商">
+            <SettingsPanel title="供应商">
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 {providerPresets.map((provider) => (
                   <button
@@ -594,9 +600,9 @@ export default function SettingsPage() {
                   </button>
                 ))}
               </div>
-            </Panel>
+            </SettingsPanel>
 
-            <Panel title="接入中转站">
+            <SettingsPanel title="接入中转站">
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="block">
                   <span className="apple-field-label mb-2 flex items-center gap-1.5">
@@ -676,10 +682,10 @@ export default function SettingsPage() {
               </div>
 
               <DetectionSummary result={detectionResult} />
-            </Panel>
+            </SettingsPanel>
 
             {showManualConfig ? (
-              <Panel title="接口">
+              <SettingsPanel title="接口">
                 <div className="grid gap-3 md:grid-cols-3">
                   <label className="block">
                     <span className="apple-field-label mb-2 block">接口</span>
@@ -699,10 +705,10 @@ export default function SettingsPage() {
                     不存储响应
                   </label>
                 </div>
-              </Panel>
+              </SettingsPanel>
             ) : null}
 
-            {showManualConfig || editingId ? <Panel title={editingId ? "编辑模型" : "手动模型"}>
+            {showManualConfig || editingId ? <SettingsPanel title={editingId ? "编辑模型" : "手动模型"}>
               <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
                 <input
                   className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
@@ -743,9 +749,9 @@ export default function SettingsPage() {
                   </button>
                 ) : null}
               </div>
-            </Panel> : null}
+            </SettingsPanel> : null}
 
-            <Panel title="模型">
+            <SettingsPanel title="模型">
               <div className="mb-3 flex justify-end">
                 <button className="apple-button inline-flex items-center gap-2 px-3 py-2 text-xs text-white/70" disabled={isBusy} onClick={refreshModels} type="button">
                   <RefreshCw className="size-3.5" />
@@ -757,7 +763,7 @@ export default function SettingsPage() {
                 <ModelGroup activeModel={imageModel} icon={<ImageIcon className="size-4" />} isBusy={isBusy} label="图片" models={groupedModels.image} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("image", model.id)} onUse={useAsDefault} />
                 <ModelGroup activeModel={videoModel} icon={<Film className="size-4" />} isBusy={isBusy} label="视频" models={groupedModels.video} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("video", model.id)} onUse={useAsDefault} />
               </div>
-            </Panel>
+            </SettingsPanel>
           </div>
 
           <aside className="space-y-4">
@@ -774,33 +780,33 @@ export default function SettingsPage() {
               onTestImageModel={testPrimaryImageModel}
             />
 
-            <Panel title="状态">
+            <SettingsPanel title="状态">
               <div className="space-y-3">
-                <StatusRow detail={effectiveProvider.label} label="供应商" state="success" />
-                <StatusRow detail={displayedApiBaseUrl || "未填写"} label="请求地址" state={displayedApiBaseUrl ? "success" : "idle"} />
-                <StatusRow detail={healthKeyLabel(serverHealth, maskedApiKey)} label="Key" state={serverHealth?.hasKey || maskedApiKey ? "success" : "idle"} />
-                <StatusRow detail={supportsModelsList ? "支持" : "未确认"} label="模型列表" state={supportsModelsList ? "success" : "idle"} />
-                <StatusRow detail={[supportsResponses ? "Responses" : "", supportsChatCompletions ? "Chat" : ""].filter(Boolean).join(" / ") || "未确认"} label="文本接口" state={supportsResponses || supportsChatCompletions ? "success" : "idle"} />
-                <StatusRow detail={supportsImageGeneration ? "支持" : "未通过 / 未开通"} label="图片生成" state={supportsImageGeneration ? "success" : "error"} />
-                <StatusRow detail={`${passedImageModels.length} 个`} label="首页图片模型" state={passedImageModels.length ? "success" : "idle"} />
+                <SettingsStatusRow detail={effectiveProvider.label} label="供应商" state="success" />
+                <SettingsStatusRow detail={displayedApiBaseUrl || "未填写"} label="请求地址" state={displayedApiBaseUrl ? "success" : "idle"} />
+                <SettingsStatusRow detail={healthKeyLabel(serverHealth, maskedApiKey)} label="Key" state={serverHealth?.hasKey || maskedApiKey ? "success" : "idle"} />
+                <SettingsStatusRow detail={supportsModelsList ? "支持" : "未确认"} label="模型列表" state={supportsModelsList ? "success" : "idle"} />
+                <SettingsStatusRow detail={[supportsResponses ? "Responses" : "", supportsChatCompletions ? "Chat" : ""].filter(Boolean).join(" / ") || "未确认"} label="文本接口" state={supportsResponses || supportsChatCompletions ? "success" : "idle"} />
+                <SettingsStatusRow detail={supportsImageGeneration ? "支持" : "未通过 / 未开通"} label="图片生成" state={supportsImageGeneration ? "success" : "error"} />
+                <SettingsStatusRow detail={`${passedImageModels.length} 个`} label="首页图片模型" state={passedImageModels.length ? "success" : "idle"} />
               </div>
-            </Panel>
+            </SettingsPanel>
 
-            <Panel title="服务器">
+            <SettingsPanel title="服务器">
               <div className="space-y-3">
-                <StatusRow detail={nodeRuntime.detail} label="Node" state={nodeRuntime.state} />
-                <StatusRow detail={serverHealth?.diagnostics?.runtime || "未读取"} label="运行时" state={serverHealth?.diagnostics?.runtime ? "success" : "idle"} />
-                <StatusRow detail={serverHealth?.diagnostics?.platform || "未读取"} label="平台" state={serverHealth?.diagnostics?.platform ? "success" : "idle"} />
-                <StatusRow detail={formatServerTime(serverHealth?.diagnostics?.serverTime)} label="服务时间" state={serverHealth?.diagnostics?.serverTime ? "success" : "idle"} />
+                <SettingsStatusRow detail={nodeRuntime.detail} label="Node" state={nodeRuntime.state} />
+                <SettingsStatusRow detail={serverHealth?.diagnostics?.runtime || "未读取"} label="运行时" state={serverHealth?.diagnostics?.runtime ? "success" : "idle"} />
+                <SettingsStatusRow detail={serverHealth?.diagnostics?.platform || "未读取"} label="平台" state={serverHealth?.diagnostics?.platform ? "success" : "idle"} />
+                <SettingsStatusRow detail={formatServerTime(serverHealth?.diagnostics?.serverTime)} label="服务时间" state={serverHealth?.diagnostics?.serverTime ? "success" : "idle"} />
               </div>
               {serverHealth?.message ? <div className="apple-caption mt-3 rounded-[12px] border border-white/10 bg-white/[0.045] px-3 py-2 text-white/44">{serverHealth.message}</div> : null}
               <button className="apple-button mt-3 inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-xs text-white/70" disabled={isBusy} onClick={reloadServerHealth} type="button">
                 <RefreshCw className="size-3.5" />
                 刷新服务器诊断
               </button>
-            </Panel>
+            </SettingsPanel>
 
-            <Panel title="默认">
+            <SettingsPanel title="默认">
               <div className="space-y-2 text-sm leading-6 text-white/64">
                 <div>文本：{textModel || "未选"}</div>
                 <div>图片：{imageModel || "未选"}</div>
@@ -808,46 +814,19 @@ export default function SettingsPage() {
                 <div>接口：{wireApi}</div>
                 <div className="apple-caption pt-1">{savedAt ? `保存 ${savedAt}` : lastTestedAt ? `检测 ${new Date(lastTestedAt).toLocaleString("zh-CN")}` : modelsUpdatedAt ? `更新 ${new Date(modelsUpdatedAt).toLocaleString("zh-CN")}` : "未保存"}</div>
               </div>
-            </Panel>
+            </SettingsPanel>
 
-            <Panel title="测试">
+            <SettingsPanel title="测试">
               {lastModelTest ? (
-                <ResultLine ok={lastModelTest.ok} text={`${modelKindLabel(lastModelTest.kind)}：${lastModelTest.message}`} />
+                <SettingsResultLine ok={lastModelTest.ok} text={`${modelKindLabel(lastModelTest.kind)}：${lastModelTest.message}`} />
               ) : (
                 <div className="apple-empty-state p-4 text-sm text-white/46">测试通过后才在首页显示</div>
               )}
-            </Panel>
+            </SettingsPanel>
           </aside>
         </section>
       </section>
     </main>
-  );
-}
-
-function StatusBanner({ status }: { status: Status }) {
-  return (
-    <div
-      className={`mb-5 flex items-center gap-2 rounded-[14px] border px-4 py-3 text-sm ${
-        status.type === "error"
-          ? "apple-status-danger"
-          : status.type === "success"
-            ? "apple-status-success"
-            : status.type === "loading"
-              ? "apple-status-warning"
-              : "apple-status-neutral"
-      }`}
-    >
-      {status.type === "loading" ? <Loader2 className="size-4 shrink-0 animate-spin" /> : <StatusIcon state={status.type === "error" ? "error" : status.type === "success" ? "success" : "idle"} />}
-      {status.message}
-    </div>
-  );
-}
-function Panel({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
-  return (
-    <section className="apple-panel scroll-mt-5 p-4" id={id}>
-      <h2 className="mb-3 text-sm font-semibold text-white/88">{title}</h2>
-      {children}
-    </section>
   );
 }
 
@@ -876,7 +855,7 @@ function SetupChecklist({
 }) {
   const imageReady = passedImageCount > 0;
   return (
-    <Panel title="接入流程">
+    <SettingsPanel title="接入流程">
       <div className="space-y-2">
         <ChecklistRow done={hasProvider} label="填写中转站地址" detail={hasProvider ? "已填写请求地址" : "先填官网或 API 地址"} />
         <ChecklistRow done={hasKey} label="配置 API Key" detail={hasKey ? "Key 已保存或本次已输入" : "Key 不会显示明文"} />
@@ -925,14 +904,14 @@ function SetupChecklist({
           返回工作台
         </Link>
       </div>
-    </Panel>
+    </SettingsPanel>
   );
 }
 
 function ChecklistRow({ detail, done, label }: { detail: string; done: boolean; label: string }) {
   return (
     <div className="flex items-start gap-2 rounded-[12px] border border-white/10 bg-white/[0.045] px-3 py-2">
-      <StatusIcon state={done ? "success" : "idle"} />
+      <SettingsStatusIcon state={done ? "success" : "idle"} />
       <div className="min-w-0">
         <div className="text-sm font-medium text-white/78">{label}</div>
         <div className="mt-0.5 truncate text-xs text-white/42">{detail}</div>
@@ -957,15 +936,15 @@ function DetectionSummary({ result }: { result: DetectionResult | null }) {
           <div className="text-sm font-semibold text-white/86">{result.ok ? "检测通过" : "需要处理"}</div>
           <div className="apple-caption mt-1">{result.message}</div>
         </div>
-        <StatusIcon state={result.ok ? "success" : "error"} />
+        <SettingsStatusIcon state={result.ok ? "success" : "error"} />
       </div>
       <div className="grid gap-2 md:grid-cols-2">
-        <MiniMetric label="可用地址" value={result.apiBaseUrl || "未确认"} ok={Boolean(result.apiBaseUrl && result.ok)} />
-        <MiniMetric label="Key" value={result.apiKeyStatus === "valid" ? "可用" : result.apiKeyStatus === "invalid" ? "无效" : "未知"} ok={result.apiKeyStatus === "valid"} />
-        <MiniMetric label="接口" value={[result.supportsResponses ? "Responses" : "", result.supportsChatCompletions ? "Chat" : ""].filter(Boolean).join(" / ") || "未通过"} ok={result.supportsResponses || result.supportsChatCompletions} />
-        <MiniMetric label="模型列表" value={result.supportsModelsList ? "支持" : "不支持"} ok={result.supportsModelsList} />
-        <MiniMetric label="文本模型" value={result.textModel || result.recommended.textModel || "手动填写"} ok={Boolean(result.textModel)} />
-        <MiniMetric label="图片生成" value={result.supportsImageGeneration ? result.imageModel || "支持" : "未通过"} ok={result.supportsImageGeneration} />
+        <SettingsMiniMetric label="可用地址" value={result.apiBaseUrl || "未确认"} ok={Boolean(result.apiBaseUrl && result.ok)} />
+        <SettingsMiniMetric label="Key" value={result.apiKeyStatus === "valid" ? "可用" : result.apiKeyStatus === "invalid" ? "无效" : "未知"} ok={result.apiKeyStatus === "valid"} />
+        <SettingsMiniMetric label="接口" value={[result.supportsResponses ? "Responses" : "", result.supportsChatCompletions ? "Chat" : ""].filter(Boolean).join(" / ") || "未通过"} ok={result.supportsResponses || result.supportsChatCompletions} />
+        <SettingsMiniMetric label="模型列表" value={result.supportsModelsList ? "支持" : "不支持"} ok={result.supportsModelsList} />
+        <SettingsMiniMetric label="文本模型" value={result.textModel || result.recommended.textModel || "手动填写"} ok={Boolean(result.textModel)} />
+        <SettingsMiniMetric label="图片生成" value={result.supportsImageGeneration ? result.imageModel || "支持" : "未通过"} ok={result.supportsImageGeneration} />
       </div>
       {result.models?.length ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -985,18 +964,6 @@ function DetectionSummary({ result }: { result: DetectionResult | null }) {
         </div>
       ) : null}
     </section>
-  );
-}
-
-function MiniMetric({ label, ok, value }: { label: string; ok: boolean; value: string }) {
-  return (
-    <div className="rounded-[12px] border border-white/10 bg-white/[0.05] p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-white/42">{label}</span>
-        <StatusIcon state={ok ? "success" : "idle"} />
-      </div>
-      <div className="mt-1 truncate text-sm font-semibold text-white/78">{value}</div>
-    </div>
   );
 }
 
@@ -1133,33 +1100,6 @@ function nodeRuntimeStatus(version?: string): { detail: string; state: "idle" | 
     detail: supported ? `v${version} · 已满足 >=20.9` : `v${version} · 需升级到 >=20.9`,
     state: supported ? "success" : "error",
   };
-}
-
-function StatusRow({ detail, label, state }: { detail: string; label: string; state: "idle" | "success" | "error" }) {
-  return (
-    <div className="apple-surface-section flex items-start gap-3 p-3">
-      <StatusIcon state={state} />
-      <div className="min-w-0">
-        <div className="text-sm font-medium text-white/84">{label}</div>
-        <div className="mt-1 break-words text-xs leading-5 text-white/44">{detail}</div>
-      </div>
-    </div>
-  );
-}
-
-function ResultLine({ ok, text }: { ok: boolean; text: string }) {
-  return (
-    <div className="apple-surface-section flex items-start gap-3 p-3 text-sm">
-      <StatusIcon state={ok ? "success" : "error"} />
-      <span className="leading-5 text-white/70">{text}</span>
-    </div>
-  );
-}
-
-function StatusIcon({ state }: { state: "idle" | "success" | "error" }) {
-  if (state === "success") return <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#7cf0cf]" />;
-  if (state === "error") return <CircleAlert className="mt-0.5 size-4 shrink-0 text-[#ff8b80]" />;
-  return <CircleDashed className="mt-0.5 size-4 shrink-0 text-[#7b8797]" />;
 }
 
 function modelsFor(capability: ModelCapability, models: ModelCatalogItem[]) {
