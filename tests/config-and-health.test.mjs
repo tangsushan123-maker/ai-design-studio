@@ -1171,9 +1171,15 @@ describe("Text-to-image references", () => {
     assert.equal(promptSource.includes("必须自动补全用途、行业/场景、受众、主标题、副标题、核心卖点、主视觉元素"), true);
     assert.equal(promptSource.includes("function inferFestivalPoster"), true);
     assert.equal(promptSource.includes("端午通用品牌海报可用 title=端午安康"), true);
+    assert.equal(promptSource.includes("医疗/医院/机构品牌端午海报要偏关怀和安康祝福"), true);
+    assert.equal(promptSource.includes("除非用户明确写了活动、优惠、促销、福利、礼品、领取、报名、套餐、买赠"), true);
     assert.equal(promptSource.includes("科技馆/科普活动端午海报可用 title=科技里的端午"), true);
     assert.equal(promptSource.includes('title: "端午安康"'), true);
     assert.equal(promptSource.includes('subtitle: "粽叶飘香，情暖仲夏"'), true);
+    assert.equal(promptSource.includes('subtitle: "粽叶飘香，安康常伴"'), true);
+    assert.equal(promptSource.includes('sellingPoints: ["愿您和家人平安顺遂，身心常健", "健康相伴", "安心守护"]'), true);
+    assert.equal(promptSource.includes("hasPromotionIntent ?"), true);
+    assert.equal(promptSource.includes('["愿你岁岁安康，万事顺遂", "粽香仲夏", "安康相伴"]'), true);
     assert.equal(promptSource.includes('title: "科技里的端午"'), true);
     assert.equal(promptSource.includes('subtitle: "传统文化与科学探索的奇妙相遇"'), true);
     assert.equal(promptSource.includes("Use real poster copy, not planning labels"), true);

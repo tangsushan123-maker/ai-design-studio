@@ -180,7 +180,8 @@ export function buildDesignDirectorBriefRequestPrompt(request: DesignRequest, ra
     "JSON 字段：imageType,useScene,audience,communicationGoal,title,subtitle,sellingPoints,mainVisualConcept,creativeMetaphor,layout,colorSystem,typographyTone,textureSource,whitespaceAndSafety,industryRules,textPolicy,directions,recommendedDirectionId,recommendationReason。",
     "directions 固定 3 个，id 为 A/B/C；每个包含 name,concept,mainVisual,layout,palette,typography,texture,scenario,risk,score。",
     "如果用户只输入模糊短句，例如“帮我生成一张端午节海报”，必须自动补全用途、行业/场景、受众、主标题、副标题、核心卖点、主视觉元素、节日/行业符号、色彩风格、版式结构和推荐画布比例。",
-    "自动补全文案必须像真实海报上会出现的短句：例如端午通用品牌海报可用 title=端午安康，subtitle=粽叶飘香，情暖仲夏，sellingPoints 可含愿你岁岁安康，万事顺遂；不要把“节日氛围、品牌祝福、活动转化、探索感、互动感”这类策划标签当成画面文字。",
+    "自动补全文案必须像真实海报上会出现的短句：例如端午通用品牌海报可用 title=端午安康，subtitle=粽叶飘香，情暖仲夏，sellingPoints 可含愿你岁岁安康，万事顺遂；医疗/医院/机构品牌端午海报要偏关怀和安康祝福，可用 title=端午安康，subtitle=粽叶飘香，安康常伴，sellingPoints 可含愿您和家人平安顺遂，身心常健；不要把“节日氛围、品牌祝福、活动转化、探索感、互动感”这类策划标签当成画面文字。",
+    "除非用户明确写了活动、优惠、促销、福利、礼品、领取、报名、套餐、买赠，否则节日品牌海报不要出现“好礼、礼遇、福利、钜惠、限时、转化、到店”等促销文案。",
     "如果识别到具体行业，节日文案要按行业改写：例如科技馆/科普活动端午海报可用 title=科技里的端午 或 端午奇妙游，subtitle=传统文化与科学探索的奇妙相遇。",
     "节日海报要像真实商业活动主视觉：主标题可读、元素强相关、配色有节日气质、版式有明确标题区/主体区/信息区，不要只堆素材。",
     wantsProjectContext
@@ -352,19 +353,21 @@ export function normalizeDesignDirectorBrief(value: unknown, fallback: DesignDir
 function normalizeBriefVisibleCopy(source: Partial<DesignDirectorBrief>, fallback: DesignDirectorBrief) {
   const sourceTitle = cleanPromptText(source.title);
   const sourceSubtitle = cleanPromptText(source.subtitle);
-  const title = isUsablePosterCopy(sourceTitle, "title") ? sourceTitle : fallback.title;
-  const subtitle = isUsablePosterCopy(sourceSubtitle, "subtitle") ? sourceSubtitle : fallback.subtitle;
+  const allowPromotionCopy = fallback.sellingPoints.some((item) => /礼遇|好礼|优惠|福利|促销|领取|报名|套餐|买赠/.test(item));
+  const title = isUsablePosterCopy(sourceTitle, "title", allowPromotionCopy) ? sourceTitle : fallback.title;
+  const subtitle = isUsablePosterCopy(sourceSubtitle, "subtitle", allowPromotionCopy) ? sourceSubtitle : fallback.subtitle;
   const sourcePoints = Array.isArray(source.sellingPoints) ? source.sellingPoints.map(cleanPromptText).filter(Boolean) : [];
-  const sellingPoints = [...sourcePoints.filter((item) => isUsablePosterCopy(item, "label")), ...fallback.sellingPoints]
+  const sellingPoints = [...sourcePoints.filter((item) => isUsablePosterCopy(item, "label", allowPromotionCopy)), ...fallback.sellingPoints]
     .filter((item, index, arr) => arr.indexOf(item) === index)
     .slice(0, 3);
   return { title, subtitle, sellingPoints: sellingPoints.length ? sellingPoints : fallback.sellingPoints };
 }
 
-function isUsablePosterCopy(value: string, role: "title" | "subtitle" | "label") {
+function isUsablePosterCopy(value: string, role: "title" | "subtitle" | "label", allowPromotionCopy = false) {
   if (!value) return false;
   if (value.length > (role === "title" ? 18 : 28)) return false;
   if (role === "title" && /海报|广告|宣传图|设计图|图片|生成/.test(value)) return false;
+  if (!allowPromotionCopy && /好礼|礼遇|福利|钜惠|优惠|限时|促销|转化|到店|领取|套餐|买赠/.test(value)) return false;
   if (/^(节日氛围|品牌祝福|活动转化|探索感|互动感|知识传播|主题清晰|视觉完整|信息克制|核心卖点|商业转化|传播记忆点|用户转化)$/.test(value)) return false;
   if (/^(节日|品牌|活动|商业|视觉|信息|转化|传播|互动|探索|知识)(氛围|祝福|转化|感|传播|标签|卖点|策略)$/.test(value)) return false;
   if (/^(海报|广告|宣传|生成|设计|图片)$/.test(value)) return false;
@@ -703,6 +706,7 @@ function inferDirectorSellingPoints(text: string) {
 function inferFestivalPoster(text: string) {
   if (/端午|龙舟|粽子|艾草|五彩绳/.test(text)) {
     const industry = inferDirectorIndustry(text);
+    const hasPromotionIntent = /活动|促销|优惠|折扣|福利|礼品|好礼|礼遇|领取|报名|套餐|买赠|门店|到店|转化/.test(text);
     if (industry === "科普科技") {
       return {
         title: "科技里的端午",
@@ -719,16 +723,36 @@ function inferFestivalPoster(text: string) {
         typographyTone: "现代国风结合科技感标题字，副标题清楚，避免长文和伪中文小字",
       };
     }
+    if (industry === "医疗") {
+      return {
+        title: "端午安康",
+        subtitle: "粽叶飘香，安康常伴",
+        sellingPoints: ["愿您和家人平安顺遂，身心常健", "健康相伴", "安心守护"],
+        useScene: "医院品牌节日海报 / 节日问候 / 线上传播",
+        audience: "患者、家属、社区居民和医院品牌关注者",
+        communicationGoal: "用端午节日氛围传达医院的专业、温和与长期陪伴，不做促销和送礼暗示",
+        colorSystem: "青绿、米白、浅金为主，整体干净温和；竹叶、水纹和传统纹样保持克制",
+        mainVisualConcept: "粽叶、艾草、竹影、水纹、柔和晨光与医院品牌标识形成清爽安康的节日画面",
+        creativeMetaphor: "用艾草清香和粽叶包裹感表达平安、守护与节日关怀",
+        stableLayout: "左上品牌区 / 右侧或中上主标题 / 中部节日主视觉 / 底部简短祝福与留白区",
+        creativeLayout: "竹影和水纹形成柔和动线，标题稳重醒目，品牌区清楚但不压主视觉",
+        typographyTone: "稳重现代国风标题字，副标题温和清楚，避免促销口吻和拥挤小字",
+      };
+    }
     return {
       title: "端午安康",
       subtitle: "粽叶飘香，情暖仲夏",
-      sellingPoints: ["愿你岁岁安康，万事顺遂", "粽香礼遇", "仲夏好礼"],
-      useScene: "节日营销 / 线上传播 / 门店活动预热",
+      sellingPoints: hasPromotionIntent ? ["愿你岁岁安康，万事顺遂", "粽香礼遇", "仲夏好礼"] : ["愿你岁岁安康，万事顺遂", "粽香仲夏", "安康相伴"],
+      useScene: hasPromotionIntent ? "节日活动海报 / 线上传播 / 门店活动预热" : "品牌节日海报 / 节日问候 / 线上传播",
       audience: "品牌用户、门店顾客和线上活动参与者",
-      communicationGoal: "用端午节日情绪吸引注意，传达祝福和活动信息，提升传播与到店/转化意愿",
+      communicationGoal: hasPromotionIntent
+        ? "用端午节日情绪吸引注意，传达祝福和活动信息，提升传播与到店/转化意愿"
+        : "用端午节日情绪传达品牌问候和陪伴感，建立温和、可信、有节日记忆点的品牌形象",
       colorSystem: "青绿、米白为主，少量金色点缀；水纹、竹叶和传统纹样保持克制高级",
       mainVisualConcept: "粽子、龙舟、水纹、艾草、祥云或竹叶构成主视觉，结合现代商业留白和节日仪式感",
-      creativeMetaphor: "用龙舟动势和粽叶包裹感表达节日活力、团圆祝福和品牌好礼",
+      creativeMetaphor: hasPromotionIntent
+        ? "用龙舟动势和粽叶包裹感表达节日活力、团圆祝福和品牌礼遇"
+        : "用龙舟动势和粽叶包裹感表达节日活力、平安祝福和品牌陪伴",
       stableLayout: "上方主标题 / 中央粽子与龙舟主视觉 / 底部活动信息与品牌留白区",
       creativeLayout: "龙舟水纹形成动势斜线，粽子作为视觉焦点，标题与主体错位但保持安全边距",
       typographyTone: "现代国风标题字，副标题简洁，避免长文和伪中文小字",
