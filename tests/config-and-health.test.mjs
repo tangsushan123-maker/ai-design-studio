@@ -636,6 +636,14 @@ describe("Generated image serving", () => {
     assert.equal(previewRouteSource.includes("status: 304"), true);
     assert.equal(cacheSource.includes('"Cache-Control": cacheControl'), true);
   });
+
+  it("checks generated image restore conflicts without reading image files", async () => {
+    const generatedImagesRouteSource = await readFile(new URL("../app/api/generated-images/route.ts", import.meta.url), "utf8");
+
+    assert.equal(generatedImagesRouteSource.includes("rename(sourceImagePath, restoredImagePath)"), true);
+    assert.equal(generatedImagesRouteSource.includes("return (await stat(filePath)).isFile()"), true);
+    assert.equal(generatedImagesRouteSource.includes("await readFile(filePath);"), false);
+  });
 });
 
 describe("Remote image import security", () => {

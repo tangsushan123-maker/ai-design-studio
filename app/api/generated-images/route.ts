@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { mkdir, readFile, rename, unlink } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { requireCurrentUser } from "@/lib/auth";
 import { listGeneratedImages } from "@/lib/generated-history";
@@ -216,8 +216,7 @@ async function uniqueGeneratedFileName(fileName: string) {
 
 async function fileExists(filePath: string) {
   try {
-    await readFile(filePath);
-    return true;
+    return (await stat(filePath)).isFile();
   } catch {
     return false;
   }
