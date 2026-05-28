@@ -4,6 +4,7 @@ import {
   projectSnapshotLimit,
   projectStorageKey,
 } from "@/components/workbench/workbench-config";
+import { imageKey } from "@/components/workbench/workbench-image-collection";
 import {
   dismissedImageStorageKey,
   dismissedTaskStorageKey,
@@ -13,8 +14,9 @@ import {
   projectTaskStorageKey,
   stripProjectRuntimeState,
 } from "@/components/workbench/workbench-project-helpers";
-import { restoreProjectTasks, sanitizeProjectTasks } from "@/components/workbench/workbench-task-helpers";
+import { restoreProjectTasks, sanitizeProjectTasks, taskCandidateImagesFromNode } from "@/components/workbench/workbench-task-helpers";
 import type {
+  FlowNode,
   ImageAsset,
   ProjectLocalCachePointer,
   ProjectPayload,
@@ -74,6 +76,19 @@ export function readProjectTaskCache(projectId: string, fallbackRuns: TaskRecord
   } catch {
     return filterDismissedProjectTasks(projectId, fallbackRuns);
   }
+}
+
+export function filterDismissedRestoredNodes(projectId: string, nodes: FlowNode[]) {
+  if (!nodes.length) return nodes;
+  const taskRefs = loadDismissedTaskRefs(projectId);
+  const imageKeys = loadDismissedImageKeySet(projectId);
+  if (!taskRefs.nodeIds.size && !imageKeys.size) return nodes;
+  return nodes.filter((node) => {
+    if (taskRefs.nodeIds.has(node.id)) return false;
+    const candidates = taskCandidateImagesFromNode(node);
+    if (!candidates.length) return true;
+    return !candidates.every((image) => imageKeys.has(imageKey(image)));
+  });
 }
 
 export function readProjectSnapshots(projectId: string): ProjectSnapshot[] {

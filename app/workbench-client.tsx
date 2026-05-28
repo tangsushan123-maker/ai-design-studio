@@ -290,6 +290,7 @@ import {
   taskNeedsServerSync,
 } from "@/components/workbench/workbench-task-helpers";
 import {
+  filterDismissedRestoredNodes,
   getStoredProject,
   imageSourceDismissedForProject,
   isFiniteViewport,
@@ -7657,19 +7658,6 @@ function restoreNodes(nodes: FlowNode[], runs: TaskRecord[] = []) {
       };
     });
   return normalizeRestoredCanvasPositions(restored);
-}
-
-function filterDismissedRestoredNodes(projectId: string, nodes: FlowNode[]) {
-  if (!nodes.length) return nodes;
-  const taskRefs = loadDismissedTaskRefs(projectId);
-  const imageKeys = loadDismissedImageKeySet(projectId);
-  if (!taskRefs.nodeIds.size && !imageKeys.size) return nodes;
-  return nodes.filter((node) => {
-    if (taskRefs.nodeIds.has(node.id)) return false;
-    const candidates = taskCandidateImagesFromNode(node);
-    if (!candidates.length) return true;
-    return !candidates.every((image) => imageKeys.has(imageKey(image)));
-  });
 }
 
 function isRestorableNodeKind(value: unknown) {
