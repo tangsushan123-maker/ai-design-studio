@@ -23,11 +23,12 @@ describe("OpenAI defaults", () => {
   });
 
   it("keeps production preflight available for server deploys", async () => {
-    const [packageSource, preflightSource, deploySource, readmeSource] = await Promise.all([
+    const [packageSource, preflightSource, deploySource, readmeSource, pm2Source] = await Promise.all([
       readFile(new URL("../package.json", import.meta.url), "utf8"),
       readFile(new URL("../scripts/preflight.mjs", import.meta.url), "utf8"),
       readFile(new URL("../docs/production-deploy.md", import.meta.url), "utf8"),
       readFile(new URL("../README.md", import.meta.url), "utf8"),
+      readFile(new URL("../ecosystem.config.cjs", import.meta.url), "utf8"),
     ]);
 
     assert.equal(packageSource.includes('"preflight": "node scripts/preflight.mjs"'), true);
@@ -42,8 +43,14 @@ describe("OpenAI defaults", () => {
     assert.equal(preflightSource.includes("*.tsbuildinfo"), true);
     assert.equal(deploySource.includes("npm run preflight"), true);
     assert.equal(readmeSource.includes("Node.js `>=20.9.0`"), true);
-    assert.equal(readmeSource.includes("pm2 start npm --name ai-design-studio -- start"), true);
+    assert.equal(readmeSource.includes("pm2 start ecosystem.config.cjs"), true);
+    assert.equal(readmeSource.includes("pm2 reload ecosystem.config.cjs --update-env"), true);
     assert.equal(readmeSource.includes("docs/production-deploy.md"), true);
+    assert.equal(readmeSource.includes("ecosystem.config.cjs"), true);
+    assert.equal(deploySource.includes("pm2 logs ai-design-studio --lines 100"), true);
+    assert.equal(pm2Source.includes('name: "ai-design-studio"'), true);
+    assert.equal(pm2Source.includes('args: "start -H 127.0.0.1 -p 3000"'), true);
+    assert.equal(pm2Source.includes('max_memory_restart: "1G"'), true);
     assert.equal(readmeSource.includes("public/generated/*"), true);
   });
 });

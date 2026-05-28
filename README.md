@@ -54,11 +54,11 @@ cp .env.example .env.local
 ```bash
 npm run preflight
 npm run build
-pm2 start npm --name ai-design-studio -- start
+pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
-默认监听 `127.0.0.1:3000`。用 nginx 反向代理到域名即可让别人通过网站访问。完整 nginx 示例见 [docs/production-deploy.md](docs/production-deploy.md)。
+默认监听 `127.0.0.1:3000`，PM2 会在内存超过 1GB 时自动重启服务。用 nginx 反向代理到域名即可让别人通过网站访问。完整 nginx 示例见 [docs/production-deploy.md](docs/production-deploy.md)。
 
 更新服务器版本：
 
@@ -68,7 +68,7 @@ git pull
 npm ci
 npm run preflight
 npm run build
-pm2 restart ai-design-studio
+pm2 reload ecosystem.config.cjs --update-env
 ```
 
 ## 验证命令
@@ -94,6 +94,7 @@ npm run preflight
 - `components/workbench/`：工作台 UI 组件。
 - `lib/`：模型配置、提示词、图片处理、项目数据和质量检查逻辑。
 - `docs/production-deploy.md`：服务器部署说明。
+- `ecosystem.config.cjs`：PM2 生产服务配置。
 - `docs/known-issues.md`：当前已知限制和后续优化方向。
 - `public/generated/`：本地生成图片目录，只保留 `.gitkeep`，不要提交生成图片。
 
@@ -109,4 +110,3 @@ npm run preflight
 - `public/generated/*`
 - `node_modules/`
 - `.next/`
-

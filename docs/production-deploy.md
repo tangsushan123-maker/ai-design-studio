@@ -23,11 +23,11 @@ Edit `.env.local` and set `OPENAI_API_KEY`. You can also configure the API provi
 ```bash
 npm run preflight
 npm run build
-pm2 start npm --name ai-design-studio -- start
+pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
-The app listens on port `3000` by default.
+The app listens on `127.0.0.1:3000` by default. `ecosystem.config.cjs` pins the working directory, runs the built Next.js app through PM2, and restarts the process if memory goes above 1GB.
 
 ## Nginx Reverse Proxy
 
@@ -68,8 +68,10 @@ git pull
 npm ci
 npm run preflight
 npm run build
-pm2 restart ai-design-studio
+pm2 reload ecosystem.config.cjs --update-env
 ```
+
+If the process does not exist yet, run `pm2 start ecosystem.config.cjs` instead.
 
 ## Safety Checks
 
@@ -77,3 +79,4 @@ pm2 restart ai-design-studio
 - Back up local JSON files and `public/generated/` before moving servers.
 - If generation fails after deploy, open `/settings`, verify the provider, test the text model, then run a full image model test.
 - Server diagnostics are available from `GET /api/health-openai`; check `diagnostics.nodeVersion`, `diagnostics.runtime`, and `hasKey` before debugging nginx.
+- Check `pm2 logs ai-design-studio --lines 100` when the website opens but generation or settings requests fail.
