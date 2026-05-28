@@ -33,6 +33,7 @@
     "preflight": "node scripts/preflight.mjs",
     "start": "next start",
     "lint": "eslint .",
+    "user:create": "node scripts/create-auth-user.mjs",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit"
   }
