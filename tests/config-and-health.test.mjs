@@ -1336,6 +1336,10 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("fileKey: `referenceImage_${index}`"), true);
     assert.equal(routeSource.includes("fileKey: `brandAsset_${index}`"), true);
     assert.equal(routeSource.includes("slice(0, 5)"), true);
+    assert.equal(promptSource.includes("references.length >= 5"), true);
+    assert.equal(routeSource.includes("references.length >= 5"), true);
+    assert.equal(promptSource.includes("value.filter((item) => Boolean(item?.label)).slice(0, 5)"), false);
+    assert.equal(routeSource.includes("parsed.filter((item) => Boolean(item?.label)).slice(0, 5)"), false);
     assert.equal(routeSource.includes("for (let index = 1; index <= 5"), false);
     assert.equal(routeSource.includes("buildPromptsFromDesignPlan"), true);
     assert.equal(routeSource.includes("Never use the raw user sentence as visible poster copy"), true);

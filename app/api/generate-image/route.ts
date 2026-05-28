@@ -1000,7 +1000,14 @@ function parseReferenceManifest(value: FormDataEntryValue | null): TextReference
   if (typeof value !== "string" || !value.trim()) return [];
   try {
     const parsed = JSON.parse(value) as TextReferenceImage[];
-    return Array.isArray(parsed) ? parsed.filter((item) => Boolean(item?.label)).slice(0, 5) : [];
+    if (!Array.isArray(parsed)) return [];
+    const references: TextReferenceImage[] = [];
+    for (const item of parsed) {
+      if (!item?.label) continue;
+      references.push(item);
+      if (references.length >= 5) break;
+    }
+    return references;
   } catch {
     return [];
   }

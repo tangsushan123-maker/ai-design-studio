@@ -851,7 +851,14 @@ function buildDirectorIndustryRules(text: string) {
 }
 
 function normalizeTextReferenceImages(value: DesignRequest["referenceImages"]) {
-  return Array.isArray(value) ? value.filter((item) => Boolean(item?.label)).slice(0, 5) : [];
+  if (!Array.isArray(value)) return [];
+  const references: NonNullable<DesignRequest["referenceImages"]> = [];
+  for (const item of value) {
+    if (!item?.label) continue;
+    references.push(item);
+    if (references.length >= 5) break;
+  }
+  return references;
 }
 
 function buildTextReferencePrompt(referenceImages: NonNullable<DesignRequest["referenceImages"]>, strongReferenceMode = false) {
