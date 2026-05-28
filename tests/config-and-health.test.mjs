@@ -2152,11 +2152,12 @@ describe("Workbench compact typography", () => {
 
 describe("Account navigation", () => {
   it("keeps account actions separate from API settings", async () => {
-    const [accountSwitcherSource, accountsPageSource, settingsPageSource, globalsSource] = await Promise.all([
+    const [accountSwitcherSource, accountsPageSource, settingsPageSource, globalsSource, authSource] = await Promise.all([
       readFile(new URL("../components/account-switcher.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/accounts/page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+      readFile(new URL("../lib/auth.ts", import.meta.url), "utf8"),
     ]);
 
     assert.equal(accountSwitcherSource.includes("子账号管理"), true);
@@ -2167,6 +2168,8 @@ describe("Account navigation", () => {
     assert.equal(accountsPageSource.includes("<AdminAccountsManager />"), true);
     assert.equal(settingsPageSource.includes("AdminAccountsManager"), false);
     assert.equal(globalsSource.includes("account-menu__identity"), false);
+    assert.equal(authSource.includes("let ownerCount = 0"), true);
+    assert.equal(authSource.includes('store.users.filter((user) => user.role === "owner").length'), false);
   });
 });
 

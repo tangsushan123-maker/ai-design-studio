@@ -164,13 +164,23 @@ export async function adminUpsertAuthUser(input: { id?: string; email: string; p
 
 export async function adminDeleteAuthUser(input: { id: string; currentUserId: string }) {
   const store = await readUserStore();
-  const target = store.users.find((user) => user.id === input.id);
+  let target: StoredUser | undefined;
+  let ownerCount = 0;
+  const nextUsers: StoredUser[] = [];
+  for (const user of store.users) {
+    if (user.role === "owner") ownerCount += 1;
+    if (user.id === input.id) {
+      target = user;
+      continue;
+    }
+    nextUsers.push(user);
+  }
   if (!target) throw new AuthInputError("账号不存在。");
   if (target.id === input.currentUserId) throw new AuthInputError("不能删除当前登录的管理员账号。");
-  if (target.role === "owner" && store.users.filter((user) => user.role === "owner").length <= 1) {
+  if (target.role === "owner" && ownerCount <= 1) {
     throw new AuthInputError("不能删除最后一个管理员账号。");
   }
-  await writeUserStore({ users: store.users.filter((user) => user.id !== target.id) });
+  await writeUserStore({ users: nextUsers });
   return publicUser(target);
 }
 
