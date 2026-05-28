@@ -20,6 +20,7 @@ const imageVariantSpecs: Record<ImageVariantKind, { longEdge: number; quality: n
   thumbnail: { longEdge: 300, quality: 78 },
   preview: { longEdge: 1200, quality: 84 },
 };
+const imageVariantBuilds = new Map<string, Promise<{ fileName: string; path: string; url: string }>>();
 
 export function getGeneratedDir() {
   return generatedDir;
@@ -150,6 +151,26 @@ export async function ensureImageVariant(fileName: string, kind: ImageVariantKin
   const exists = await stat(variantPath).then((fileStat) => fileStat.isFile()).catch(() => false);
   if (exists) return { fileName: variantFileName, path: variantPath, url: variantUrl };
 
+  const pending = imageVariantBuilds.get(variantPath);
+  if (pending) return pending;
+
+  const build = buildImageVariant(fileName, kind, inputBuffer, {
+    fileName: variantFileName,
+    path: variantPath,
+    url: variantUrl,
+  }).finally(() => {
+    imageVariantBuilds.delete(variantPath);
+  });
+  imageVariantBuilds.set(variantPath, build);
+  return build;
+}
+
+async function buildImageVariant(
+  fileName: string,
+  kind: ImageVariantKind,
+  inputBuffer: Buffer | undefined,
+  variant: { fileName: string; path: string; url: string },
+) {
   const source = inputBuffer || await readFile(getGeneratedPath(fileName));
   const spec = imageVariantSpecs[kind];
   const output = await sharp(source)
@@ -163,9 +184,9 @@ export async function ensureImageVariant(fileName: string, kind: ImageVariantKin
     })
     .webp({ quality: spec.quality, effort: 4 })
     .toBuffer();
-  await mkdir(path.dirname(variantPath), { recursive: true });
-  await writeBufferAtomic(variantPath, output);
-  return { fileName: variantFileName, path: variantPath, url: variantUrl };
+  await mkdir(path.dirname(variant.path), { recursive: true });
+  await writeBufferAtomic(variant.path, output);
+  return variant;
 }
 
 export async function ensureImageVariantForPublicUrl(publicUrl: string, kind: ImageVariantKind) {

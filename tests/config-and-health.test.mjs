@@ -637,6 +637,17 @@ describe("Generated image serving", () => {
     assert.equal(cacheSource.includes('"Cache-Control": cacheControl'), true);
   });
 
+  it("coalesces concurrent preview variant builds", async () => {
+    const imageUtilsSource = await readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8");
+
+    assert.equal(imageUtilsSource.includes("const imageVariantBuilds = new Map"), true);
+    assert.equal(imageUtilsSource.includes("const pending = imageVariantBuilds.get(variantPath)"), true);
+    assert.equal(imageUtilsSource.includes("if (pending) return pending"), true);
+    assert.equal(imageUtilsSource.includes("imageVariantBuilds.set(variantPath, build)"), true);
+    assert.equal(imageUtilsSource.includes("imageVariantBuilds.delete(variantPath)"), true);
+    assert.equal(imageUtilsSource.includes("async function buildImageVariant"), true);
+  });
+
   it("does not block image responses on preview variant generation", async () => {
     const imageUtilsSource = await readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8");
 
