@@ -1914,6 +1914,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(materialLibrariesRouteSource.includes("parseMaterialLibraryPayload"), true);
     assert.equal(materialLibrariesRouteSource.includes("InvalidMaterialLibraryPayloadError"), true);
     assert.equal(materialLibrariesRouteSource.includes("素材库 JSON 无法解析"), true);
+    assert.equal(materialLibrariesRouteSource.includes("function materialLibraryItemCounts"), true);
+    assert.equal(materialLibrariesRouteSource.includes('library.items.filter((item) => item.type === "style_rule")'), false);
+    assert.equal(materialLibrariesRouteSource.includes('library.items.filter((item) => item.type === "reference")'), false);
     assert.equal(workbenchSource.includes("refreshMaterialLibraries({ quiet: true })"), true);
     assert.equal(workbenchSource.includes("imageImportInFlightRef"), true);
     assert.equal(workbenchSource.includes("正在导入上一张图片，请稍候。"), true);

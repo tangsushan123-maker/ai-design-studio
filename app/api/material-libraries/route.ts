@@ -168,8 +168,7 @@ async function writeStyleLibraryStore(store: StyleLibraryStore) {
 }
 
 function summarizeLibrary(library: MaterialLibraryRecord, includeItems: boolean) {
-  const styleRuleCount = library.items.filter((item) => item.type === "style_rule").length;
-  const referenceCount = library.items.filter((item) => item.type === "reference").length;
+  const itemCounts = materialLibraryItemCounts(library);
   return {
     id: library.id,
     name: library.name,
@@ -178,11 +177,21 @@ function summarizeLibrary(library: MaterialLibraryRecord, includeItems: boolean)
     description: library.description,
     tags: library.tags,
     itemCount: library.items.length,
-    styleRuleCount,
-    referenceCount,
+    styleRuleCount: itemCounts.styleRuleCount,
+    referenceCount: itemCounts.referenceCount,
     updatedAt: library.updatedAt,
     items: includeItems ? library.items : undefined,
   };
+}
+
+function materialLibraryItemCounts(library: MaterialLibraryRecord) {
+  let styleRuleCount = 0;
+  let referenceCount = 0;
+  for (const item of library.items) {
+    if (item.type === "style_rule") styleRuleCount += 1;
+    if (item.type === "reference") referenceCount += 1;
+  }
+  return { styleRuleCount, referenceCount };
 }
 
 function materialLibraryErrorMessage(prefix: string, error: unknown) {
