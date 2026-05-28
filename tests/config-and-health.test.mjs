@@ -1901,6 +1901,10 @@ describe("AI compositing", () => {
     assert.equal(promptSource.includes("合成要点：大小、位置、透视、接触、遮挡、光向、投影、反射、色温、颗粒、清晰度、边缘和景深一致"), true);
 
     assert.equal(routeSource.includes('(["natural", "advertising"] as const)'), true);
+    assert.equal(routeSource.includes("const [first, second] = await Promise.all"), true);
+    assert.equal(routeSource.includes('readImageInput(formData, "imageA", "sourceUrlA", "subject-source.png")'), true);
+    assert.equal(routeSource.includes('readImageInput(formData, "imageB", "sourceUrlB", "scene-source.png")'), true);
+    assert.equal(routeSource.includes('const first = await readImageInput(formData, "imageA"'), false);
     assert.equal(routeSource.includes("wantsMultipleImageOutputs"), true);
     assert.equal(routeSource.includes("getImageRatio(second.buffer)"), true);
     assert.equal(routeSource.includes('mode: "AI合成"'), true);

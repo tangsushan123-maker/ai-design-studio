@@ -39,8 +39,10 @@ export async function POST(request: Request) {
     taskTrace = taskTraceFromFormData(formData, "fuse_images", "/api/fuse-images");
     await recordTaskRunStarted(taskTrace);
     const promptText = String(formData.get("prompt") ?? "");
-    const first = await readImageInput(formData, "imageA", "sourceUrlA", "subject-source.png");
-    const second = await readImageInput(formData, "imageB", "sourceUrlB", "scene-source.png");
+    const [first, second] = await Promise.all([
+      readImageInput(formData, "imageA", "sourceUrlA", "subject-source.png"),
+      readImageInput(formData, "imageB", "sourceUrlB", "scene-source.png"),
+    ]);
 
     if (!first || !second) {
       await recordTaskRunFailed(taskTrace, "请先连接图1主体来源和图2场景来源。");
