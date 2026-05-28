@@ -14,8 +14,6 @@ export const runtime = "nodejs";
 
 const rootProjectsPath = path.join(process.cwd(), "projects.local.json");
 const rootLegacyProjectPath = path.join(process.cwd(), "project.local.json");
-const rootProjectsBackupPath = `${rootProjectsPath}.bak`;
-const rootLegacyProjectBackupPath = `${rootLegacyProjectPath}.bak`;
 const ownerProjectStoreReadConcurrency = 8;
 
 type StoredProject = {
@@ -249,17 +247,13 @@ async function readStore(userId: string, options: { includeRootMigration?: boole
   const includeRootMigration = options.includeRootMigration ?? true;
   const scopedProjectsPath = userDataPath(userId, "projects.local.json");
   const scopedLegacyProjectPath = userDataPath(userId, "project.local.json");
-  const scopedStore =
-    await readProjectStoreFile(scopedProjectsPath) ||
-    await readProjectStoreFile(`${scopedProjectsPath}.bak`);
+  const scopedStore = await readProjectStoreFile(scopedProjectsPath);
   const rootStore = includeRootMigration
-    ? await readProjectStoreFile(rootProjectsPath) || await readProjectStoreFile(rootProjectsBackupPath)
+    ? await readProjectStoreFile(rootProjectsPath)
     : null;
-  const scopedLegacy =
-    (await readProjectFile(scopedLegacyProjectPath)) ||
-    (await readProjectFile(`${scopedLegacyProjectPath}.bak`));
+  const scopedLegacy = await readProjectFile(scopedLegacyProjectPath);
   const rootLegacy = includeRootMigration
-    ? (await readProjectFile(rootLegacyProjectPath)) || (await readProjectFile(rootLegacyProjectBackupPath))
+    ? await readProjectFile(rootLegacyProjectPath)
     : null;
 
   if (scopedStore) {
