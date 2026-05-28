@@ -1044,7 +1044,7 @@ function NodeWorkflowWorkbench({
   const [projectListError, setProjectListError] = useState("");
   const [projectBootReady, setProjectBootReady] = useState(false);
   const [modelInfo, setModelInfo] = useState(initialModelInfo);
-  const [status, setStatus] = useState("空画布。点击“添加节点”，或直接拖拽 / 粘贴图片。");
+  const [, setStatus] = useState("空画布。点击“添加节点”，或直接拖拽 / 粘贴图片。");
   const [creativeStartBusy, setCreativeStartBusy] = useState(false);
   const [leftRailOpen, setLeftRailOpen] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
@@ -5394,25 +5394,18 @@ function NodeWorkflowWorkbench({
                 图片 {projectImageCount}
               </span>
               {lastProjectJsonBytes ? (
-                <span className={`apple-pill px-2 py-1 text-[11px] ${lastProjectJsonBytes >= projectCapacityJsonWarningBytes ? "text-[#ffe2a3]" : ""}`}>
-                  项目 {formatFileSize(lastProjectJsonBytes)}
+                <span className={`apple-pill px-2 py-1 text-[11px] ${lastProjectJsonBytes >= projectCapacityJsonWarningBytes ? "text-[#ffe2a3]" : ""}`} title={`项目 ${formatFileSize(lastProjectJsonBytes)}${lastSaveDurationMs ? ` · 保存 ${formatDuration(lastSaveDurationMs)}` : ""}`}>
+                  项目
                 </span>
               ) : null}
-              {lastSaveDurationMs ? <span className="apple-pill px-2 py-1 text-[11px]">保存 {formatDuration(lastSaveDurationMs)}</span> : null}
             </div>
-            {saveFeedback ? (
+            {saveFeedback?.tone === "error" ? (
               <div
-                className={`mt-2 rounded-xl border px-2.5 py-1.5 text-[11px] leading-5 ${
-                  saveFeedback.tone === "error"
-                    ? "border-[#ff6b5f]/20 bg-[#ff6b5f]/12 text-[#ffb4a8]"
-                    : saveFeedback.tone === "success"
-                      ? "border-[#74e3c5]/20 bg-[#74e3c5]/12 text-[#adf8e5]"
-                      : "border-white/12 bg-white/[0.06] text-white/66"
-                }`}
+                className="mt-2 rounded-xl border border-[#ff6b5f]/20 bg-[#ff6b5f]/12 px-2.5 py-1.5 text-[11px] leading-5 text-[#ffb4a8]"
               >
                 {saveFeedback.message}
               </div>
-            ) : status ? <div className="apple-caption mt-2 line-clamp-1">{status}</div> : null}
+            ) : null}
             {projectCapacity.message ? (
               <div
                 className={`mt-2 rounded-xl border px-2.5 py-1.5 text-[11px] leading-5 ${
