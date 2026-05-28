@@ -90,7 +90,6 @@ import {
   estimateWorkflowNodeHeight,
   filterEdgesForNodes,
   nodeAutoSpacingX,
-  normalizeRestoredCanvasPositions,
 } from "@/components/workbench/workbench-layout";
 import {
   designComparisonModeLabel,
@@ -192,6 +191,7 @@ import {
   treeResultHorizontalGap,
 } from "@/components/workbench/workbench-config";
 import { imageModelProductHint, imageModelReadiness, initialImageModelFor, preferredAutoImageModelId } from "@/components/workbench/workbench-models";
+import { restoreNodes } from "@/components/workbench/workbench-node-restore";
 import {
   batchImageActionSummary,
   compactImageMeta,
@@ -209,7 +209,7 @@ import {
   taskStatusLabel,
 } from "@/components/workbench/workbench-labels";
 import { DetailLine, EmptyPanel, MiniInput, StatusDot, ToolbarButton } from "@/components/workbench/workbench-small-ui";
-import { isActiveNodeStatus, isDeferredQueuedTask, isFinishedNodeStatus, isQualityGateBlocked, isTaskActivelyRunning, isTaskPossiblyStuck } from "@/components/workbench/workbench-task-state";
+import { isDeferredQueuedTask, isQualityGateBlocked, isTaskActivelyRunning, isTaskPossiblyStuck } from "@/components/workbench/workbench-task-state";
 import {
   adaptiveRatioOptions,
   customSize,
@@ -278,7 +278,6 @@ import {
   buildTaskRecoveredCompletionPatch,
   hasTaskResultNodesOnCanvasFromNodes,
   imageBelongsToProject,
-  latestTaskByNodeId,
   recoverTaskCanvasResultFromNodes,
   restoreProjectTasks,
   serverTaskRunOutputs,
@@ -7620,65 +7619,4 @@ function ImageLightbox({
       </div>
     </div>
   );
-}
-
-function restoreNodes(nodes: FlowNode[], runs: TaskRecord[] = []) {
-  const latestTaskByNode = latestTaskByNodeId(runs);
-  const restored = nodes
-    .filter((node) => node?.id && node?.type && isRestorableNodeKind(node.type))
-    .map((node) => {
-      const kind = normalizeLegacyNodeKind(node.data.kind || node.type);
-      const catalog = nodeCatalog.find((item) => item.type === kind);
-      const task = latestTaskByNode.get(node.id);
-      const existingOutputs = Array.isArray(node.data.outputs) ? node.data.outputs : node.data.output ? [node.data.output] : [];
-      const taskOutputs = task?.outputs?.length ? task.outputs : task?.result ? [task.result] : [];
-      const outputs = existingOutputs.length ? existingOutputs : taskOutputs;
-      const activeWithoutOutput = isActiveNodeStatus(node.data.status) && !outputs.length;
-      const taskError = task?.error || task?.progressLabel || "";
-      const taskFinishedStatus = activeWithoutOutput && task && isFinishedNodeStatus(task.status) ? task.status : node.data.status;
-      const restoredStatus = outputs.length && taskFinishedStatus === "failed" ? "completed" : taskFinishedStatus;
-      const restoredError = restoredStatus === "failed" && !node.data.error && taskError ? taskError : restoredStatus === "completed" ? "" : node.data.error;
-      return {
-        ...node,
-        type: kind,
-        selected: false,
-        dragging: false,
-        data: {
-          ...node.data,
-          title: node.data.kind === "upscale_4k" ? "画质增强" : node.data.title,
-          kind,
-          subtitle: catalog?.description || node.data.subtitle,
-          params: migrateLegacyNodeParams(kind, node.data.kind, node.data.params || {}),
-          output: node.data.output || outputs[0] || null,
-          outputs,
-          resultCount: outputs.length || node.data.resultCount,
-          status: restoredStatus,
-          error: restoredError ? friendlyDisplayError(String(restoredError)) : restoredError,
-        },
-      };
-    });
-  return normalizeRestoredCanvasPositions(restored);
-}
-
-function isRestorableNodeKind(value: unknown) {
-  return nodeCatalog.some((item) => item.type === value) || value === "upscale_4k";
-}
-
-function normalizeLegacyNodeKind(value: unknown): NodeKind {
-  if (value === "upscale_4k") return "hd_redraw";
-  return nodeCatalog.some((item) => item.type === value) ? value as NodeKind : "text_to_image";
-}
-
-function migrateLegacyNodeParams(kind: NodeKind, originalKind: unknown, params: Record<string, unknown>) {
-  if (originalKind !== "upscale_4k") return Object.keys(params).length ? params : { ...defaultParamsByKind[kind] };
-  const enhancementMode = qualityEnhanceModeFromFitMode(stringParam(params.fitMode), params);
-  return {
-    ...defaultParamsByKind.hd_redraw,
-    targetSize: stringParam(params.targetSize) || defaultParamsByKind.hd_redraw.targetSize,
-    quality: qualityEnhanceQualityParam(params.quality),
-    format: exportFormatParam(params.format),
-    enhancementMode,
-    prompt: stringParam(params.prompt) || qualityEnhanceDefaultPrompt(enhancementMode),
-    model: stringParam(params.model),
-  };
 }
