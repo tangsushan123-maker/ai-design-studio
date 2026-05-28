@@ -77,6 +77,60 @@ export function taskCandidateImagesFromNode(node: FlowNode) {
   ].filter(isImageAssetLike);
 }
 
+export function recoverTaskCanvasResultFromNodes(nodes: FlowNode[], task: TaskResultMatchContext) {
+  const canvasNodeIds = new Set(nodes.map((node) => node.id));
+  const recoveredNodeIds = new Set((task.resultNodeIds || []).filter((nodeId) => canvasNodeIds.has(nodeId)));
+  const recoveredOutputs: ImageAsset[] = [];
+  const seen = new Set<string>();
+  const addImage = (image: unknown, force = false, nodeId?: string) => {
+    if (!isImageAssetLike(image)) return;
+    if (!force && !taskResultImageMatches(image, task)) return;
+    const key = imageKey(image);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    recoveredOutputs.push(image);
+    if (nodeId) recoveredNodeIds.add(nodeId);
+  };
+
+  nodes.forEach((node) => {
+    const candidates = taskCandidateImagesFromNode(node);
+    const knownResultNode = recoveredNodeIds.has(node.id);
+    candidates.forEach((image) => addImage(image, knownResultNode, node.id));
+  });
+
+  return {
+    outputs: recoveredOutputs,
+    resultNodeIds: [...recoveredNodeIds],
+  };
+}
+
+export function hasTaskResultNodesOnCanvasFromNodes(nodes: FlowNode[], task: TaskResultMatchContext) {
+  const recovered = recoverTaskCanvasResultFromNodes(nodes, task);
+  if (recovered.outputs.length) return true;
+  if (!task.resultNodeIds?.length) return false;
+  const canvasNodeIds = new Set(nodes.map((node) => node.id));
+  return task.resultNodeIds.every((nodeId) => canvasNodeIds.has(nodeId));
+}
+
+export function buildTaskRecoveredCompletionPatch(
+  task: TaskRecord,
+  recovered: { outputs: ImageAsset[]; resultNodeIds: string[] },
+): Partial<TaskRecord> {
+  return {
+    status: "completed",
+    stage: "completed",
+    backendRunState: "finished",
+    endedAt: task.endedAt || Date.now(),
+    result: recovered.outputs[0],
+    outputs: recovered.outputs,
+    resultCount: recovered.outputs.length,
+    resultNodeIds: recovered.resultNodeIds,
+    progress: 100,
+    error: "",
+    progressLabel: "已核验：结果已在画布，任务记录已自动修正",
+  };
+}
+
 export function isImageAssetLike(value: unknown): value is ImageAsset {
   return Boolean(value && typeof value === "object" && typeof (value as ImageAsset).url === "string" && (value as ImageAsset).url);
 }

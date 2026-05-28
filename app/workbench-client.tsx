@@ -277,8 +277,10 @@ import {
 import { appendDataUrlToForm, appendImageToForm, imageFromSingleResponse, imageSourcePayloadForPngLayerExport, imagesFromResponse } from "@/components/workbench/workbench-image-requests";
 import { copyImageToClipboard, copyTextToClipboard, downloadImageFile, downloadRemoteFile } from "@/components/workbench/workbench-file-actions";
 import {
+  buildTaskRecoveredCompletionPatch,
+  hasTaskResultNodesOnCanvasFromNodes,
   imageBelongsToProject,
-  isImageAssetLike,
+  recoverTaskCanvasResultFromNodes,
   sanitizeProjectTasks,
   serverTaskRunOutputs,
   serverTaskRunState,
@@ -286,7 +288,6 @@ import {
   taskCandidateImagesFromNode,
   taskHasResultImages,
   taskNeedsServerSync,
-  taskResultImageMatches,
 } from "@/components/workbench/workbench-task-helpers";
 import {
   imageSourceDismissedForProject,
@@ -505,52 +506,10 @@ function NodeWorkflowWorkbench({
     dismissedTaskRefsRef.current = loadDismissedTaskRefs(projectId);
     dismissedImageKeysRef.current = loadDismissedImageKeySet(projectId);
   }, [projectId]);
-  const recoverTaskCanvasResult = useCallback((task: TaskResultMatchContext) => {
-    const canvasNodeIds = new Set(nodesRef.current.map((node) => node.id));
-    const recoveredNodeIds = new Set((task.resultNodeIds || []).filter((nodeId) => canvasNodeIds.has(nodeId)));
-    const recoveredOutputs: ImageAsset[] = [];
-    const seen = new Set<string>();
-    const addImage = (image: unknown, force = false, nodeId?: string) => {
-      if (!isImageAssetLike(image)) return;
-      if (!force && !taskResultImageMatches(image, task)) return;
-      const key = imageKey(image);
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      recoveredOutputs.push(image);
-      if (nodeId) recoveredNodeIds.add(nodeId);
-    };
-
-    nodesRef.current.forEach((node) => {
-      const candidates = taskCandidateImagesFromNode(node);
-      const knownResultNode = recoveredNodeIds.has(node.id);
-      candidates.forEach((image) => addImage(image, knownResultNode, node.id));
-    });
-
-    return {
-      outputs: recoveredOutputs,
-      resultNodeIds: [...recoveredNodeIds],
-    };
-  }, []);
+  const recoverTaskCanvasResult = useCallback((task: TaskResultMatchContext) => recoverTaskCanvasResultFromNodes(nodesRef.current, task), []);
   const hasTaskResultNodesOnCanvas = useCallback((task: TaskResultMatchContext) => {
-    const recovered = recoverTaskCanvasResult(task);
-    if (recovered.outputs.length) return true;
-    if (!task.resultNodeIds?.length) return false;
-    const canvasNodeIds = new Set(nodesRef.current.map((node) => node.id));
-    return task.resultNodeIds.every((nodeId) => canvasNodeIds.has(nodeId));
-  }, [recoverTaskCanvasResult]);
-  const taskRecoveredCompletionPatch = useCallback((task: TaskRecord, recovered: { outputs: ImageAsset[]; resultNodeIds: string[] }): Partial<TaskRecord> => ({
-    status: "completed",
-    stage: "completed",
-    backendRunState: "finished",
-    endedAt: task.endedAt || Date.now(),
-    result: recovered.outputs[0],
-    outputs: recovered.outputs,
-    resultCount: recovered.outputs.length,
-    resultNodeIds: recovered.resultNodeIds,
-    progress: 100,
-    error: "",
-    progressLabel: "已核验：结果已在画布，任务记录已自动修正",
-  }), []);
+    return hasTaskResultNodesOnCanvasFromNodes(nodesRef.current, task);
+  }, []);
   const scheduleSuccessfulTaskAutoHide = useCallback((taskId: string) => {
     const existingTimer = taskCleanupTimersRef.current[taskId];
     if (existingTimer) window.clearTimeout(existingTimer);
@@ -796,7 +755,7 @@ function NodeWorkflowWorkbench({
           clearTaskCleanup(task.id);
           return {
             ...task,
-            ...taskRecoveredCompletionPatch(task, recovered),
+            ...buildTaskRecoveredCompletionPatch(task, recovered),
           };
         });
         if (!changed) return current;
@@ -808,7 +767,7 @@ function NodeWorkflowWorkbench({
     return () => window.clearTimeout(timer);
     // Cache writing reads snapshot refs; recovery is keyed to node/task result state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasTaskResultNodesOnCanvas, nodes, projectId, recoverTaskCanvasResult, taskRecoveredCompletionPatch]);
+  }, [hasTaskResultNodesOnCanvas, nodes, projectId, recoverTaskCanvasResult]);
   useEffect(() => {
     const tasksMissingCanvasNodes = tasks.filter((task) =>
       taskBelongsToProject(task, projectId) &&
@@ -2275,7 +2234,7 @@ function NodeWorkflowWorkbench({
           );
         }
         updateTask(taskId, {
-          ...taskRecoveredCompletionPatch({ id: taskId, nodeId, nodeName: node.data.title, type: nodeKindLabel(node.data.kind), model: activeImageModelForNode(node), status: "failed", startedAt: Date.now() } as TaskRecord, recovered),
+          ...buildTaskRecoveredCompletionPatch({ id: taskId, nodeId, nodeName: node.data.title, type: nodeKindLabel(node.data.kind), model: activeImageModelForNode(node), status: "failed", startedAt: Date.now() } as TaskRecord, recovered),
           backendRunState: "finished",
           progressLabel: "已核验：画布已有结果，已阻止假失败",
         });
