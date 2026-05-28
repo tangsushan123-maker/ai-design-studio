@@ -1063,7 +1063,7 @@ describe("Text-to-image references", () => {
     assert.equal(promptSource.includes("Logo 只是品牌识别"), true);
     assert.equal(promptSource.includes("重要文字、Logo、人物、产品、IP、二维码和卖点放在画面中心 76% 内"), true);
     assert.equal(promptSource.includes("buildDesignDirectorBriefRequestPrompt"), true);
-    assert.equal(promptSource.includes("AI 设计总监"), true);
+    assert.equal(promptSource.includes("AI 海报策划总监"), true);
     assert.equal(promptSource.includes("Design Brief"), true);
     assert.equal(promptSource.includes("directions 固定 3 个"), true);
     assert.equal(creativeBriefRouteSource.includes("parseCreativeBriefPayload"), true);
@@ -1156,6 +1156,17 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("shouldRetryImageSizeWithNativeFallback"), true);
     assert.equal(routeSource.includes("buildModelNativeSizeFallbackPrompt"), true);
     assert.equal(routeSource.includes("getOpenAIImageSize(ratio)"), true);
+    assert.equal(routeSource.includes("shouldForceAiPosterPlanning"), true);
+    assert.equal(routeSource.includes("compact.length <= 42"), true);
+    assert.equal(routeSource.includes("端午|中秋|春节|新年"), true);
+    assert.equal(promptSource.includes("AI 海报策划总监"), true);
+    assert.equal(promptSource.includes("必须自动补全用途、行业/场景、受众、主标题、副标题、核心卖点、主视觉元素"), true);
+    assert.equal(promptSource.includes("function inferFestivalPoster"), true);
+    assert.equal(promptSource.includes('title: "粽情端午"'), true);
+    assert.equal(promptSource.includes("粽子、龙舟、水纹、艾草、祥云或竹叶构成主视觉"), true);
+    assert.equal(promptSource.includes("青绿、米白为主，少量金色点缀"), true);
+    assert.equal(promptSource.includes("上方主标题 / 中央粽子与龙舟主视觉 / 底部活动信息与品牌留白区"), true);
+    assert.equal(promptSource.includes("节日营销：符号必须强相关"), true);
 
     assert.equal(workbenchSource.includes("text_to_image: ["), true);
     assert.equal(workbenchSource.includes('text_to_image: [{ id: textReferenceInputHandle, label: "图片参考" }]'), true);

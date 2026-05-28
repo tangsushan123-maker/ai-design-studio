@@ -175,10 +175,12 @@ function sanitizedReferenceAnalysisForPrompt(sourceAnalysis: string | undefined,
 export function buildDesignDirectorBriefRequestPrompt(request: DesignRequest, ratioText: string) {
   const wantsProjectContext = wantsProjectOutputContext(request.prompt);
   return [
-    "你是 AI 设计总监。请先把用户的一句话需求整理成结构化 Design Brief，再给出 3 个可落地设计方案。",
+    "你是 AI 海报策划总监和商业视觉设计总监。请先把用户的一句话需求整理成结构化 Design Brief，再给出 3 个可落地设计方案。",
     "只输出合法 JSON，不要 Markdown。",
     "JSON 字段：imageType,useScene,audience,communicationGoal,title,subtitle,sellingPoints,mainVisualConcept,creativeMetaphor,layout,colorSystem,typographyTone,textureSource,whitespaceAndSafety,industryRules,textPolicy,directions,recommendedDirectionId,recommendationReason。",
     "directions 固定 3 个，id 为 A/B/C；每个包含 name,concept,mainVisual,layout,palette,typography,texture,scenario,risk,score。",
+    "如果用户只输入模糊短句，例如“帮我生成一张端午节海报”，必须自动补全用途、行业/场景、受众、主标题、副标题、核心卖点、主视觉元素、节日/行业符号、色彩风格、版式结构和推荐画布比例。",
+    "节日海报要像真实商业活动主视觉：主标题可读、元素强相关、配色有节日气质、版式有明确标题区/主体区/信息区，不要只堆素材。",
     wantsProjectContext
       ? "规则：不要把用户所有文字都塞进图里；提炼 1 个主标题、1 个副标题、最多 3 个卖点；电话、地址、二维码、长段文字建议后期真实字体排版。"
       : "规则：不要把用户所有文字都塞进图里；只提炼必要主视觉和极少标题；长段文字与细节信息后期真实字体排版。",
@@ -197,37 +199,38 @@ export function buildDesignDirectorBriefRequestPrompt(request: DesignRequest, ra
 export function buildDesignDirectorBriefFallback(request: DesignRequest): DesignDirectorBrief {
   const text = `${request.adType || ""}\n${request.prompt || ""}\n${request.sourceAnalysis || ""}`;
   const wantsProjectContext = wantsProjectOutputContext(request.prompt);
-  const imageType = inferDirectorImageType(text);
+  const festival = inferFestivalPoster(text);
+  const imageType = festival ? "节日营销海报" : inferDirectorImageType(text);
   const industry = inferDirectorIndustry(text);
-  const title = inferDirectorTitle(request.prompt);
-  const points = inferDirectorSellingPoints(text);
+  const title = festival?.title || inferDirectorTitle(request.prompt);
+  const points = festival?.sellingPoints || inferDirectorSellingPoints(text);
   const isOutdoor = /户外|公交|电子屏|大屏|横幅/i.test(text);
   const isProduct = /产品|商品|包装|详情页|电商/i.test(text);
   const isMedical = industry === "医疗";
-  const useScene = isOutdoor ? "线下投放 / 远距离识别" : isProduct ? "详情页首屏 / 转化展示" : "线上传播 / 品牌宣传";
-  const audience = isMedical ? "患者、家属和普通消费者" : /儿童|学生|科普|科技馆/i.test(text) ? "学生、家长和科普活动参与者" : isProduct ? "潜在消费者和渠道客户" : "目标用户和活动参与者";
-  const communicationGoal = isProduct ? "突出产品质感、卖点和转化路径" : isOutdoor ? "3 秒内吸引注意并传达核心主题" : "建立信任、强化主题记忆点";
-  const colorSystem = isMedical
+  const useScene = festival?.useScene || (isOutdoor ? "线下投放 / 远距离识别" : isProduct ? "详情页首屏 / 转化展示" : "线上传播 / 品牌宣传");
+  const audience = festival?.audience || (isMedical ? "患者、家属和普通消费者" : /儿童|学生|科普|科技馆/i.test(text) ? "学生、家长和科普活动参与者" : isProduct ? "潜在消费者和渠道客户" : "目标用户和活动参与者");
+  const communicationGoal = festival?.communicationGoal || (isProduct ? "突出产品质感、卖点和转化路径" : isOutdoor ? "3 秒内吸引注意并传达核心主题" : "建立信任、强化主题记忆点");
+  const colorSystem = festival?.colorSystem || (isMedical
     ? "主色蓝/绿/白，辅助暖灰，少量高亮色"
     : /科技|科普|科技馆/i.test(text)
       ? "主色科技蓝或深色空间，辅助青绿/白，强调色少量点亮"
       : isProduct
         ? "主色跟随产品，背景低干扰，强调色用于卖点"
-        : "1 个主色、1-2 个辅助色、1 个强调色";
-  const mainVisualConcept = isProduct
+        : "1 个主色、1-2 个辅助色、1 个强调色");
+  const mainVisualConcept = festival?.mainVisualConcept || (isProduct
     ? "产品是第一主体，配合展示台、真实材质高光和少量卖点标签"
     : isMedical
       ? "柔和光带、专业场景或可信医生形象表达安全、舒适、专业"
       : /科普|科技馆|科技/i.test(text)
         ? "知识光束、互动装置、探索路径和空间层次表达探索感"
-        : "围绕主题建立一个清晰主视觉，而不是素材堆砌";
+        : "围绕主题建立一个清晰主视觉，而不是素材堆砌");
   const directions: DesignDirectorDirection[] = [
     {
       id: "A",
       name: "成熟商业版",
-      concept: "稳版式、少文字、强信任，适合客户提案和正式投放。",
+      concept: festival ? "节日主题明确、信息清晰、商业质感稳定，适合品牌活动首版提案。" : "稳版式、少文字、强信任，适合客户提案和正式投放。",
       mainVisual: mainVisualConcept,
-      layout: isOutdoor ? "中心主视觉 + 大标题 + 极少辅助信息" : isProduct ? "产品主体 + 卖点分区 + 干净转化区" : "主标题 / 主视觉 / 卖点三段式",
+      layout: festival?.stableLayout || (isOutdoor ? "中心主视觉 + 大标题 + 极少辅助信息" : isProduct ? "产品主体 + 卖点分区 + 干净转化区" : "主标题 / 主视觉 / 卖点三段式"),
       palette: colorSystem,
       typography: "主标题清楚，副标题克制，小字后期真实字体排版。",
       texture: "真实光影、干净边缘、统一色温和适度留白。",
@@ -238,13 +241,13 @@ export function buildDesignDirectorBriefFallback(request: DesignRequest): Design
     {
       id: "B",
       name: "创意主视觉版",
-      concept: "用更强隐喻和视觉记忆点表达主题，但控制元素数量。",
+      concept: festival ? "用节日符号建立更强传播记忆点，但控制元素数量和信息密度。" : "用更强隐喻和视觉记忆点表达主题，但控制元素数量。",
       mainVisual: mainVisualConcept,
-      layout: "中心主视觉或留白型高级构图，标题与主体错位但不贴边。",
+      layout: festival?.creativeLayout || "中心主视觉或留白型高级构图，标题与主体错位但不贴边。",
       palette: colorSystem,
       typography: "尽量少字，保留标题空间，避免 AI 生成长中文。",
       texture: "空间层次、材质对比和柔和光效，不靠杂乱粒子。",
-      scenario: "线上传播 / 活动主视觉",
+      scenario: festival ? "节日活动主视觉 / 线上传播" : "线上传播 / 活动主视觉",
       risk: "创意过强时可能偏离行业克制感。",
       score: isMedical || isProduct ? 86 : 90,
     },
@@ -269,13 +272,13 @@ export function buildDesignDirectorBriefFallback(request: DesignRequest): Design
     audience,
     communicationGoal,
     title,
-    subtitle: points[0] || "专业、清晰、可信的主题表达",
+    subtitle: festival?.subtitle || points[0] || "专业、清晰、可信的主题表达",
     sellingPoints: points.slice(0, 3),
     mainVisualConcept,
-    creativeMetaphor: isProduct ? "用产品展示台和材质高光表达品质与转化" : mainVisualConcept,
+    creativeMetaphor: festival?.creativeMetaphor || (isProduct ? "用产品展示台和材质高光表达品质与转化" : mainVisualConcept),
     layout: directions.find((item) => item.id === recommendedDirectionId)?.layout || directions[0].layout,
     colorSystem,
-    typographyTone: isMedical ? "专业可信、干净温和" : /科技|科普/i.test(text) ? "现代简洁、有探索感" : "清晰商业化、层级分明",
+    typographyTone: festival?.typographyTone || (isMedical ? "专业可信、干净温和" : /科技|科普/i.test(text) ? "现代简洁、有探索感" : "清晰商业化、层级分明"),
     textureSource: "高级感来自留白、统一配色、真实光影、空间层次、精细边缘和商业摄影感。",
     whitespaceAndSafety: wantsProjectContext
       ? "保留 25%-40% 呼吸空间；重要元素距离边缘至少 8%-12%；主体、标题、Logo 不贴边不裁切。"
@@ -637,7 +640,60 @@ function inferDirectorSellingPoints(text: string) {
   return ["主题清晰", "视觉完整", "信息克制"];
 }
 
+function inferFestivalPoster(text: string) {
+  if (/端午|龙舟|粽子|艾草|五彩绳/.test(text)) {
+    return {
+      title: "粽情端午",
+      subtitle: "端午限定活动开启",
+      sellingPoints: ["节日氛围", "品牌祝福", "活动转化"],
+      useScene: "节日营销 / 线上传播 / 门店活动预热",
+      audience: "品牌用户、门店顾客和线上活动参与者",
+      communicationGoal: "用端午节日情绪吸引注意，传达祝福和活动信息，提升传播与到店/转化意愿",
+      colorSystem: "青绿、米白为主，少量金色点缀；水纹、竹叶和传统纹样保持克制高级",
+      mainVisualConcept: "粽子、龙舟、水纹、艾草、祥云或竹叶构成主视觉，结合现代商业留白和节日仪式感",
+      creativeMetaphor: "用龙舟动势和粽叶包裹感表达节日活力、团圆祝福和品牌好礼",
+      stableLayout: "上方主标题 / 中央粽子与龙舟主视觉 / 底部活动信息与品牌留白区",
+      creativeLayout: "龙舟水纹形成动势斜线，粽子作为视觉焦点，标题与主体错位但保持安全边距",
+      typographyTone: "现代国风标题字，副标题简洁，避免长文和伪中文小字",
+    };
+  }
+  if (/中秋|月饼|月亮|桂花|团圆/.test(text)) {
+    return {
+      title: "月满中秋",
+      subtitle: "中秋限定礼遇",
+      sellingPoints: ["团圆氛围", "礼赠场景", "品牌温度"],
+      useScene: "节日营销 / 礼赠传播 / 线上海报",
+      audience: "品牌用户、礼赠客户和活动参与者",
+      communicationGoal: "用团圆和礼赠情绪建立节日记忆点，承接品牌活动或产品转化",
+      colorSystem: "暖金、月白、深蓝或桂花橙为主，质感温润，不做廉价促销红",
+      mainVisualConcept: "明月、月饼、桂花、礼盒和云纹形成中心主视觉，保留高级留白",
+      creativeMetaphor: "用圆月和礼盒表达团圆、礼遇与品牌心意",
+      stableLayout: "上方主标题 / 中央月亮礼盒主视觉 / 底部活动信息区",
+      creativeLayout: "月亮作为大背景焦点，礼盒或月饼前景错位构图，信息区清晰分层",
+      typographyTone: "温润国风标题字，字数克制，细节文案后期排版",
+    };
+  }
+  if (/春节|新年|除夕|拜年|红包|年货/.test(text)) {
+    return {
+      title: "新春大吉",
+      subtitle: "新年限定礼遇",
+      sellingPoints: ["新年氛围", "喜庆祝福", "活动转化"],
+      useScene: "春节营销 / 门店活动 / 线上传播",
+      audience: "品牌用户、家庭消费人群和活动参与者",
+      communicationGoal: "用喜庆节日氛围吸引注意，传达祝福、优惠或年货活动",
+      colorSystem: "中国红、暖金和少量米白，保持高级质感，避免杂乱廉价",
+      mainVisualConcept: "灯笼、红包、窗花、祥云、礼盒和金色光效构成节日主视觉",
+      creativeMetaphor: "用打开的礼盒和升腾祥云表达好运、礼遇和品牌祝福",
+      stableLayout: "上方大标题 / 中央礼盒灯笼主视觉 / 底部活动信息区",
+      creativeLayout: "红金节日元素环绕中心主视觉，标题和礼盒错位形成动势",
+      typographyTone: "喜庆但克制的标题字，避免过多金属描边和拥挤小字",
+    };
+  }
+  return null;
+}
+
 function buildDirectorIndustryRules(text: string) {
+  if (/端午|中秋|春节|新年|节日|龙舟|粽子|月饼|红包/.test(text)) return "节日营销：符号必须强相关，节日元素服务主题和活动转化；主标题清楚，主体完整，避免素材堆砌、廉价促销感和伪中文小字。";
   const industry = inferDirectorIndustry(text);
   if (industry === "医疗") return "医疗类：专业、可信、干净、温和、安全；不要低价促销感、恐吓患者、过度科幻或杂乱背景。";
   if (industry === "科普科技") return "科普/科技馆：探索、知识、互动、公益；活泼但不幼稚，有空间感，不要商业促销堆砌。";

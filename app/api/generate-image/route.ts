@@ -519,7 +519,15 @@ function textToImageGenerationProfile(body: DesignRequest, hasReferenceFiles = f
 }
 
 function shouldUseFastDesignBrief(body: DesignRequest, hasReferenceFiles = false) {
+  if (shouldForceAiPosterPlanning(body)) return false;
   return body.quality === "standard" && !hasReferenceFiles && !body.referenceImages?.length;
+}
+
+function shouldForceAiPosterPlanning(body: DesignRequest) {
+  const text = `${body.adType || ""}\n${body.prompt || ""}`.trim();
+  const compact = text.replace(/\s+/g, "");
+  return compact.length <= 42 ||
+    /海报|主视觉|活动|节日|端午|中秋|春节|新年|营销|促销|宣传|小红书|朋友圈/.test(text);
 }
 
 function designBriefCacheKey(body: DesignRequest, ratioText: string, hasReferenceFiles = false) {
