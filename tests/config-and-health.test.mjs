@@ -1744,7 +1744,11 @@ describe("Project stability and task tracing", () => {
     assert.equal(generatedHistorySource.includes("historyImageMetadataFromSaved(savedMetadata) || await sharp(fullPath).metadata()"), true);
     assert.equal(generatedHistorySource.includes("numberValue(outputSize?.width) || numberValue(savedMetadata.width)"), true);
     assert.equal(generatedHistorySource.includes("sortTime: historyMetadataSortTime(savedMetadata)"), true);
-    assert.equal(generatedHistorySource.includes("cachedFileStat || await stat(fullPath)"), true);
+    assert.equal(generatedHistorySource.includes("const savedFileSizeBytes = numberValue(savedMetadata.fileSizeBytes)"), true);
+    assert.equal(generatedHistorySource.includes("const savedGeneratedAt = stringValue(savedMetadata.generatedAt)"), true);
+    assert.equal(generatedHistorySource.includes("savedFileSizeBytes === undefined || !savedGeneratedAt ? await stat(fullPath) : undefined"), true);
+    assert.equal(generatedHistorySource.includes("fileSizeBytes: savedFileSizeBytes ?? fileStat?.size ?? 0"), true);
+    assert.equal(generatedHistorySource.includes("cachedFileStat || await stat(fullPath)"), false);
     assert.equal(generatedHistorySource.includes("historySortTime(metadata"), false);
     assert.equal(generatedHistorySource.includes("historyDirectoryReadConcurrency = 16"), true);
     assert.equal(generatedHistorySource.includes("historyMetadataReadConcurrency = 48"), true);

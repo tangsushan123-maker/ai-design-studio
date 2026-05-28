@@ -73,7 +73,9 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
       async (entry) => {
         const { fileName, fullPath, savedMetadata } = entry;
         const cachedFileStat = "fileStat" in entry ? entry.fileStat : undefined;
-        const fileStat = cachedFileStat || await stat(fullPath);
+        const savedFileSizeBytes = numberValue(savedMetadata.fileSizeBytes);
+        const savedGeneratedAt = stringValue(savedMetadata.generatedAt);
+        const fileStat = cachedFileStat || (savedFileSizeBytes === undefined || !savedGeneratedAt ? await stat(fullPath) : undefined);
         const metadata = historyImageMetadataFromSaved(savedMetadata) || await sharp(fullPath).metadata();
         const quality = inferQuality(fileName);
         const aspectRatio = inferRatio(fileName, metadata.width, metadata.height);
@@ -90,7 +92,7 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
             width: metadata.width || 0,
             height: metadata.height || 0,
             format: metadata.format,
-            fileSizeBytes: fileStat.size,
+            fileSizeBytes: savedFileSizeBytes ?? fileStat?.size ?? 0,
             quality: normalizeQuality(savedMetadata.quality) || quality,
             expectedSize: objectValue(savedMetadata.expectedOutputSize) as { width?: number; height?: number } | undefined,
           });
@@ -110,9 +112,9 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
           model: stringValue(savedMetadata.model),
           aspectRatio: stringValue(savedMetadata.aspectRatio) || aspectRatio,
           quality: normalizeQuality(savedMetadata.quality) || quality,
-          generatedAt: stringValue(savedMetadata.generatedAt) || fileStat.mtime.toISOString(),
+          generatedAt: savedGeneratedAt || fileStat?.mtime.toISOString() || new Date(0).toISOString(),
           durationMs: numberValue(savedMetadata.durationMs),
-          fileSizeBytes: fileStat.size,
+          fileSizeBytes: savedFileSizeBytes ?? fileStat?.size ?? 0,
           alphaCheck: objectValue(savedMetadata.alphaCheck),
           trashed: fileName.startsWith(`${generatedTrashDirName}/`),
           deletedAt: stringValue(savedMetadata.deletedAt),
