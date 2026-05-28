@@ -38,6 +38,71 @@ export function taskNeedsServerSync(task: TaskRecord) {
   return false;
 }
 
+export function restoreProjectTasks(runs: TaskRecord[]) {
+  const now = Date.now();
+  return sanitizeProjectTasks(runs).map((task) => {
+    if (taskHasResultImages(task) && task.status === "failed") {
+      return {
+        ...task,
+        status: "completed" as const,
+        stage: "completed" as const,
+        backendRunState: "finished" as const,
+        endedAt: task.endedAt || now,
+        progress: 100,
+        error: "",
+        progressLabel: task.resultNodeIds?.length
+          ? "已生成结果，质检提醒见图片详情"
+          : "已生成结果，任务记录已自动修正",
+      };
+    }
+
+    if (task.deferred && task.status === "queued") return task;
+
+    if (taskHasResultImages(task)) {
+      return {
+        ...task,
+        status: "completed" as const,
+        stage: "completed" as const,
+        backendRunState: "finished" as const,
+        endedAt: now,
+        progress: 100,
+        error: "",
+        progressLabel: "已生成结果，任务记录已自动修正",
+      };
+    }
+
+    if (task.requestId && task.status !== "cancelled") {
+      const queued = task.status === "queued" || task.backendRunState === "waiting";
+      return {
+        ...task,
+        status: queued ? "queued" as const : "running" as const,
+        stage: queued ? "queued" as const : "generating" as const,
+        backendRunState: queued ? "waiting" as const : "active" as const,
+        endedAt: undefined,
+        progress: Math.max(12, Math.min(task.progress && task.progress < 100 ? task.progress : 22, 88)),
+        error: "",
+        progressLabel: task.status === "failed"
+          ? "页面已恢复，正在核验后台最终状态，未确认前不判失败"
+          : "页面已恢复，正在核验后台进程，完成后会自动同步结果",
+        lastHeartbeatAt: now,
+      };
+    }
+
+    if (task.endedAt || task.status === "completed" || task.status === "failed" || task.status === "cancelled") return task;
+
+    return {
+      ...task,
+      status: "failed" as const,
+      stage: "failed" as const,
+      backendRunState: "failed" as const,
+      endedAt: now,
+      progress: 100,
+      error: "页面刷新后任务已中断，请重试或删除记录。",
+      progressLabel: "已中断：可重试或删除记录",
+    };
+  });
+}
+
 export function taskBelongsToProject(task: Pick<TaskRecord, "projectId">, projectId: string) {
   return !task.projectId || task.projectId === projectId;
 }
