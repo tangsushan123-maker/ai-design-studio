@@ -1772,7 +1772,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("图片管理"), true);
     assert.equal(workbenchUiSource.includes("ImageManagerPanel"), true);
     assert.equal(workbenchUiSource.includes("imageDeletionProtection"), true);
-    assert.equal(workbenchUiSource.includes("activeKeys"), true);
+    assert.equal(workbenchUiSource.includes("selectedSummary"), true);
+    assert.equal(workbenchUiSource.includes("activeKeys"), false);
     assert.equal(workbenchUiSource.includes("当前显示 {filteredRows.length}/{managedRows.length} 张"), true);
     assert.equal(workbenchUiSource.includes("downloadingKey"), true);
     assert.equal(workbenchUiSource.includes("disabled={Boolean(downloadingKey)}"), true);

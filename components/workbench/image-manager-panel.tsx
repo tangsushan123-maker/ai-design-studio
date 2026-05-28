@@ -162,15 +162,20 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
     () => filteredRows.filter((row) => imageManagerRowSelectable(row.protection)),
     [filteredRows],
   );
-  const activeKeys = useMemo(() => new Set(managedRows.map((row) => imageManagerKey(row.image))), [managedRows]);
-  const selectedRows = useMemo(
-    () => managedRows.filter((row) => activeKeys.has(imageManagerKey(row.image)) && selectedKeys.has(imageManagerKey(row.image))),
-    [activeKeys, managedRows, selectedKeys],
-  );
+  const selectedSummary = useMemo(() => {
+    const rows = managedRows.filter((row) => selectedKeys.has(imageManagerKey(row.image)));
+    return rows.reduce((summary, row) => {
+      summary.images.push(row.image);
+      if (row.protection.isTrashed) summary.trashCount += 1;
+      if (row.protection.canDelete && !row.protection.isTrashed) summary.cleanableCount += 1;
+      return summary;
+    }, { rows, images: [] as TImage[], trashCount: 0, cleanableCount: 0 });
+  }, [managedRows, selectedKeys]);
 
-  const selectedImages = selectedRows.map((row) => row.image);
-  const selectedTrashCount = selectedRows.filter((row) => row.protection.isTrashed).length;
-  const selectedCleanableCount = selectedRows.filter((row) => row.protection.canDelete && !row.protection.isTrashed).length;
+  const selectedRows = selectedSummary.rows;
+  const selectedImages = selectedSummary.images;
+  const selectedTrashCount = selectedSummary.trashCount;
+  const selectedCleanableCount = selectedSummary.cleanableCount;
   const allVisibleSelectableSelected = Boolean(selectableRows.length && selectableRows.every((row) => selectedKeys.has(imageManagerKey(row.image))));
 
   function toggleSelected(image: TImage) {
