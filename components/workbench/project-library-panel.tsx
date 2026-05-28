@@ -6,6 +6,9 @@ import { useState } from "react";
 type ProjectLibraryItem = {
   id: string;
   name: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
+  ownerName?: string;
   coverUrl?: string;
   organizationName?: string;
   assetCount?: number;
@@ -16,6 +19,7 @@ type ProjectLibraryItem = {
 
 export function ProjectLibraryPanel({
   activeProjectId,
+  activeProjectOwnerUserId = "",
   onClose,
   onCreateNew,
   onDelete,
@@ -25,10 +29,11 @@ export function ProjectLibraryPanel({
   formatUpdatedAt,
 }: {
   activeProjectId: string;
+  activeProjectOwnerUserId?: string;
   onClose: () => void;
   onCreateNew: () => void;
-  onDelete: (id: string) => void | Promise<unknown>;
-  onOpen: (id: string) => void | Promise<unknown>;
+  onDelete: (id: string, ownerUserId?: string) => void | Promise<unknown>;
+  onOpen: (id: string, ownerUserId?: string) => void | Promise<unknown>;
   onRefresh: () => void | Promise<unknown>;
   projects: ProjectLibraryItem[];
   formatUpdatedAt: (value: string) => string;
@@ -40,16 +45,17 @@ export function ProjectLibraryPanel({
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   async function deleteProject(project: ProjectLibraryItem) {
+    const key = projectItemKey(project);
     if (deletingId) return;
-    if (confirmDeleteId !== project.id) {
-      setConfirmDeleteId(project.id);
+    if (confirmDeleteId !== key) {
+      setConfirmDeleteId(key);
       setActionMessage({ tone: "success", text: `再点一次确认删除「${project.name}」。` });
       return;
     }
-    setDeletingId(project.id);
+    setDeletingId(key);
     setActionMessage(null);
     try {
-      await onDelete(project.id);
+      await onDelete(project.id, project.ownerUserId);
       setConfirmDeleteId("");
       setActionMessage({ tone: "success", text: "项目删除已提交。" });
     } catch (error) {
@@ -60,12 +66,13 @@ export function ProjectLibraryPanel({
   }
 
   async function openProject(project: ProjectLibraryItem) {
+    const key = projectItemKey(project);
     if (openingId || deletingId) return;
-    setOpeningId(project.id);
+    setOpeningId(key);
     setConfirmDeleteId("");
     setActionMessage(null);
     try {
-      const opened = await onOpen(project.id);
+      const opened = await onOpen(project.id, project.ownerUserId);
       if (opened === false) throw new Error("打开项目失败。");
     } catch (error) {
       setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "打开项目失败。" });
@@ -128,10 +135,13 @@ export function ProjectLibraryPanel({
         ) : null}
         {projects.length ? (
           <div className="space-y-2">
-            {projects.map((project) => (
+            {projects.map((project) => {
+              const key = projectItemKey(project);
+              const active = isActiveProjectItem(project, activeProjectId, activeProjectOwnerUserId);
+              return (
               <article
-                className={`apple-interactive-card p-3 ${project.id === activeProjectId ? "is-selected" : ""}`}
-                key={project.id}
+                className={`apple-interactive-card p-3 ${active ? "is-selected" : ""}`}
+                key={key}
               >
                 <button className="flex w-full items-center gap-2 text-left disabled:opacity-55" disabled={Boolean(openingId || deletingId)} onClick={() => void openProject(project)} type="button">
                   {project.coverUrl ? (
@@ -143,15 +153,15 @@ export function ProjectLibraryPanel({
                     </span>
                   )}
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12px] font-semibold text-white/82">{openingId === project.id ? "打开中..." : project.name}</span>
-                    <span className="apple-caption mt-0.5 block truncate">{project.organizationName || "机构未填"}</span>
+                    <span className="block truncate text-[12px] font-semibold text-white/82">{openingId === key ? "打开中..." : project.name}</span>
+                    <span className="apple-caption mt-0.5 block truncate">{project.ownerEmail ? `${project.ownerName || project.ownerEmail} · ` : ""}{project.organizationName || "机构未填"}</span>
                     <span className="apple-caption mt-1 block">
                       {project.assetCount || 0} 素材 · {project.updatedAt ? formatUpdatedAt(project.updatedAt) : "刚刚"}
                     </span>
                   </span>
                 </button>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className={`px-2 py-1 text-[11px] ${project.id === activeProjectId ? "apple-pill-accent" : "apple-pill"} truncate`}>
+                  <span className={`px-2 py-1 text-[11px] ${active ? "apple-pill-accent" : "apple-pill"} truncate`}>
                     {project.libraryName || "独立素材"}
                   </span>
                   <button
@@ -161,12 +171,13 @@ export function ProjectLibraryPanel({
                     title="删除项目"
                     type="button"
                   >
-                    <Trash2 className={`size-3 ${deletingId === project.id ? "animate-pulse" : ""}`} />
-                    {deletingId === project.id ? "删除中" : confirmDeleteId === project.id ? "确认删除" : "删除"}
+                    <Trash2 className={`size-3 ${deletingId === key ? "animate-pulse" : ""}`} />
+                    {deletingId === key ? "删除中" : confirmDeleteId === key ? "确认删除" : "删除"}
                   </button>
                 </div>
               </article>
-            ))}
+            );
+            })}
           </div>
         ) : (
           <div className="apple-empty-state px-4 py-10 text-center">
@@ -179,4 +190,14 @@ export function ProjectLibraryPanel({
       </div>
     </section>
   );
+}
+
+function projectItemKey(project: ProjectLibraryItem) {
+  return `${project.ownerUserId || "current"}:${project.id}`;
+}
+
+function isActiveProjectItem(project: ProjectLibraryItem, activeProjectId: string, activeProjectOwnerUserId = "") {
+  if (project.id !== activeProjectId) return false;
+  if (!activeProjectOwnerUserId) return true;
+  return (project.ownerUserId || "") === activeProjectOwnerUserId;
 }

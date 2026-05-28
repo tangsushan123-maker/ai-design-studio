@@ -30,10 +30,12 @@ import { parseProtectionContext } from "@/lib/design-production";
 import { inspectImageQuality } from "@/lib/image-quality";
 import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
 import { stat } from "node:fs/promises";
+import { withCurrentConfigUser } from "@/lib/request-config-user";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
   try {
@@ -530,6 +532,8 @@ export async function POST(request: Request) {
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
   }
+
+  });
 }
 
 type EditResultProcessContext = {

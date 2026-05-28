@@ -7,10 +7,12 @@ import {
 } from "@/lib/creative-brief";
 import { getAnalysisModel } from "@/lib/model-config";
 import { getOpenAI } from "@/lib/openai";
+import { withCurrentConfigUser } from "@/lib/request-config-user";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  return await withCurrentConfigUser(async () => {
   try {
     const contentType = request.headers.get("content-type") || "";
     if (!contentType.includes("application/json")) {
@@ -47,6 +49,8 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+
+  });
 }
 
 class InvalidCreativeBriefPayloadError extends Error {}

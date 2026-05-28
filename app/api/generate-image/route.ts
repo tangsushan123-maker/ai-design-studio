@@ -2,14 +2,7 @@ import { NextResponse } from "next/server";
 import { toFile } from "openai/uploads";
 import sharp from "sharp";
 import { toApiError } from "@/lib/api-errors";
-import {
-  buildDesignDirectorBriefFallback,
-  buildDesignDirectorBriefRequestPrompt,
-  buildDesignDirectorImagePrompt,
-  normalizeDesignDirectorBrief,
-  shouldUseStrongTextReferenceMode,
-  type DesignDirectorBrief,
-} from "@/lib/prompt";
+import { shouldUseStrongTextReferenceMode } from "@/lib/prompt";
 import {
   assertExactPixelSize,
   getOpenAIImageSize,
@@ -30,18 +23,24 @@ import { getOpenAI } from "@/lib/openai";
 import { getAnalysisModel, resolveImageModel, supportsConfigurableImageInputFidelity } from "@/lib/model-config";
 import { imageRequestOptions, runQueuedImageModelRequestWithRetry } from "@/lib/image-request-queue";
 import type { DesignRequest, TextReferenceImage } from "@/lib/design-options";
+import {
+  buildDesignPlanPrompt,
+  buildFallbackDesignPlan,
+  designPlanToImagePrompt,
+  normalizeDesignPlan,
+  parseDesignPlanJson,
+  type DesignPlan,
+} from "@/lib/design-plan";
 import { normalizeProtectionContext } from "@/lib/design-production";
 import { inspectImageQuality } from "@/lib/image-quality";
 import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, taskTraceFromJson, type TaskRunTrace } from "@/lib/task-run-ledger";
+import { withCurrentConfigUser } from "@/lib/request-config-user";
 import { stat } from "node:fs/promises";
 
 export const runtime = "nodejs";
 
-const designBriefCache = new Map<string, { createdAt: number; value: DesignDirectorBrief }>();
-const designBriefCacheTtlMs = 1000 * 60 * 30;
-const designBriefCacheMaxItems = 80;
-
 export async function POST(request: Request) {
+  return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
   try {
@@ -87,18 +86,15 @@ export async function POST(request: Request) {
           sourceAnalysis: [body.sourceAnalysis, referenceSummaryForBrief].filter(Boolean).join("\n"),
         }
       : body;
-    const designBrief = await createDesignDirectorBrief(openai, { ...bodyWithReferenceAnalysis, protectionContext }, outputRatioLabel, hasReferenceFiles);
-    const promptDirections = selectPromptDirections(designBrief);
+    const designPlan = await createTextToImageDesignPlan(openai, bodyWithReferenceAnalysis, {
+      outputSize,
+      outputRatioLabel,
+      referenceSummary: referenceSummaryForBrief,
+    });
     const targetCanvasFirst = shouldUseTextToImageTargetCanvasFirst(size, outputSize);
 
     const targetCount = generationProfile.targetCount;
-    const prompts = Array.from({ length: targetCount }, (_, index) =>
-      buildDesignDirectorImagePrompt({
-        ...bodyWithReferenceAnalysis,
-        protectionContext,
-        variantDirection: index === 0 ? "stable" : "creative",
-      }, designBrief, promptDirections[index] || promptDirections[0]),
-    );
+    const prompts = buildPromptsFromDesignPlan(designPlan, body, targetCount);
     const createImageRequestWithSize = async (requestPrompt: string, requestSize: string, requestCount = 1) => {
       if (referenceFiles.length) {
         const summary = await getReferenceFallbackSummary();
@@ -311,8 +307,7 @@ export async function POST(request: Request) {
           sourceNodeId: taskTrace?.nodeId,
           sourceNodeName: taskTrace?.nodeName,
           sourceNodeKind: taskTrace?.nodeKind,
-          designBrief,
-          designDirection: promptDirections[index] || promptDirections[0],
+          designPlan,
           generationProfile: {
             ...generationProfile,
             canvasFallbackUsed,
@@ -402,8 +397,7 @@ export async function POST(request: Request) {
         sourceNodeId: taskTrace?.nodeId,
         sourceNodeName: taskTrace?.nodeName,
         sourceNodeKind: taskTrace?.nodeKind,
-        designBrief,
-        designDirection: promptDirections[variant - 1] || promptDirections[0],
+        designPlan,
         generationProfile: {
           ...generationProfile,
           canvasFallbackUsed: targetCanvasFirst,
@@ -428,7 +422,7 @@ export async function POST(request: Request) {
         ...taskRunResponseMeta(taskTrace, startedAt, images, "partial"),
         images,
         prompt: prompts.join("\n\n---\n\n"),
-        designBrief,
+        designPlan,
         generationProfile: { ...generationProfile, targetCanvasFirst },
         size,
         model: imageModel,
@@ -440,7 +434,7 @@ export async function POST(request: Request) {
     }
 
     await recordTaskRunFinished(taskTrace, { outputs: images, model: imageModel, message: `文生图完成，生成 ${images.length} 张。` });
-    return NextResponse.json({ ...taskRunResponseMeta(taskTrace, startedAt, images), images, prompt: prompts.join("\n\n---\n\n"), designBrief, generationProfile: { ...generationProfile, targetCanvasFirst }, size, model: imageModel, imageModel });
+    return NextResponse.json({ ...taskRunResponseMeta(taskTrace, startedAt, images), images, prompt: prompts.join("\n\n---\n\n"), designPlan, generationProfile: { ...generationProfile, targetCanvasFirst }, size, model: imageModel, imageModel });
   } catch (error) {
     if (error instanceof InvalidTextToImagePayloadError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -449,6 +443,7 @@ export async function POST(request: Request) {
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
   }
+  });
 }
 
 class InvalidTextToImagePayloadError extends Error {}
@@ -475,34 +470,69 @@ type TextToImageProcessContext = {
   protectionContext: ReturnType<typeof normalizeProtectionContext>;
 };
 
-async function createDesignDirectorBrief(
+async function createTextToImageDesignPlan(
   openai: ReturnType<typeof getOpenAI>,
   body: DesignRequest,
-  ratioText: string,
-  hasReferenceFiles = false,
-): Promise<DesignDirectorBrief> {
-  cleanupDesignBriefCache();
-  const cacheKey = designBriefCacheKey(body, ratioText, hasReferenceFiles);
-  const cached = designBriefCache.get(cacheKey);
-  if (cached && Date.now() - cached.createdAt < designBriefCacheTtlMs) return cached.value;
-  const fallback = buildDesignDirectorBriefFallback(body);
-  if (shouldUseFastDesignBrief(body, hasReferenceFiles)) {
-    rememberDesignBrief(cacheKey, fallback);
-    return fallback;
-  }
+  context: {
+    outputSize: { width: number; height: number };
+    outputRatioLabel: string;
+    referenceSummary?: string;
+  },
+): Promise<DesignPlan> {
+  const fallback = buildFallbackDesignPlan({
+    userPrompt: body.prompt,
+    industry: body.adType && body.adType !== "通用设计" ? body.adType : undefined,
+    referenceImages: body.referenceImages as unknown as Array<Record<string, unknown>>,
+    referenceAnalysis: body.sourceAnalysis || context.referenceSummary || "",
+    options: {
+      aspectRatio: body.aspectRatio,
+      customWidth: body.customWidth || context.outputSize.width,
+      customHeight: body.customHeight || context.outputSize.height,
+      mode: "commercial",
+      textMode: body.textMode || "ai_text_preview",
+    },
+  });
   try {
     const response = await openai.responses.create({
       model: getAnalysisModel(),
-      input: buildDesignDirectorBriefRequestPrompt(body, ratioText),
-      max_output_tokens: 1800,
-    }, { timeout: 5500 });
-    const brief = normalizeDesignDirectorBrief(parseDesignBriefJson(response.output_text || ""), fallback);
-    rememberDesignBrief(cacheKey, brief);
-    return brief;
+      input: buildDesignPlanPrompt({
+        userPrompt: body.prompt,
+        industry: body.adType && body.adType !== "通用设计" ? body.adType : undefined,
+        referenceImages: body.referenceImages as unknown as Array<Record<string, unknown>>,
+        referenceAnalysis: [body.sourceAnalysis, context.referenceSummary].filter(Boolean).join("\n"),
+        options: {
+          size: `${context.outputSize.width}x${context.outputSize.height}`,
+          aspectRatio: body.aspectRatio,
+          customWidth: body.customWidth || context.outputSize.width,
+          customHeight: body.customHeight || context.outputSize.height,
+          mode: "commercial",
+          textMode: body.textMode || "ai_text_preview",
+        },
+      }),
+      max_output_tokens: 2200,
+    }, { timeout: 15_000 });
+    return normalizeDesignPlan(parseDesignPlanJson(response.output_text || ""), fallback);
   } catch {
-    rememberDesignBrief(cacheKey, fallback);
     return fallback;
   }
+}
+
+function buildPromptsFromDesignPlan(plan: DesignPlan, body: DesignRequest, targetCount: number) {
+  const primary = [
+    designPlanToImagePrompt(plan),
+    `Negative prompt: ${plan.negativePrompt}`,
+    "This image request comes from an internal structured design plan. Never use the raw user sentence as visible poster copy.",
+    body.textMode === "background_only"
+      ? "Generate a clean text-free base image only."
+      : "Generate the final complete poster directly, including the planned visible copy as designed typography. Do not rely on any later text overlay.",
+  ].filter(Boolean).join("\n");
+  if (targetCount <= 1) return [primary];
+  return Array.from({ length: targetCount }, (_, index) => index === 0
+    ? primary
+    : [
+        primary,
+        `Variant ${index + 1}: keep the same approved plan, size, copy safety, reference style and hierarchy; adjust only visual rhythm, lighting, decoration density and main visual angle. Do not add new text or assets.`,
+      ].join("\n"));
 }
 
 function textToImageGenerationProfile(body: DesignRequest, hasReferenceFiles = false) {
@@ -516,71 +546,6 @@ function textToImageGenerationProfile(body: DesignRequest, hasReferenceFiles = f
     return { label: "标准出图", targetCount: 2, maxRetries: 1, briefMode: "ai_cached", modelCallPolicy: "dual_variants_retry_if_needed" };
   }
   return { label: "快速预览", targetCount: 2, maxRetries: 1, briefMode: "rules_cached", modelCallPolicy: "fast_dual_variants" };
-}
-
-function shouldUseFastDesignBrief(body: DesignRequest, hasReferenceFiles = false) {
-  if (shouldForceAiPosterPlanning(body)) return false;
-  return body.quality === "standard" && !hasReferenceFiles && !body.referenceImages?.length;
-}
-
-function shouldForceAiPosterPlanning(body: DesignRequest) {
-  const text = `${body.adType || ""}\n${body.prompt || ""}`.trim();
-  const compact = text.replace(/\s+/g, "");
-  return compact.length <= 42 ||
-    /海报|主视觉|活动|节日|端午|中秋|春节|新年|营销|促销|宣传|小红书|朋友圈/.test(text);
-}
-
-function designBriefCacheKey(body: DesignRequest, ratioText: string, hasReferenceFiles = false) {
-  return JSON.stringify({
-    prompt: body.prompt,
-    adType: body.adType,
-    ratioText,
-    hasReferenceFiles,
-    aspectRatio: body.aspectRatio,
-    customWidth: body.customWidth || 0,
-    customHeight: body.customHeight || 0,
-    sourceAnalysis: body.sourceAnalysis || "",
-    referenceImages: (body.referenceImages || []).map((item) => ({
-      id: item.id,
-      role: item.role,
-      weight: item.weight,
-      fileName: item.fileName,
-    })),
-  });
-}
-
-function rememberDesignBrief(key: string, value: DesignDirectorBrief) {
-  designBriefCache.set(key, { createdAt: Date.now(), value });
-  if (designBriefCache.size <= designBriefCacheMaxItems) return;
-  const oldest = [...designBriefCache.entries()].sort((a, b) => a[1].createdAt - b[1].createdAt)[0]?.[0];
-  if (oldest) designBriefCache.delete(oldest);
-}
-
-function cleanupDesignBriefCache() {
-  const now = Date.now();
-  for (const [key, item] of designBriefCache.entries()) {
-    if (now - item.createdAt > designBriefCacheTtlMs) designBriefCache.delete(key);
-  }
-}
-
-function parseDesignBriefJson(text: string) {
-  const trimmed = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  try {
-    return JSON.parse(trimmed.slice(start, end + 1));
-  } catch {
-    return null;
-  }
-}
-
-function selectPromptDirections(brief: DesignDirectorBrief) {
-  const recommended = brief.directions.find((item) => item.id === brief.recommendedDirectionId) || brief.directions[0];
-  const alternate = brief.directions
-    .filter((item) => item.id !== recommended.id)
-    .sort((a, b) => b.score - a.score)[0] || recommended;
-  return [recommended, alternate];
 }
 
 function supportsImageRequestBatchCount(model: string, hasReferenceFiles = false) {
@@ -996,6 +961,10 @@ function designRequestFromFormData(formData: FormData): DesignRequest {
     keepOriginalRatio: String(formData.get("keepOriginalRatio") ?? "") === "true",
     sourceAnalysis: String(formData.get("sourceAnalysis") ?? ""),
     referenceImages: parseReferenceManifest(formData.get("referenceManifest")),
+    designPlan: parseDesignPlanField(formData.get("designPlan")),
+    imagePrompt: String(formData.get("imagePrompt") ?? "") || undefined,
+    negativePrompt: String(formData.get("negativePrompt") ?? "") || undefined,
+    textMode: parseTextModeField(formData.get("textMode")),
     compositionCompleteness: String(formData.get("compositionCompleteness") ?? "更完整"),
     safeMargin: String(formData.get("safeMargin") ?? "15%"),
     cameraDistance: String(formData.get("cameraDistance") ?? "中景"),
@@ -1003,6 +972,21 @@ function designRequestFromFormData(formData: FormData): DesignRequest {
     previewFit: "contain",
     protectionContext: parseProtectionContext(formData.get("protectionContext")),
   };
+}
+
+function parseDesignPlanField(value: FormDataEntryValue | null): DesignPlan | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" ? parsed as DesignPlan : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseTextModeField(value: FormDataEntryValue | null): DesignRequest["textMode"] {
+  if (typeof value !== "string") return undefined;
+  return value === "background_only" || value === "ai_text_preview" || value === "real_text_overlay" ? value : undefined;
 }
 
 function parseReferenceManifest(value: FormDataEntryValue | null): TextReferenceImage[] {

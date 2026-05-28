@@ -1,7 +1,7 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { requireCurrentUser, userDataPath } from "@/lib/auth";
+import { listAuthUsers, requireCurrentUser, userDataPath } from "@/lib/auth";
 import { writeJsonAtomic } from "@/lib/local-json-store";
 import {
   createDefaultProjectKnowledge,
@@ -19,6 +19,9 @@ const rootLegacyProjectBackupPath = `${rootLegacyProjectPath}.bak`;
 type StoredProject = {
   id: string;
   name: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
+  ownerName?: string;
   projectKind?: "scratch" | "formal" | "temporary";
   updatedAt?: string;
   assets?: unknown[];
@@ -42,9 +45,22 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get("mode");
   const id = url.searchParams.get("id");
-  const store = await readStore(user.id);
+  const ownerUserId = url.searchParams.get("ownerUserId") || "";
+  const isOwner = user.role === "owner";
+  const store = isOwner && ownerUserId ? await readStore(ownerUserId, { includeRootMigration: false }) : await readStore(user.id);
 
   if (mode === "list") {
+    if (isOwner) {
+      const ownerStores = await readAllOwnerProjectStores(user.id);
+      const projects = ownerStores.flatMap((entry) => entry.store.projects.map((project) => withProjectOwner(project, entry.owner)));
+      const sortedProjects = projects.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+      const activeProjectId = ownerStores.find((entry) => entry.owner.id === user.id)?.store.activeProjectId || store.activeProjectId;
+      return NextResponse.json({
+        activeProjectId,
+        projects: summarizeProjects(sortedProjects),
+        adminProjectView: true,
+      });
+    }
     return NextResponse.json({
       activeProjectId: store.activeProjectId,
       projects: store.projects.map((project) => ({
@@ -63,7 +79,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const project = store.projects.find((item) => item.id === id) || store.projects.find((item) => item.id === store.activeProjectId) || createBlankProject();
+  const project = isOwner
+    ? await findProjectForOwnerView(id, ownerUserId, user.id)
+    : store.projects.find((item) => item.id === id) || store.projects.find((item) => item.id === store.activeProjectId) || createBlankProject();
   return NextResponse.json(project);
 }
 
@@ -94,12 +112,16 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const store = await readStore(user.id);
+    const targetUserId = user.role === "owner" && input.ownerUserId ? input.ownerUserId : user.id;
+    const store = await readStore(targetUserId, { includeRootMigration: targetUserId === user.id });
     const projectId = input.id || `project_${Date.now()}`;
     const projectName = input.name || "AI 设计项目";
     const project: StoredProject = {
       id: projectId,
       name: projectName,
+      ownerUserId: targetUserId,
+      ownerEmail: typeof input.ownerEmail === "string" ? input.ownerEmail : undefined,
+      ownerName: typeof input.ownerName === "string" ? input.ownerName : undefined,
       projectKind: normalizeProjectKind(input.projectKind),
       updatedAt: input.updatedAt || new Date().toISOString(),
       viewport: input.viewport,
@@ -122,8 +144,11 @@ export async function POST(request: Request) {
       activeProjectId: input.setActive === false ? store.activeProjectId : project.id,
       projects,
     };
-    await writeStore(user.id, nextStore);
-    return NextResponse.json({ ok: true, project, projects: summarizeProjects(nextStore.projects), activeProjectId: nextStore.activeProjectId });
+    await writeStore(targetUserId, nextStore);
+    const responseProjects = user.role === "owner"
+      ? summarizeProjects((await readAllOwnerProjectStores(user.id)).flatMap((entry) => entry.store.projects.map((item) => withProjectOwner(item, entry.owner))))
+      : summarizeProjects(nextStore.projects);
+    return NextResponse.json({ ok: true, project, projects: responseProjects, activeProjectId: nextStore.activeProjectId });
   } catch (error) {
     if (error instanceof InvalidProjectPayloadError) {
       return NextResponse.json(
@@ -160,7 +185,8 @@ export async function DELETE(request: Request) {
     const input = await parseProjectDeletePayload(request);
     if (!input.id) return NextResponse.json({ error: "缺少项目 ID。" }, { status: 400 });
 
-    const store = await readStore(user.id);
+    const targetUserId = user.role === "owner" && input.ownerUserId ? input.ownerUserId : user.id;
+    const store = await readStore(targetUserId, { includeRootMigration: targetUserId === user.id });
     const projects = store.projects.filter((project) => project.id !== input.id);
     const nextProjects = projects.length ? projects : [createBlankProject()];
     const nextActiveId = store.activeProjectId === input.id ? nextProjects[0].id : store.activeProjectId;
@@ -168,8 +194,11 @@ export async function DELETE(request: Request) {
       activeProjectId: nextProjects.some((project) => project.id === nextActiveId) ? nextActiveId : nextProjects[0].id,
       projects: nextProjects,
     };
-    await writeStore(user.id, nextStore);
-    return NextResponse.json({ ok: true, activeProjectId: nextStore.activeProjectId, projects: summarizeProjects(nextStore.projects) });
+    await writeStore(targetUserId, nextStore);
+    const responseProjects = user.role === "owner"
+      ? summarizeProjects((await readAllOwnerProjectStores(user.id)).flatMap((entry) => entry.store.projects.map((item) => withProjectOwner(item, entry.owner))))
+      : summarizeProjects(nextStore.projects);
+    return NextResponse.json({ ok: true, activeProjectId: nextStore.activeProjectId, projects: responseProjects });
   } catch (error) {
     if (error instanceof InvalidProjectDeletePayloadError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -180,13 +209,13 @@ export async function DELETE(request: Request) {
 
 class InvalidProjectDeletePayloadError extends Error {}
 
-async function parseProjectDeletePayload(request: Request): Promise<{ id?: string }> {
+async function parseProjectDeletePayload(request: Request): Promise<{ id?: string; ownerUserId?: string }> {
   try {
     const input = await request.json() as unknown;
     if (!input || typeof input !== "object" || Array.isArray(input)) {
       throw new InvalidProjectDeletePayloadError("项目删除请求格式不正确。");
     }
-    return input as { id?: string };
+    return input as { id?: string; ownerUserId?: string };
   } catch (error) {
     if (error instanceof InvalidProjectDeletePayloadError) throw error;
     throw new InvalidProjectDeletePayloadError("项目删除 JSON 无法解析，请刷新项目列表后重试。");
@@ -214,21 +243,22 @@ function createBlankProject(): StoredProject {
   };
 }
 
-async function readStore(userId: string): Promise<ProjectStore> {
+async function readStore(userId: string, options: { includeRootMigration?: boolean } = {}): Promise<ProjectStore> {
+  const includeRootMigration = options.includeRootMigration ?? true;
   const scopedProjectsPath = userDataPath(userId, "projects.local.json");
   const scopedLegacyProjectPath = userDataPath(userId, "project.local.json");
   const scopedStore =
     await readProjectStoreFile(scopedProjectsPath) ||
     await readProjectStoreFile(`${scopedProjectsPath}.bak`);
-  const rootStore =
-    await readProjectStoreFile(rootProjectsPath) ||
-    await readProjectStoreFile(rootProjectsBackupPath);
+  const rootStore = includeRootMigration
+    ? await readProjectStoreFile(rootProjectsPath) || await readProjectStoreFile(rootProjectsBackupPath)
+    : null;
   const scopedLegacy =
     (await readProjectFile(scopedLegacyProjectPath)) ||
     (await readProjectFile(`${scopedLegacyProjectPath}.bak`));
-  const rootLegacy =
-    (await readProjectFile(rootLegacyProjectPath)) ||
-    (await readProjectFile(rootLegacyProjectBackupPath));
+  const rootLegacy = includeRootMigration
+    ? (await readProjectFile(rootLegacyProjectPath)) || (await readProjectFile(rootLegacyProjectBackupPath))
+    : null;
 
   if (scopedStore) {
     const scoped = reconcileStoreWithLegacyProject(scopedStore, scopedLegacy);
@@ -256,6 +286,74 @@ async function readStore(userId: string): Promise<ProjectStore> {
 
   const blank = createBlankProject();
   return { activeProjectId: blank.id, projects: [blank] };
+}
+
+async function readAllOwnerProjectStores(currentUserId: string) {
+  const users = await listAuthUsers();
+  const orderedUsers = [
+    ...users.filter((user) => user.id === currentUserId),
+    ...users.filter((user) => user.id !== currentUserId),
+  ];
+  const entries = await Promise.all(
+    orderedUsers.map(async (owner) => {
+      const includeRootMigration = owner.id === currentUserId;
+      const hasScopedStore = await fileExists(userDataPath(owner.id, "projects.local.json")) || await fileExists(userDataPath(owner.id, "project.local.json"));
+      if (!includeRootMigration && !hasScopedStore) return null;
+      const store = await readStore(owner.id, { includeRootMigration });
+      const projects = store.projects.filter(isMeaningfulProject);
+      return projects.length ? { owner, store: { ...store, projects } } : null;
+    }),
+  );
+  return entries.filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+}
+
+function isMeaningfulProject(project: StoredProject) {
+  return Boolean(
+    project.id !== "local-project" ||
+      project.name !== "AI 设计项目" ||
+      project.nodes?.length ||
+      project.assets?.length ||
+      project.runs?.length ||
+      project.knowledge?.references.length ||
+      project.knowledge?.materialLibrary.items.length ||
+      project.knowledge?.archive.organizationName,
+  );
+}
+
+async function findProjectForOwnerView(projectId: string | null, ownerUserId: string, currentUserId: string) {
+  if (ownerUserId) {
+    const users = await listAuthUsers();
+    const owner = users.find((item) => item.id === ownerUserId);
+    const store = await readStore(ownerUserId, { includeRootMigration: ownerUserId === currentUserId });
+    const project = store.projects.find((item) => item.id === projectId) || store.projects.find((item) => item.id === store.activeProjectId) || createBlankProject();
+    return owner ? withProjectOwner(project, owner) : project;
+  }
+
+  const ownerStores = await readAllOwnerProjectStores(currentUserId);
+  for (const entry of ownerStores) {
+    const project = entry.store.projects.find((item) => item.id === projectId);
+    if (project) return withProjectOwner(project, entry.owner);
+  }
+  const fallback = ownerStores[0];
+  return fallback ? withProjectOwner(fallback.store.projects[0], fallback.owner) : createBlankProject();
+}
+
+function withProjectOwner(project: StoredProject, owner: { id: string; email: string; name: string }) {
+  return {
+    ...project,
+    ownerUserId: owner.id,
+    ownerEmail: owner.email,
+    ownerName: owner.name,
+  };
+}
+
+async function fileExists(filePath: string) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function mergeLegacyRootStore(scoped: ProjectStore, rootStore: ProjectStore | null, rootLegacy: StoredProject | null): ProjectStore {
@@ -307,6 +405,9 @@ function summarizeProjects(projects: StoredProject[]) {
   return projects.map((project) => ({
     id: project.id,
     name: project.name,
+    ownerUserId: project.ownerUserId,
+    ownerEmail: project.ownerEmail,
+    ownerName: project.ownerName,
     projectKind: project.projectKind,
     updatedAt: project.updatedAt,
     nodeCount: project.nodes?.length || 0,

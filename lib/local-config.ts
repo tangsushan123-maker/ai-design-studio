@@ -1,5 +1,6 @@
 import "server-only";
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import { readJsonWithBackupSync, writeJsonAtomic } from "./local-json-store";
 import {
@@ -64,10 +65,27 @@ export type ResolvedOpenAIConfig = {
   source: "config.local.json" | "env" | "default";
 };
 
-const configPath = path.join(process.cwd(), "config.local.json");
+type ConfigUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: "owner" | "user";
+};
+
+const legacyConfigPath = path.join(process.cwd(), "config.local.json");
+const configUserStorage = new AsyncLocalStorage<ConfigUser | null>();
+
+export function runWithConfigUser<T>(user: ConfigUser | null, callback: () => T): T {
+  return configUserStorage.run(user, callback);
+}
+
+export function getConfigUser() {
+  return configUserStorage.getStore() || null;
+}
 
 export function readLocalConfig(): Partial<LocalOpenAIConfig> {
   try {
+    const configPath = activeConfigPath();
     const parsed = readJsonWithBackupSync<Partial<LocalOpenAIConfig> & {
       analysisModel?: string;
       apiKey?: string;
@@ -107,9 +125,11 @@ export function readLocalConfig(): Partial<LocalOpenAIConfig> {
 
 export function getOpenAIConfig(): ResolvedOpenAIConfig {
   const local = readLocalConfig();
+  const configUser = getConfigUser();
+  const canUseSharedServerKey = !configUser || configUser.role === "owner";
   const providerId = resolveProviderId(local.providerId || process.env.OPENAI_PROVIDER_ID, local.providerSiteUrl, local.apiBaseUrl);
   const provider = findProviderPreset(providerId);
-  const apiKey = local.openaiApiKey || providerEnvKey(provider.apiKeyEnv) || process.env.OPENAI_API_KEY || "";
+  const apiKey = local.openaiApiKey || (canUseSharedServerKey ? providerEnvKey(provider.apiKeyEnv) || process.env.OPENAI_API_KEY || "" : "");
   const providerSiteUrl = local.providerSiteUrl || siteUrlFromApiBaseUrl(local.apiBaseUrl) || provider.siteUrl || "";
   const providerName = local.providerName || provider.label;
   const apiBaseUrl = local.apiBaseUrl || process.env.OPENAI_BASE_URL || provider.apiBaseUrl || defaultOpenAIConfig.apiBaseUrl;
@@ -426,5 +446,19 @@ function visibleModelOrFallback(modelId: string, models: ModelCatalogItem[], cap
 }
 
 async function writeConfigAtomic(config: LocalOpenAIConfig) {
-  await writeJsonAtomic(configPath, config);
+  await writeJsonAtomic(activeConfigPath({ forWrite: true }), config);
+}
+
+function activeConfigPath(options?: { forWrite?: boolean }) {
+  const user = getConfigUser();
+  if (!user) return legacyConfigPath;
+  const userConfigPath = path.join(process.cwd(), "data", "users", safePathPart(user.id), "config.local.json");
+  if (options?.forWrite || user.role !== "owner") return userConfigPath;
+
+  const userConfig = readJsonWithBackupSync<Partial<LocalOpenAIConfig>>(userConfigPath, {});
+  return Object.keys(userConfig).length ? userConfigPath : legacyConfigPath;
+}
+
+function safePathPart(value: string) {
+  return value.replace(/[^A-Za-z0-9_-]/g, "_") || "unknown";
 }

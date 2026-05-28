@@ -87,4 +87,8 @@ export type DesignRequest = {
   subjectScale?: string;
   previewFit?: "contain" | "cover";
   protectionContext?: import("./design-production").ProtectionContext;
+  designPlan?: import("./design-plan").DesignPlan;
+  imagePrompt?: string;
+  negativePrompt?: string;
+  textMode?: "real_text_overlay" | "background_only" | "ai_text_preview";
 };

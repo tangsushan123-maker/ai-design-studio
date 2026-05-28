@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getOpenAIConfig } from "@/lib/local-config";
+import { requireCurrentUser } from "@/lib/auth";
+import { getOpenAIConfig, runWithConfigUser } from "@/lib/local-config";
 import { testConfiguredModel } from "@/lib/model-catalog";
 import { buildRuntimeDiagnostics, parseHealthMode, skippedImageCheck, type ModelCheck } from "@/lib/openai-health";
 import { getAnalysisModel, getImageModel, getVideoModel } from "@/lib/model-config";
@@ -7,6 +8,8 @@ import { getAnalysisModel, getImageModel, getVideoModel } from "@/lib/model-conf
 export const runtime = "nodejs";
 
 export async function GET() {
+  const user = await requireCurrentUser();
+  return runWithConfigUser(user, () => {
   const imageModel = getImageModel();
   const analysisModel = getAnalysisModel();
   const videoModel = getVideoModel();
@@ -32,9 +35,12 @@ export async function GET() {
     diagnostics: buildRuntimeDiagnostics(),
     message: config.hasApiKey ? "API Key 已配置。" : "未检测到 OpenAI API Key。",
   });
+  });
 }
 
 export async function POST(request: Request) {
+  const user = await requireCurrentUser();
+  return await runWithConfigUser(user, async () => {
   const mode = parseHealthMode(new URL(request.url).searchParams.get("mode"));
   const imageModel = getImageModel();
   const analysisModel = getAnalysisModel();
@@ -98,6 +104,7 @@ export async function POST(request: Request) {
     analysis,
     image,
     video,
+  });
   });
 }
 

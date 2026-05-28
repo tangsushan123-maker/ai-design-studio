@@ -77,6 +77,7 @@ task-runs.local.json.bak
 strategies.local.json
 style-libraries.local.json
 data/users/
+data/backups/
 
 # Local generated artifacts and backups
 .DS_Store

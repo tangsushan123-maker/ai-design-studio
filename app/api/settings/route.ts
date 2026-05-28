@@ -1,97 +1,106 @@
 import { NextResponse } from "next/server";
-import { getOpenAIConfig, maskApiKey, readLocalConfig, saveLocalConfig } from "@/lib/local-config";
+import { requireCurrentUser } from "@/lib/auth";
+import { getOpenAIConfig, maskApiKey, readLocalConfig, runWithConfigUser, saveLocalConfig } from "@/lib/local-config";
 import type { ModelReasoningEffort, ModelWireApi } from "@/lib/openai-defaults";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const config = getOpenAIConfig();
+  const user = await requireCurrentUser();
+  return runWithConfigUser(user, () => {
+    const config = getOpenAIConfig();
 
-  return NextResponse.json({
-    hasApiKey: config.hasApiKey,
-    maskedApiKey: maskApiKey(config.apiKey),
-    providerName: config.providerName,
-    providerId: config.providerId,
-    providerLabel: config.providerLabel,
-    websiteUrl: config.websiteUrl,
-    providerSiteUrl: config.providerSiteUrl,
-    apiBaseUrl: config.apiBaseUrl,
-    wireApi: config.wireApi,
-    requiresOpenAIAuth: config.requiresOpenAIAuth,
-    disableResponseStorage: config.disableResponseStorage,
-    modelReasoningEffort: config.modelReasoningEffort,
-    textModel: config.textModel,
-    imageModel: config.imageModel,
-    analysisModel: config.analysisModel,
-    videoModel: config.videoModel,
-    modelsCache: config.modelsCache,
-    modelsUpdatedAt: config.modelsUpdatedAt,
-    supportsModelsList: config.supportsModelsList,
-    supportsResponses: config.supportsResponses,
-    supportsChatCompletions: config.supportsChatCompletions,
-    supportsImageGeneration: config.supportsImageGeneration,
-    lastTestedAt: config.lastTestedAt,
-    isDefault: config.isDefault,
+    return NextResponse.json({
+      hasApiKey: config.hasApiKey,
+      maskedApiKey: maskApiKey(config.apiKey),
+      providerName: config.providerName,
+      providerId: config.providerId,
+      providerLabel: config.providerLabel,
+      websiteUrl: config.websiteUrl,
+      providerSiteUrl: config.providerSiteUrl,
+      apiBaseUrl: config.apiBaseUrl,
+      wireApi: config.wireApi,
+      requiresOpenAIAuth: config.requiresOpenAIAuth,
+      disableResponseStorage: config.disableResponseStorage,
+      modelReasoningEffort: config.modelReasoningEffort,
+      textModel: config.textModel,
+      imageModel: config.imageModel,
+      analysisModel: config.analysisModel,
+      videoModel: config.videoModel,
+      modelsCache: config.modelsCache,
+      modelsUpdatedAt: config.modelsUpdatedAt,
+      supportsModelsList: config.supportsModelsList,
+      supportsResponses: config.supportsResponses,
+      supportsChatCompletions: config.supportsChatCompletions,
+      supportsImageGeneration: config.supportsImageGeneration,
+      lastTestedAt: config.lastTestedAt,
+      isDefault: config.isDefault,
+      accountConfigScope: user.role === "owner" ? "owner" : "user",
+    });
   });
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await parseSettingsPayload(request);
-    const currentLocal = readLocalConfig();
-    const nextApiKey = body.apiKey?.trim() || currentLocal.openaiApiKey || "";
+    const user = await requireCurrentUser();
+    return await runWithConfigUser(user, async () => {
+      const body = await parseSettingsPayload(request);
+      const currentLocal = readLocalConfig();
+      const nextApiKey = body.apiKey?.trim() || currentLocal.openaiApiKey || "";
 
-    const saved = await saveLocalConfig({
-      apiKey: nextApiKey,
-      providerName: body.providerName,
-      providerId: body.providerId,
-      websiteUrl: body.websiteUrl,
-      providerSiteUrl: body.providerSiteUrl,
-      apiBaseUrl: body.apiBaseUrl,
-      wireApi: body.wireApi,
-      requiresOpenAIAuth: body.requiresOpenAIAuth,
-      disableResponseStorage: body.disableResponseStorage,
-      modelReasoningEffort: body.modelReasoningEffort,
-      textModel: body.textModel,
-      imageModel: body.imageModel,
-      analysisModel: body.analysisModel,
-      videoModel: body.videoModel,
-      modelsCache: Array.isArray(body.modelsCache) ? body.modelsCache : currentLocal.modelsCache,
-      modelsUpdatedAt: currentLocal.modelsUpdatedAt,
-      supportsModelsList: body.supportsModelsList ?? currentLocal.supportsModelsList,
-      supportsResponses: body.supportsResponses ?? currentLocal.supportsResponses,
-      supportsChatCompletions: body.supportsChatCompletions ?? currentLocal.supportsChatCompletions,
-      supportsImageGeneration: body.supportsImageGeneration ?? currentLocal.supportsImageGeneration,
-      lastTestedAt: currentLocal.lastTestedAt,
-      isDefault: currentLocal.isDefault,
-    });
+      const saved = await saveLocalConfig({
+        apiKey: nextApiKey,
+        providerName: body.providerName,
+        providerId: body.providerId,
+        websiteUrl: body.websiteUrl,
+        providerSiteUrl: body.providerSiteUrl,
+        apiBaseUrl: body.apiBaseUrl,
+        wireApi: body.wireApi,
+        requiresOpenAIAuth: body.requiresOpenAIAuth,
+        disableResponseStorage: body.disableResponseStorage,
+        modelReasoningEffort: body.modelReasoningEffort,
+        textModel: body.textModel,
+        imageModel: body.imageModel,
+        analysisModel: body.analysisModel,
+        videoModel: body.videoModel,
+        modelsCache: Array.isArray(body.modelsCache) ? body.modelsCache : currentLocal.modelsCache,
+        modelsUpdatedAt: currentLocal.modelsUpdatedAt,
+        supportsModelsList: body.supportsModelsList ?? currentLocal.supportsModelsList,
+        supportsResponses: body.supportsResponses ?? currentLocal.supportsResponses,
+        supportsChatCompletions: body.supportsChatCompletions ?? currentLocal.supportsChatCompletions,
+        supportsImageGeneration: body.supportsImageGeneration ?? currentLocal.supportsImageGeneration,
+        lastTestedAt: currentLocal.lastTestedAt,
+        isDefault: currentLocal.isDefault,
+      });
 
-    return NextResponse.json({
-      ok: true,
-      hasApiKey: Boolean(saved.openaiApiKey),
-      maskedApiKey: maskApiKey(saved.openaiApiKey),
-      providerName: saved.providerName,
-      providerId: saved.providerId,
-      websiteUrl: saved.websiteUrl,
-      providerSiteUrl: saved.providerSiteUrl,
-      apiBaseUrl: saved.apiBaseUrl,
-      wireApi: saved.wireApi,
-      requiresOpenAIAuth: saved.requiresOpenAIAuth,
-      disableResponseStorage: saved.disableResponseStorage,
-      modelReasoningEffort: saved.modelReasoningEffort,
-      textModel: saved.textModel,
-      imageModel: saved.imageModel,
-      analysisModel: saved.textModel,
-      videoModel: saved.videoModel,
-      modelsCache: saved.modelsCache,
-      modelsUpdatedAt: saved.modelsUpdatedAt,
-      supportsModelsList: saved.supportsModelsList,
-      supportsResponses: saved.supportsResponses,
-      supportsChatCompletions: saved.supportsChatCompletions,
-      supportsImageGeneration: saved.supportsImageGeneration,
-      lastTestedAt: saved.lastTestedAt,
-      isDefault: saved.isDefault,
-      message: "API 配置已保存。",
+      return NextResponse.json({
+        ok: true,
+        hasApiKey: Boolean(saved.openaiApiKey),
+        maskedApiKey: maskApiKey(saved.openaiApiKey),
+        providerName: saved.providerName,
+        providerId: saved.providerId,
+        websiteUrl: saved.websiteUrl,
+        providerSiteUrl: saved.providerSiteUrl,
+        apiBaseUrl: saved.apiBaseUrl,
+        wireApi: saved.wireApi,
+        requiresOpenAIAuth: saved.requiresOpenAIAuth,
+        disableResponseStorage: saved.disableResponseStorage,
+        modelReasoningEffort: saved.modelReasoningEffort,
+        textModel: saved.textModel,
+        imageModel: saved.imageModel,
+        analysisModel: saved.textModel,
+        videoModel: saved.videoModel,
+        modelsCache: saved.modelsCache,
+        modelsUpdatedAt: saved.modelsUpdatedAt,
+        supportsModelsList: saved.supportsModelsList,
+        supportsResponses: saved.supportsResponses,
+        supportsChatCompletions: saved.supportsChatCompletions,
+        supportsImageGeneration: saved.supportsImageGeneration,
+        lastTestedAt: saved.lastTestedAt,
+        isDefault: saved.isDefault,
+        accountConfigScope: user.role === "owner" ? "owner" : "user",
+        message: "API 配置已保存到当前账号。",
+      });
     });
   } catch (error) {
     if (error instanceof InvalidSettingsPayloadError) {

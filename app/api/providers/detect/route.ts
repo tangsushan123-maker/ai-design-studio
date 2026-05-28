@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { readLocalConfig } from "@/lib/local-config";
+import { requireCurrentUser } from "@/lib/auth";
+import { readLocalConfig, runWithConfigUser } from "@/lib/local-config";
 import { detectProvider } from "@/lib/provider-detector";
 import type { ModelWireApi } from "@/lib/openai-defaults";
 
@@ -21,18 +22,21 @@ type ProviderDetectPayload = {
 
 export async function POST(request: Request) {
   try {
-    const body = await parseProviderDetectPayload(request);
-    const currentLocal = readLocalConfig();
-    const result = await detectProvider({
-      websiteUrl: body.websiteUrl,
-      apiBaseUrl: body.apiBaseUrl,
-      apiKey: body.apiKey?.trim() || currentLocal.openaiApiKey || "",
-      providerName: body.providerName,
-      save: Boolean(body.save),
-      manual: body.manual,
-    });
+    const user = await requireCurrentUser();
+    return await runWithConfigUser(user, async () => {
+      const body = await parseProviderDetectPayload(request);
+      const currentLocal = readLocalConfig();
+      const result = await detectProvider({
+        websiteUrl: body.websiteUrl,
+        apiBaseUrl: body.apiBaseUrl,
+        apiKey: body.apiKey?.trim() || currentLocal.openaiApiKey || "",
+        providerName: body.providerName,
+        save: Boolean(body.save),
+        manual: body.manual,
+      });
 
-    return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+      return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+    });
   } catch (error) {
     if (error instanceof InvalidProviderDetectPayloadError) {
       return NextResponse.json({

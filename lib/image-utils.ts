@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { aspectRatios, type AspectRatioValue, type QualityValue } from "./design-options";
 import { writeJsonAtomic } from "./local-json-store";
+import { getConfigUser } from "./local-config";
 
 export type PixelSize = {
   width: number;
@@ -117,8 +118,12 @@ export async function saveImageMetadata(fileName: string, metadata: Record<strin
   await ensureGeneratedDir();
   const metadataPath = getGeneratedPath(`${fileName}.json`);
   await mkdir(path.dirname(metadataPath), { recursive: true });
+  const configUser = getConfigUser();
   await writeJsonAtomic(metadataPath, {
     ...metadata,
+    ownerUserId: typeof metadata.ownerUserId === "string" ? metadata.ownerUserId : configUser?.id,
+    ownerEmail: typeof metadata.ownerEmail === "string" ? metadata.ownerEmail : configUser?.email,
+    ownerName: typeof metadata.ownerName === "string" ? metadata.ownerName : configUser?.name,
     fileName,
     savedPath: getGeneratedPath(fileName),
     originalUrl: typeof metadata.originalUrl === "string" ? metadata.originalUrl : getGeneratedUrl(fileName),

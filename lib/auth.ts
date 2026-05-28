@@ -17,6 +17,8 @@ export type AuthUser = {
   role: "owner" | "user";
   createdAt: string;
   updatedAt: string;
+  lastLoginAt?: string;
+  loginCount?: number;
 };
 
 type StoredUser = AuthUser & {
@@ -87,6 +89,11 @@ export async function loginUser(input: { email: string; password: string }) {
     throw new AuthInputError("账号或密码不正确。");
   }
 
+  user.lastLoginAt = new Date().toISOString();
+  user.loginCount = (user.loginCount || 0) + 1;
+  user.updatedAt = user.lastLoginAt;
+  await writeUserStore(store);
+
   return publicUser(user);
 }
 
@@ -106,6 +113,65 @@ export async function requireCurrentUser() {
   const user = await getCurrentUser();
   if (!user) throw new AuthRequiredError("请先登录。");
   return user;
+}
+
+export async function listAuthUsers() {
+  const store = await readUserStore();
+  return store.users.map(publicUser);
+}
+
+export async function adminUpsertAuthUser(input: { id?: string; email: string; password?: string; name?: string; role?: "owner" | "user" }) {
+  const store = await readUserStore();
+  const email = normalizeEmail(input.email);
+  const name = normalizeName(input.name, email);
+  const role = input.role === "owner" ? "owner" : "user";
+  const now = new Date().toISOString();
+  const existing = input.id
+    ? store.users.find((user) => user.id === input.id)
+    : store.users.find((user) => user.email === email);
+
+  if (existing) {
+    existing.email = email;
+    existing.name = name;
+    existing.role = role;
+    existing.updatedAt = now;
+    if (input.password) {
+      const password = normalizePassword(input.password);
+      existing.passwordSalt = crypto.randomBytes(16).toString("base64url");
+      existing.passwordHash = await hashPassword(password, existing.passwordSalt);
+    }
+    await writeUserStore(store);
+    return publicUser(existing);
+  }
+
+  const password = normalizePassword(input.password || "");
+  const passwordSalt = crypto.randomBytes(16).toString("base64url");
+  const passwordHash = await hashPassword(password, passwordSalt);
+  const user: StoredUser = {
+    id: `user_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
+    email,
+    name,
+    role: store.users.length ? role : "owner",
+    passwordSalt,
+    passwordHash,
+    createdAt: now,
+    updatedAt: now,
+    loginCount: 0,
+  };
+  await writeUserStore({ users: [...store.users, user] });
+  return publicUser(user);
+}
+
+export async function adminDeleteAuthUser(input: { id: string; currentUserId: string }) {
+  const store = await readUserStore();
+  const target = store.users.find((user) => user.id === input.id);
+  if (!target) throw new AuthInputError("账号不存在。");
+  if (target.id === input.currentUserId) throw new AuthInputError("不能删除当前登录的管理员账号。");
+  if (target.role === "owner" && store.users.filter((user) => user.role === "owner").length <= 1) {
+    throw new AuthInputError("不能删除最后一个管理员账号。");
+  }
+  await writeUserStore({ users: store.users.filter((user) => user.id !== target.id) });
+  return publicUser(target);
 }
 
 export async function createSessionToken(user: AuthUser) {
@@ -197,6 +263,8 @@ function publicUser(user: StoredUser): AuthUser {
     role: user.role,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
+    lastLoginAt: user.lastLoginAt,
+    loginCount: user.loginCount || 0,
   };
 }
 

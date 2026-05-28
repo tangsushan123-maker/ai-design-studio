@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireCurrentUser } from "@/lib/auth";
 import { inspectPngAlpha, readImageMetadata, saveImageBuffer, saveImageMetadata } from "@/lib/image-utils";
 import { maxUploadBytes, supportedImageTypes } from "@/lib/request-guards";
 
@@ -6,6 +7,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    const user = await requireCurrentUser();
     const formData = await request.formData();
     const file = formData.get("image");
     const source = String(formData.get("source") || "upload");
@@ -80,6 +82,9 @@ export async function POST(request: Request) {
       originalFileName: file.name,
       mimeType: file.type,
       uploadSource: source,
+      ownerUserId: user.id,
+      ownerEmail: user.email,
+      ownerName: user.name,
       projectId: projectId || undefined,
       materialType: materialType || undefined,
       alphaCheck,

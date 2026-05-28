@@ -1,6 +1,6 @@
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { requireCurrentUser, userDataPath } from "@/lib/auth";
+import { listAuthUsers, requireCurrentUser, userDataPath } from "@/lib/auth";
 import { readJsonWithBackup, writeJsonAtomic } from "@/lib/local-json-store";
 import {
   createDefaultPublicStyleLibraries,
@@ -32,7 +32,10 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const mode = url.searchParams.get("mode");
     const includeItems = mode === "detail";
-    const [projectLibraries, styleLibraries] = await Promise.all([readProjectLibraries(user.id), readStyleLibraries()]);
+    const [projectLibraries, styleLibraries] = await Promise.all([
+      user.role === "owner" ? readAllProjectLibraries() : readProjectLibraries(user.id),
+      readStyleLibraries(),
+    ]);
 
     return NextResponse.json({
       projectLibraries: projectLibraries.map((library) => summarizeLibrary(library, includeItems)),
@@ -101,6 +104,12 @@ async function readProjectLibraries(userId: string) {
     const normalized = normalizeMaterialLibraryRecord(project.knowledge?.materialLibrary, fallback);
     return [{ ...normalized, ownerProjectId: project.id }];
   });
+}
+
+async function readAllProjectLibraries() {
+  const users = await listAuthUsers();
+  const libraries = await Promise.all(users.map((user) => readProjectLibraries(user.id)));
+  return libraries.flat();
 }
 
 async function readStyleLibraries() {

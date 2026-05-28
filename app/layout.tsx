@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { AuthStatus } from "@/components/auth-status";
 import { ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
 
@@ -14,17 +13,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem("design-studio-theme");if(t!=="light"&&t!=="dark")t="dark";document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t;}catch(e){document.documentElement.dataset.theme="dark";}`,
-          }}
-        />
-      </head>
+    <html lang="zh-CN" data-theme="dark" style={{ colorScheme: "dark" }} suppressHydrationWarning>
       <body>
         {children}
-        <AuthStatus />
         <ThemeToggle />
       </body>
     </html>

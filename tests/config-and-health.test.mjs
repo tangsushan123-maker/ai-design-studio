@@ -1033,7 +1033,7 @@ describe("Image-to-image creative redesign", () => {
 
 describe("Text-to-image references", () => {
   it("supports structured reference images for text-to-image only", async () => {
-    const [promptSource, routeSource, workbenchSource, optionsSource, creativeBriefSource, creativeBriefRouteSource, queueSource, deliverySource] = await Promise.all([
+    const [promptSource, routeSource, workbenchSource, optionsSource, creativeBriefSource, creativeBriefRouteSource, queueSource, deliverySource, designPlanSource] = await Promise.all([
       readFile(new URL("../lib/prompt.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/generate-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
@@ -1042,6 +1042,7 @@ describe("Text-to-image references", () => {
       readFile(new URL("../app/api/creative-brief/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/image-request-queue.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/workbench-delivery.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/design-plan.ts", import.meta.url), "utf8"),
     ]);
 
     assert.equal(optionsSource.includes("export type TextReferenceRole"), true);
@@ -1088,7 +1089,8 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("readImageInput(formData, `brandAsset_${index}`"), true);
     assert.equal(routeSource.includes("slice(0, 5)"), true);
     assert.equal(routeSource.includes("index <= 5"), true);
-    assert.equal(routeSource.includes('variantDirection: index === 0 ? "stable" : "creative"'), true);
+    assert.equal(routeSource.includes("buildPromptsFromDesignPlan"), true);
+    assert.equal(routeSource.includes("Never use the raw user sentence as visible poster copy"), true);
     assert.equal(routeSource.includes("文生图/图片参考编辑"), true);
     assert.equal(routeSource.includes("parseTextToImageJsonPayload"), true);
     assert.equal(routeSource.includes("InvalidTextToImagePayloadError"), true);
@@ -1101,7 +1103,7 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("limitPromptText(referenceSummary, 1800)"), true);
     assert.equal(routeSource.includes("活动主题、核心文案、人物/产品/服务"), true);
     assert.equal(routeSource.includes("normalizeTextToImageRequest"), true);
-    assert.equal(routeSource.includes("createDesignDirectorBrief"), true);
+    assert.equal(routeSource.includes("createTextToImageDesignPlan"), true);
     assert.equal(routeSource.includes("getAnalysisModel"), true);
     assert.equal(routeSource.includes("resolveImageModel(body.imageModel, body.model)"), true);
     assert.equal(routeSource.includes("imageModel: String(formData.get(\"imageModel\")"), true);
@@ -1113,16 +1115,18 @@ describe("Text-to-image references", () => {
     assert.equal(workbenchSource.includes("活动主题、核心文案、版式骨架"), true);
     assert.equal(creativeBriefRouteSource.includes("getAnalysisModel"), true);
     assert.equal(creativeBriefRouteSource.includes("getImageModel"), false);
-    assert.equal(routeSource.includes("buildDesignDirectorBriefRequestPrompt"), true);
-    assert.equal(routeSource.includes("normalizeDesignDirectorBrief"), true);
-    assert.equal(routeSource.includes("selectPromptDirections"), true);
-    assert.equal(routeSource.includes("designBrief"), true);
-    assert.equal(promptSource.includes("Structured poster planning"), true);
-    assert.equal(promptSource.includes("Planned visible copy"), true);
-    assert.equal(promptSource.includes("No explicit copy was provided: use the following planned short commercial copy"), true);
-    assert.equal(promptSource.includes("Headline: ${brief.title}."), true);
-    assert.equal(promptSource.includes("Scene and layout execution"), true);
-    assert.equal(promptSource.includes("Do not merely draw words from the user request; execute the planned copy"), true);
+    assert.equal(routeSource.includes("buildDesignPlanPrompt"), true);
+    assert.equal(routeSource.includes("normalizeDesignPlan"), true);
+    assert.equal(routeSource.includes("designPlan"), true);
+    assert.equal(routeSource.includes("normalizeProvidedDesignPlan"), false);
+    assert.equal(designPlanSource.includes("后台静默规则"), true);
+    assert.equal(designPlanSource.includes("copywriting 只能放最终海报上应该真实显示的文字"), true);
+    assert.equal(designPlanSource.includes("用户原始需求是设计指令，不是海报文案"), true);
+    assert.equal(designPlanSource.includes("出图规则：本系统不再后期盖字"), true);
+    assert.equal(designPlanSource.includes("imagePrompt 只允许使用你分析后的设计方案和 copywriting"), true);
+    assert.equal(designPlanSource.includes("sanitizePosterCopy"), true);
+    assert.equal(routeSource.includes("applyDesignPlanTextOverlay"), false);
+    assert.equal(routeSource.includes("Generate the final complete poster directly"), true);
     assert.equal(routeSource.includes('const textToImageFitMode = "strict_full_bleed"'), true);
     assert.equal(routeSource.includes("buildNativeRatioRetryPrompt"), true);
     assert.equal(routeSource.includes("\"smart_outpaint\""), false);
@@ -1133,8 +1137,8 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes('label: "快速预览", targetCount: 2, maxRetries: 1'), true);
     assert.equal(routeSource.includes('label: "标准出图", targetCount: 2, maxRetries: 1'), true);
     assert.equal(routeSource.includes('label: "正式高清", targetCount: 2, maxRetries: 2'), true);
-    assert.equal(routeSource.includes("max_output_tokens: 1800"), true);
-    assert.equal(routeSource.includes("timeout: 5500"), true);
+    assert.equal(routeSource.includes("max_output_tokens: 2200"), true);
+    assert.equal(routeSource.includes("timeout: 15_000"), true);
     assert.equal(routeSource.includes("modelCallPolicy"), true);
     assert.equal(routeSource.includes("targetCanvasFirst"), true);
     assert.equal(routeSource.includes("shouldUseTextToImageTargetCanvasFirst"), true);
@@ -1146,8 +1150,8 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("方案 2 只参考以下差异方向，不要重复整段规则"), true);
     assert.equal(routeSource.includes("generationProfile.maxRetries"), true);
     assert.equal(routeSource.includes("hasReferenceFiles"), true);
-    assert.equal(routeSource.includes("designBriefCache"), true);
-    assert.equal(routeSource.includes("shouldUseFastDesignBrief"), true);
+    assert.equal(routeSource.includes("designBriefCache"), false);
+    assert.equal(routeSource.includes("shouldUseFastDesignBrief"), false);
     assert.equal(routeSource.includes("textToImageSafeMarginPercent"), true);
     assert.equal(routeSource.includes("tightenTextToImageCompositionRisk"), true);
     assert.equal(routeSource.includes("四周 18% 只放背景/出血装饰"), true);
@@ -1164,20 +1168,13 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("shouldRetryImageSizeWithNativeFallback"), true);
     assert.equal(routeSource.includes("buildModelNativeSizeFallbackPrompt"), true);
     assert.equal(routeSource.includes("getOpenAIImageSize(ratio)"), true);
-    assert.equal(routeSource.includes("shouldForceAiPosterPlanning"), true);
-    assert.equal(routeSource.includes("compact.length <= 42"), true);
-    assert.equal(routeSource.includes("端午|中秋|春节|新年"), true);
-    assert.equal(promptSource.includes("AI 海报策划总监"), true);
-    assert.equal(promptSource.includes("必须自动补全用途、行业/场景、受众、主标题、副标题、核心卖点、主视觉元素"), true);
-    assert.equal(promptSource.includes("function inferFestivalPoster"), true);
-    assert.equal(promptSource.includes("端午通用品牌海报可用 title=端午安康"), true);
-    assert.equal(promptSource.includes("医疗/医院/机构品牌端午海报要偏关怀和安康祝福"), true);
-    assert.equal(promptSource.includes("除非用户明确写了活动、优惠、促销、福利、礼品、领取、报名、套餐、买赠"), true);
-    assert.equal(promptSource.includes("科技馆/科普活动端午海报可用 title=科技里的端午"), true);
-    assert.equal(promptSource.includes('title: "端午安康"'), true);
-    assert.equal(promptSource.includes('subtitle: "粽叶飘香，情暖仲夏"'), true);
-    assert.equal(promptSource.includes('subtitle: "粽叶飘香，安康常伴"'), true);
-    assert.equal(promptSource.includes('sellingPoints: ["愿您和家人平安顺遂，身心常健", "健康相伴", "安心守护"]'), true);
+    assert.equal(routeSource.includes("shouldForceAiPosterPlanning"), false);
+    assert.equal(routeSource.includes("compact.length <= 42"), false);
+    assert.equal(designPlanSource.includes("端午节海报"), true);
+    assert.equal(designPlanSource.includes("端午安康"), true);
+    assert.equal(designPlanSource.includes("粽叶飘香，情暖仲夏"), true);
+    assert.equal(designPlanSource.includes("科技里的端午"), true);
+    assert.equal(designPlanSource.includes("除非用户用“标题、主标题、副标题、正文、文案、写上、文字为、活动信息、医生信息、电话、地址”等明确标注"), true);
     assert.equal(promptSource.includes("hasPromotionIntent ?"), true);
     assert.equal(promptSource.includes('["愿你岁岁安康，万事顺遂", "粽香仲夏", "安康相伴"]'), true);
     assert.equal(promptSource.includes('title: "科技里的端午"'), true);

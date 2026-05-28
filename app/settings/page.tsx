@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AccountSwitcher } from "@/components/account-switcher";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -17,7 +18,10 @@ import {
   RefreshCw,
   Save,
   ServerCog,
+  Shield,
   Trash2,
+  UserPlus,
+  Users,
 } from "lucide-react";
 import {
   findProviderPreset,
@@ -53,6 +57,7 @@ type SettingsResponse = {
   supportsImageGeneration?: boolean;
   lastTestedAt?: string;
   isDefault?: boolean;
+  accountConfigScope?: "owner" | "user";
 };
 
 type ModelTestResponse = {
@@ -77,6 +82,55 @@ type HealthResponse = {
     serverTime?: string;
   };
   message?: string;
+};
+
+type AdminAccountSummary = {
+  id: string;
+  email: string;
+  name: string;
+  role: "owner" | "user";
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string;
+  loginCount: number;
+  isCurrent: boolean;
+  activeRecently: boolean;
+  projects: {
+    count: number;
+    nodeCount: number;
+    assetCount: number;
+    runCount: number;
+    outputCount: number;
+    latestUpdatedAt: string;
+  };
+  api: {
+    hasKey: boolean;
+    maskedApiKey: string;
+    apiKey?: string;
+    keySource: string;
+    canReveal: boolean;
+    providerName: string;
+    apiBaseUrl: string;
+    textModel: string;
+    imageModel: string;
+    lastTestedAt: string;
+  };
+};
+
+type AdminAccountsResponse = {
+  ok: boolean;
+  accounts?: AdminAccountSummary[];
+  currentUserId?: string;
+  error?: string;
+  message?: string;
+};
+
+type AccountDraft = {
+  id: string;
+  email: string;
+  name: string;
+  password: string;
+  role: "owner" | "user";
 };
 
 type DetectionIssue = {
@@ -118,6 +172,7 @@ type DetectionResult = {
 
 const customProvider = findProviderPreset("custom");
 const emptyDraft = { id: "", label: "", capability: "text" as ModelCapability };
+const emptyAccountDraft: AccountDraft = { id: "", email: "", name: "", password: "", role: "user" };
 const reasoningEfforts: ModelReasoningEffort[] = ["none", "minimal", "low", "medium", "high", "xhigh"];
 
 function settingsRequestFailure(action: string, error: unknown) {
@@ -157,6 +212,12 @@ export default function SettingsPage() {
   const [lastModelTest, setLastModelTest] = useState<ModelTestResponse | null>(null);
   const [serverHealth, setServerHealth] = useState<HealthResponse | null>(null);
   const [savedAt, setSavedAt] = useState("");
+  const [adminAccounts, setAdminAccounts] = useState<AdminAccountSummary[]>([]);
+  const [adminAccountsReady, setAdminAccountsReady] = useState(false);
+  const [adminStatus, setAdminStatus] = useState<Status>({ type: "idle", message: "" });
+  const [accountDraft, setAccountDraft] = useState<AccountDraft>(emptyAccountDraft);
+  const [activeAccountAction, setActiveAccountAction] = useState("");
+  const [confirmDeleteAccountId, setConfirmDeleteAccountId] = useState("");
   const isBusy = status.type === "loading";
   const passedModels = useMemo(() => modelsCache.filter((model) => model.testStatus === "passed"), [modelsCache]);
   const passedImageModels = useMemo(() => passedModels.filter((model) => model.capabilities.includes("image")), [passedModels]);
@@ -193,6 +254,7 @@ export default function SettingsPage() {
       .then((data: SettingsResponse) => applySettings(data))
       .catch((error) => setStatus({ type: "error", message: settingsRequestFailure("读取配置失败", error) }));
     void reloadServerHealth();
+    void reloadAdminAccounts();
   }, []);
 
   async function reloadServerHealth() {
@@ -205,6 +267,24 @@ export default function SettingsPage() {
         ok: false,
         message: "服务诊断读取失败",
       });
+    }
+  }
+
+  async function reloadAdminAccounts(options?: { revealUserId?: string }) {
+    try {
+      const url = options?.revealUserId ? `/api/admin/accounts?revealUserId=${encodeURIComponent(options.revealUserId)}` : "/api/admin/accounts";
+      const response = await fetch(url);
+      if (response.status === 403 || response.status === 401) {
+        setAdminAccountsReady(false);
+        return;
+      }
+      const data = await readSettingsJson<AdminAccountsResponse>(response);
+      if (!response.ok || !data.ok) throw new Error(data.error || "账号管理读取失败");
+      setAdminAccounts(data.accounts || []);
+      setAdminAccountsReady(true);
+    } catch (error) {
+      setAdminAccountsReady(false);
+      setAdminStatus({ type: "error", message: settingsRequestFailure("读取账号管理失败", error) });
     }
   }
 
@@ -542,6 +622,99 @@ export default function SettingsPage() {
     applySettings(data);
   }
 
+  async function saveAccount() {
+    const isEditing = Boolean(accountDraft.id);
+    if (!accountDraft.email.trim()) {
+      setAdminStatus({ type: "error", message: "账号邮箱不能为空。" });
+      return;
+    }
+    if (!isEditing && accountDraft.password.length < 8) {
+      setAdminStatus({ type: "error", message: "新账号密码至少 8 位。" });
+      return;
+    }
+    setActiveAccountAction("save");
+    setAdminStatus({ type: "loading", message: isEditing ? "正在更新账号..." : "正在创建账号..." });
+    try {
+      const response = await fetch("/api/admin/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: accountDraft.id || undefined,
+          email: accountDraft.email,
+          name: accountDraft.name,
+          password: accountDraft.password,
+          role: accountDraft.role,
+        }),
+      });
+      const data = await readSettingsJson<AdminAccountsResponse>(response);
+      if (!response.ok || !data.ok) throw new Error(data.error || "账号保存失败");
+      setAccountDraft(emptyAccountDraft);
+      setAdminStatus({ type: "success", message: data.message || "账号已保存。" });
+      await reloadAdminAccounts();
+    } catch (error) {
+      setAdminStatus({ type: "error", message: settingsRequestFailure("账号保存失败", error) });
+    } finally {
+      setActiveAccountAction("");
+    }
+  }
+
+  async function clearAccountApiKey(account: AdminAccountSummary) {
+    setActiveAccountAction(`clear:${account.id}`);
+    setAdminStatus({ type: "loading", message: `正在清理 ${account.email} 的 API Key...` });
+    try {
+      const response = await fetch("/api/admin/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clearApiKey", userId: account.id }),
+      });
+      const data = await readSettingsJson<AdminAccountsResponse>(response);
+      if (!response.ok || !data.ok) throw new Error(data.error || "清理失败");
+      setAdminStatus({ type: "success", message: "API Key 已清理。" });
+      await reloadAdminAccounts();
+    } catch (error) {
+      setAdminStatus({ type: "error", message: settingsRequestFailure("清理 API Key 失败", error) });
+    } finally {
+      setActiveAccountAction("");
+    }
+  }
+
+  async function deleteAccount(account: AdminAccountSummary) {
+    if (confirmDeleteAccountId !== account.id) {
+      setConfirmDeleteAccountId(account.id);
+      setAdminStatus({ type: "idle", message: `再点一次删除「${account.email}」。` });
+      return;
+    }
+    setActiveAccountAction(`delete:${account.id}`);
+    setAdminStatus({ type: "loading", message: `正在删除 ${account.email}...` });
+    try {
+      const response = await fetch("/api/admin/accounts", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: account.id }),
+      });
+      const data = await readSettingsJson<AdminAccountsResponse>(response);
+      if (!response.ok || !data.ok) throw new Error(data.error || "删除失败");
+      setConfirmDeleteAccountId("");
+      setAdminStatus({ type: "success", message: "账号已删除。" });
+      await reloadAdminAccounts();
+    } catch (error) {
+      setAdminStatus({ type: "error", message: settingsRequestFailure("删除账号失败", error) });
+    } finally {
+      setActiveAccountAction("");
+    }
+  }
+
+  function editAccount(account: AdminAccountSummary) {
+    setAccountDraft({
+      id: account.id,
+      email: account.email,
+      name: account.name,
+      password: "",
+      role: account.role,
+    });
+    setAdminStatus({ type: "idle", message: "正在编辑账号，密码留空则不修改。" });
+  }
+
   function editModel(model: ModelCatalogItem) {
     setEditingId(model.id);
     setDraft({
@@ -557,9 +730,12 @@ export default function SettingsPage() {
         <header className="mb-4 flex flex-col gap-3 border-b border-white/10 pb-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="apple-title">API</h1>
-            <p className="apple-subtitle mt-1">供应商、密钥、模型</p>
+            <p className="apple-subtitle mt-1">供应商、密钥、模型；配置只保存到当前登录账号。</p>
           </div>
           <div className="flex gap-2">
+            <div className="w-[116px]">
+              <AccountSwitcher compact expanded />
+            </div>
             <button className="apple-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" disabled={isBusy} onClick={() => saveSettings()} type="button">
               {isBusy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
               保存手动配置
@@ -572,6 +748,27 @@ export default function SettingsPage() {
         </header>
 
         <StatusBanner status={status} />
+
+        {adminAccountsReady ? (
+          <AdminAccountsPanel
+            accounts={adminAccounts}
+            activeAction={activeAccountAction}
+            confirmDeleteAccountId={confirmDeleteAccountId}
+            draft={accountDraft}
+            status={adminStatus}
+            onCancelEdit={() => {
+              setAccountDraft(emptyAccountDraft);
+              setAdminStatus({ type: "idle", message: "" });
+            }}
+            onChangeDraft={setAccountDraft}
+            onClearApiKey={clearAccountApiKey}
+            onDelete={deleteAccount}
+            onEdit={editAccount}
+            onRefresh={() => reloadAdminAccounts()}
+            onReveal={(account) => reloadAdminAccounts({ revealUserId: account.api.apiKey ? undefined : account.id })}
+            onSave={saveAccount}
+          />
+        ) : null}
 
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-4">
@@ -839,6 +1036,171 @@ function StatusBanner({ status }: { status: Status }) {
       {status.type === "loading" ? <Loader2 className="size-4 shrink-0 animate-spin" /> : <StatusIcon state={status.type === "error" ? "error" : status.type === "success" ? "success" : "idle"} />}
       {status.message}
     </div>
+  );
+}
+
+function AdminAccountsPanel({
+  accounts,
+  activeAction,
+  confirmDeleteAccountId,
+  draft,
+  onCancelEdit,
+  onChangeDraft,
+  onClearApiKey,
+  onDelete,
+  onEdit,
+  onRefresh,
+  onReveal,
+  onSave,
+  status,
+}: {
+  accounts: AdminAccountSummary[];
+  activeAction: string;
+  confirmDeleteAccountId: string;
+  draft: AccountDraft;
+  status: Status;
+  onCancelEdit: () => void;
+  onChangeDraft: (draft: AccountDraft) => void;
+  onClearApiKey: (account: AdminAccountSummary) => void;
+  onDelete: (account: AdminAccountSummary) => void;
+  onEdit: (account: AdminAccountSummary) => void;
+  onRefresh: () => void;
+  onReveal: (account: AdminAccountSummary) => void;
+  onSave: () => void;
+}) {
+  const busy = Boolean(activeAction);
+  return (
+    <Panel title="账号管理">
+      <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <section className="rounded-[18px] border border-white/10 bg-white/[0.035] p-3">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white/82">
+            <UserPlus className="size-4" />
+            {draft.id ? "编辑账号" : "新建账号"}
+          </div>
+          <div className="space-y-2">
+            <input
+              className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
+              disabled={busy}
+              onChange={(event) => onChangeDraft({ ...draft, email: event.target.value })}
+              placeholder="账号邮箱"
+              value={draft.email}
+            />
+            <input
+              className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
+              disabled={busy}
+              onChange={(event) => onChangeDraft({ ...draft, name: event.target.value })}
+              placeholder="名称"
+              value={draft.name}
+            />
+            <input
+              className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
+              disabled={busy}
+              onChange={(event) => onChangeDraft({ ...draft, password: event.target.value })}
+              placeholder={draft.id ? "密码留空不修改" : "初始密码，至少 8 位"}
+              type="password"
+              value={draft.password}
+            />
+            <select
+              className="apple-select h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
+              disabled={busy}
+              onChange={(event) => onChangeDraft({ ...draft, role: event.target.value === "owner" ? "owner" : "user" })}
+              value={draft.role}
+            >
+              <option value="user">普通账号</option>
+              <option value="owner">管理员</option>
+            </select>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className="apple-button-primary inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold" disabled={busy} onClick={onSave} type="button">
+              {activeAction === "save" ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+              {draft.id ? "保存账号" : "创建账号"}
+            </button>
+            {draft.id ? (
+              <button className="apple-button px-3 py-2 text-xs text-white/70" disabled={busy} onClick={onCancelEdit} type="button">
+                取消
+              </button>
+            ) : null}
+            <button className="apple-button inline-flex items-center gap-2 px-3 py-2 text-xs text-white/70" disabled={busy} onClick={onRefresh} type="button">
+              <RefreshCw className="size-3.5" />
+              刷新
+            </button>
+          </div>
+          {status.message ? (
+            <div className={`mt-3 rounded-[12px] border px-3 py-2 text-xs leading-5 ${
+              status.type === "error"
+                ? "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]"
+                : status.type === "success"
+                  ? "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
+                  : "border-white/10 bg-white/[0.045] text-white/58"
+            }`}>
+              {status.message}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="min-w-0 rounded-[18px] border border-white/10 bg-white/[0.035] p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-white/82">
+              <Users className="size-4" />
+              当前账号 · {accounts.length}
+            </div>
+            <span className="apple-caption">管理员可查看全部项目和密钥状态</span>
+          </div>
+          <div className="space-y-2">
+            {accounts.map((account) => (
+              <article className="rounded-[16px] border border-white/10 bg-black/10 p-3" key={account.id}>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-semibold text-white/86">{account.name || account.email}</span>
+                      <span className={account.role === "owner" ? "apple-pill-accent px-2 py-0.5 text-[11px]" : "apple-pill px-2 py-0.5 text-[11px]"}>
+                        {account.role === "owner" ? "管理员" : "普通账号"}
+                      </span>
+                      {account.isCurrent ? <span className="apple-pill px-2 py-0.5 text-[11px]">当前</span> : null}
+                      {account.activeRecently ? <span className="apple-status-success rounded-full border px-2 py-0.5 text-[11px]">24h 内登录</span> : null}
+                    </div>
+                    <div className="apple-caption mt-1 truncate">{account.email}</div>
+                    <div className="mt-2 grid gap-2 text-xs text-white/56 sm:grid-cols-2 xl:grid-cols-4">
+                      <span>项目 {account.projects.count}</span>
+                      <span>节点 {account.projects.nodeCount}</span>
+                      <span>素材 {account.projects.assetCount}</span>
+                      <span>出图 {account.projects.outputCount}</span>
+                    </div>
+                    <div className="mt-2 grid gap-2 text-xs text-white/46 sm:grid-cols-2">
+                      <span>登录：{account.lastLoginAt ? new Date(account.lastLoginAt).toLocaleString("zh-CN") : "未记录"} · {account.loginCount || 0} 次</span>
+                      <span>项目更新：{account.projects.latestUpdatedAt ? new Date(account.projects.latestUpdatedAt).toLocaleString("zh-CN") : "无"}</span>
+                    </div>
+                    <div className="mt-2 rounded-[12px] border border-white/10 bg-white/[0.035] px-3 py-2 text-xs leading-5 text-white/56">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Shield className="size-3.5 text-white/42" />
+                        <span>Key：{account.api.apiKey || account.api.maskedApiKey || (account.api.hasKey ? "已配置" : "未配置")}</span>
+                        <span>来源：{apiKeySourceLabel(account.api.keySource)}</span>
+                      </div>
+                      <div className="mt-1 truncate">模型：{account.api.textModel || "文本未选"} / {account.api.imageModel || "图片未选"}</div>
+                      <div className="truncate">接口：{account.api.providerName || "未配置"} {account.api.apiBaseUrl ? `· ${account.api.apiBaseUrl}` : ""}</div>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
+                    <button className="apple-button px-3 py-1.5 text-xs text-white/70" disabled={busy} onClick={() => onEdit(account)} type="button">
+                      编辑
+                    </button>
+                    <button className="apple-button px-3 py-1.5 text-xs text-white/70 disabled:opacity-45" disabled={busy || !account.api.hasKey || !account.api.canReveal} onClick={() => onReveal(account)} type="button">
+                      {account.api.apiKey ? "隐藏" : "显示 Key"}
+                    </button>
+                    <button className="apple-button-danger px-3 py-1.5 text-xs disabled:opacity-45" disabled={busy || !account.api.hasKey} onClick={() => onClearApiKey(account)} type="button">
+                      {activeAction === `clear:${account.id}` ? "清理中" : "清理 Key"}
+                    </button>
+                    <button className="apple-button-danger px-3 py-1.5 text-xs disabled:opacity-45" disabled={busy || account.isCurrent} onClick={() => onDelete(account)} type="button">
+                      {activeAction === `delete:${account.id}` ? "删除中" : confirmDeleteAccountId === account.id ? "确认删除" : "删除账号"}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+    </Panel>
   );
 }
 
@@ -1172,6 +1534,13 @@ function modelKindLabel(kind: ModelCapability) {
   if (kind === "embedding") return "Embedding";
   if (kind === "unknown") return "未知模型";
   return "文本模型";
+}
+
+function apiKeySourceLabel(source: string) {
+  if (source === "account") return "账号配置";
+  if (source === "legacy") return "全局旧配置";
+  if (source === "env") return "服务器环境变量";
+  return "无";
 }
 
 function stepLabel(step: string) {

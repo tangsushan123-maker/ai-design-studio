@@ -73,6 +73,7 @@ import { ImageFrame } from "@/components/workbench/image-frame";
 import { ImageManagerPanel, type ImageDeletionProtection } from "@/components/workbench/image-manager-panel";
 import { NodeResultsPanel } from "@/components/workbench/node-results-panel";
 import { AssetLibraryPanel } from "@/components/workbench/asset-library-panel";
+import { AccountSwitcher } from "@/components/account-switcher";
 import { HistoryPanel } from "@/components/workbench/history-panel";
 import { ProjectHomeScreen } from "@/components/workbench/project-home-screen";
 import { ProjectCreationModal, type ProjectCreationDraft } from "@/components/workbench/project-creation-modal";
@@ -487,6 +488,9 @@ type ServerTaskRunRecord = {
 type ProjectSummary = {
   id: string;
   name: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
+  ownerName?: string;
   projectKind?: ProjectKind;
   updatedAt?: string;
   nodeCount?: number;
@@ -582,6 +586,9 @@ type MaterialLibrarySummary = {
 type ProjectPayload = {
   id: string;
   name: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
+  ownerName?: string;
   projectKind?: ProjectKind;
   updatedAt?: string;
   viewport?: { x: number; y: number; zoom: number };
@@ -774,6 +781,11 @@ const defaultParamsByKind: Record<NodeKind, Record<string, unknown>> = {
     model: "",
     aspectRatio: "auto",
     quality: "standard",
+    designMode: "commercial",
+    textMode: "ai_text_preview",
+    designPlan: null,
+    planConfirmed: false,
+    planVariantSeed: 0,
     compositionCompleteness: "更完整",
     safeMargin: "15%",
     cameraDistance: "中景",
@@ -1036,6 +1048,9 @@ function NodeWorkflowWorkbench({
   const [lightboxImage, setLightboxImage] = useState<ImageAsset | null>(null);
   const [projectName, setProjectName] = useState("节点设计项目");
   const [projectId, setProjectId] = useState("local-project");
+  const [projectOwnerUserId, setProjectOwnerUserId] = useState("");
+  const [projectOwnerEmail, setProjectOwnerEmail] = useState("");
+  const [projectOwnerName, setProjectOwnerName] = useState("");
   const activeProjectIdRef = useRef(projectId);
   const dismissedTaskRefsRef = useRef(loadDismissedTaskRefs(projectId));
   const dismissedImageKeysRef = useRef(loadDismissedImageKeySet(projectId));
@@ -1504,6 +1519,9 @@ function NodeWorkflowWorkbench({
         const restoredProjectName = stored?.name || "节点设计项目";
         if (stored?.id) setProjectId(stored.id);
         if (stored?.name) setProjectName(stored.name);
+        setProjectOwnerUserId(stored?.ownerUserId || "");
+        setProjectOwnerEmail(stored?.ownerEmail || "");
+        setProjectOwnerName(stored?.ownerName || "");
         setProjectKind(normalizeProjectKind(stored?.projectKind));
         const restoredRuns = restoreProjectTasks(stored?.runs || []);
         const restoredTasks = workflowRuntimeRef.current.resetTaskProjectContexts(
@@ -1535,6 +1553,9 @@ function NodeWorkflowWorkbench({
         const restoredProjectName = stored?.name || "节点设计项目";
         if (stored?.id) setProjectId(stored.id);
         if (stored?.name) setProjectName(stored.name);
+        setProjectOwnerUserId(stored?.ownerUserId || "");
+        setProjectOwnerEmail(stored?.ownerEmail || "");
+        setProjectOwnerName(stored?.ownerName || "");
         setProjectKind(normalizeProjectKind(stored?.projectKind));
         const restoredRuns = restoreProjectTasks(stored?.runs || []);
         const restoredTasks = workflowRuntimeRef.current.resetTaskProjectContexts(
@@ -2206,6 +2227,9 @@ function NodeWorkflowWorkbench({
       { projectId: nextId, projectName: temporaryName },
     );
     setProjectId(nextId);
+    setProjectOwnerUserId("");
+    setProjectOwnerEmail("");
+    setProjectOwnerName("");
     setProjectName(temporaryName);
     setProjectKind("temporary");
     setProjectAssets(nextAssets);
@@ -3267,6 +3291,7 @@ function NodeWorkflowWorkbench({
     const custom = customSize(params);
     const prompt = enrichPrompt(basePrompt, buildTextToImageConstraintText(node, basePrompt, references.manifest));
     if (!prompt) throw new Error("文生图节点需要填写 prompt。");
+    setStatus("AI 正在后台分析需求、参考图和素材，并生成成品图。");
     const shouldAttachProjectContext = shouldUseProjectPromptContext(basePrompt);
     const brandReferences = shouldAttachProjectContext ? resolveBrandReferenceAssets(projectProfile, getCurrentProjectBrandAssets(projectAssets, projectKnowledge)) : [];
     if (brandReferences.length || references.items.length) {
@@ -3281,6 +3306,7 @@ function NodeWorkflowWorkbench({
       appendImageModel(formData, node, stringParam(params.model));
       appendTaskTrace(formData, taskId, node, "text_to_image");
       formData.append("referenceManifest", JSON.stringify(references.manifest));
+      formData.append("textMode", stringParam(params.textMode) || "ai_text_preview");
       appendTextToImageCompositionSettings(formData, params);
       formData.append("protectionContext", JSON.stringify(buildProductionProtectionContext("text_to_image", references.items.map((item) => item.image), node, basePrompt)));
       await appendTextReferenceImages(formData, references.items);
@@ -3304,6 +3330,7 @@ function NodeWorkflowWorkbench({
         imageModel: activeImageModelForNode(node, stringParam(params.model)),
         model: activeImageModelForNode(node, stringParam(params.model)),
         referenceImages: references.manifest,
+        textMode: stringParam(params.textMode) || "ai_text_preview",
         compositionCompleteness: textToImageCompositionCompleteness(params),
         safeMargin: textToImageSafeMargin(params),
         cameraDistance: textToImageCameraDistance(params),
@@ -4794,6 +4821,9 @@ function NodeWorkflowWorkbench({
     return {
       id: projectId,
       name: projectName,
+      ownerUserId: projectOwnerUserId || undefined,
+      ownerEmail: projectOwnerEmail || undefined,
+      ownerName: projectOwnerName || undefined,
       projectKind,
       viewport: getViewport(),
       assets: projectAssets.map(stripImageFile),
@@ -4853,8 +4883,10 @@ function NodeWorkflowWorkbench({
     }
   }
 
-  async function loadProject(id: string) {
-    const response = await fetch(`/api/project?id=${encodeURIComponent(id)}`);
+  async function loadProject(id: string, ownerUserId?: string) {
+    const params = new URLSearchParams({ id });
+    if (ownerUserId) params.set("ownerUserId", ownerUserId);
+    const response = await fetch(`/api/project?${params.toString()}`);
     if (!response.ok) {
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       setStatus(data.error || `打开项目失败（HTTP ${response.status}）。`);
@@ -4867,6 +4899,9 @@ function NodeWorkflowWorkbench({
     }
     setProjectId(project.id || id);
     setProjectName(project.name || "AI 设计项目");
+    setProjectOwnerUserId(project.ownerUserId || ownerUserId || "");
+    setProjectOwnerEmail(project.ownerEmail || "");
+    setProjectOwnerName(project.ownerName || "");
     setProjectKind(normalizeProjectKind(project.projectKind));
     const restoredProjectId = project.id || id;
     const restoredProjectName = project.name || "AI 设计项目";
@@ -4903,7 +4938,7 @@ function NodeWorkflowWorkbench({
     await fetch("/api/project", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(stripProjectRuntimeState({ ...project, setActive: true })),
+      body: JSON.stringify(stripProjectRuntimeState({ ...project, ownerUserId: project.ownerUserId || ownerUserId, setActive: true })),
     }).catch(() => {
       activeProjectSyncFailed = true;
     });
@@ -4915,11 +4950,11 @@ function NodeWorkflowWorkbench({
     return true;
   }
 
-  async function deleteProject(id: string) {
+  async function deleteProject(id: string, ownerUserId?: string) {
     const response = await fetch("/api/project", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id, ownerUserId }),
     });
     if (!response.ok) {
       const data = (await response.json().catch(() => ({}))) as { error?: string };
@@ -5174,6 +5209,9 @@ function NodeWorkflowWorkbench({
     setProjectProfile(emptyProjectProfile);
     setSelectedNodeId(null);
     setProjectId(nextId);
+    setProjectOwnerUserId("");
+    setProjectOwnerEmail("");
+    setProjectOwnerName("");
     setProjectName(nextName);
     setProjectKind("formal");
     setProjectKnowledge(nextKnowledge);
@@ -5214,11 +5252,11 @@ function NodeWorkflowWorkbench({
     }
   }
 
-  async function openProjectFromHome(id: string) {
+  async function openProjectFromHome(id: string, ownerUserId?: string) {
     if (!projectBootReady || homeBusy) return;
     setHomeBusy(true);
     try {
-      const opened = await loadProject(id);
+      const opened = await loadProject(id, ownerUserId);
       if (opened) {
         setHomeProjectPickerOpen(false);
         setHomeOpen(false);
@@ -5239,10 +5277,11 @@ function NodeWorkflowWorkbench({
     return (
       <ProjectHomeScreen
         activeProjectId={projectId}
+        activeProjectOwnerUserId={projectOwnerUserId}
         busy={homeBusy || !projectBootReady}
         formatUpdatedAt={formatGeneratedAt}
         onCreate={() => void enterNewProjectFromHome()}
-        onOpen={(id) => void openProjectFromHome(id)}
+        onOpen={(id, ownerUserId) => void openProjectFromHome(id, ownerUserId)}
         onRefreshProjects={() => void refreshProjectList()}
         onShowProjects={showHomeProjectPicker}
         pickerOpen={homeProjectPickerOpen}
@@ -5257,7 +5296,7 @@ function NodeWorkflowWorkbench({
     <main className="apple-shell flex h-screen overflow-hidden text-[#f5f7fb]">
       <aside
         className={`apple-sidebar z-20 flex shrink-0 flex-col items-center gap-2 px-2 py-4 transition-[width] duration-200 ${
-          leftRailOpen ? "w-[88px]" : "w-[60px]"
+          leftRailOpen ? "w-[118px]" : "w-[60px]"
         }`}
       >
         <button
@@ -5309,12 +5348,14 @@ function NodeWorkflowWorkbench({
             <KeyRound className="size-4" />
             {leftRailOpen ? <span className="text-[11px] leading-none opacity-80">设置</span> : null}
           </Link>
+          <AccountSwitcher compact expanded={leftRailOpen} />
         </div>
       </aside>
 
       {projectPanelOpen ? (
         <ProjectLibraryPanel
           activeProjectId={projectId}
+          activeProjectOwnerUserId={projectOwnerUserId}
           formatUpdatedAt={formatGeneratedAt}
           projects={projectList}
           onClose={() => setProjectPanelOpen(false)}
@@ -5482,7 +5523,7 @@ function NodeWorkflowWorkbench({
 
         {nodeMenuOpen && !isPerformanceMode ? (
           <NodeMenu
-            x={leftRailOpen ? 96 : 70}
+            x={leftRailOpen ? 126 : 70}
             y={82}
             onClose={() => setNodeMenuOpen(false)}
             onSelect={(type) => {
@@ -7844,6 +7885,7 @@ function ImageLightbox({
   const [message, setMessage] = useState("");
   const [sidebarTab, setSidebarTab] = useState<"actions" | "info">("actions");
   const [activeEditTool, setActiveEditTool] = useState<"optimize" | "mask" | "resize" | "upscale" | null>(null);
+  const [previewZoom, setPreviewZoom] = useState(0);
   const [activeActionLabel, setActiveActionLabel] = useState("");
   const [confirmLightboxAction, setConfirmLightboxAction] = useState("");
   const [showPromptDetails, setShowPromptDetails] = useState(false);
@@ -7909,6 +7951,14 @@ function ImageLightbox({
     compareBefore
     && (image.nodeOperation === "hd_redraw" || image.nodeOperation === "upscale_4k" || image.nodeOperation === "mask_edit" || image.nodeOperation === "design_optimize" || image.mode?.includes("画质增强") || image.mode?.includes("局部") || image.mode?.includes("设计优化")),
   );
+  const previewFrameStyle = previewZoom
+    ? zoomedPreviewFrameStyle(image, previewZoom)
+    : largePreviewFrameStyle(image);
+  const previewZoomLabel = previewZoom ? `${Math.round(previewZoom * 100)}%` : "适应";
+
+  function changePreviewZoom(nextZoom: number) {
+    setPreviewZoom(Math.max(0.5, Math.min(3, Number(nextZoom.toFixed(2)))));
+  }
 
   async function runAction(label: string, action: () => void | Promise<void>) {
     if (activeActionLabel) return;
@@ -7955,8 +8005,32 @@ function ImageLightbox({
         </div>
         <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-white/[0.025] lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-h-0 p-2 sm:p-3">
-            <div className="relative flex h-full min-h-[320px] items-center justify-center overflow-auto bg-transparent p-2">
-              <div className="relative mx-auto overflow-hidden rounded-[18px] border border-white/10 bg-transparent shadow-[0_20px_70px_rgba(0,0,0,0.32)]" style={largePreviewFrameStyle(image)}>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-[16px] border border-white/10 bg-white/[0.04] px-2.5 py-2">
+              <div className="text-[11px] font-semibold text-white/70">查看：{previewZoomLabel}</div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button className={`apple-button rounded-full px-2.5 py-1 text-[11px] ${previewZoom === 0 ? "border-white/35 bg-white text-black" : "text-white/70"}`} onClick={() => setPreviewZoom(0)} type="button">
+                  适应
+                </button>
+                {[1, 1.5, 2].map((value) => (
+                  <button
+                    className={`apple-button rounded-full px-2.5 py-1 text-[11px] ${previewZoom === value ? "border-white/35 bg-white text-black" : "text-white/70"}`}
+                    key={value}
+                    onClick={() => setPreviewZoom(value)}
+                    type="button"
+                  >
+                    {Math.round(value * 100)}%
+                  </button>
+                ))}
+                <button aria-label="缩小图片" className="apple-button flex size-7 items-center justify-center rounded-full text-white/70" onClick={() => changePreviewZoom((previewZoom || 1) - 0.25)} type="button">
+                  -
+                </button>
+                <button aria-label="放大图片" className="apple-button flex size-7 items-center justify-center rounded-full text-white/70" onClick={() => changePreviewZoom((previewZoom || 1) + 0.25)} type="button">
+                  <Plus className="size-3.5" />
+                </button>
+              </div>
+            </div>
+            <div className={`relative h-[calc(100%-46px)] min-h-[320px] overflow-auto bg-transparent p-2 ${previewZoom ? "flex items-start justify-start" : "flex items-center justify-center"}`}>
+              <div className="relative mx-auto overflow-hidden rounded-[18px] border border-white/10 bg-transparent shadow-[0_20px_70px_rgba(0,0,0,0.32)]" style={previewFrameStyle}>
                 {activePngLayer ? (
                   <div className="relative h-full w-full">
                     <ImageFrame
@@ -9914,6 +9988,17 @@ function largePreviewFrameStyle(image: Pick<ImageAsset, "outputSize" | "width" |
     width: `min(100%, ${maxWidth}px, calc(${heightBudget} * ${ratio}))`,
     maxWidth: "100%",
     maxHeight: `calc${heightBudget}`,
+  };
+}
+
+function zoomedPreviewFrameStyle(image: Pick<ImageAsset, "outputSize" | "width" | "height"> | null | undefined, zoom: number) {
+  const width = Math.max(1, image?.outputSize?.width || image?.width || 1);
+  const height = Math.max(1, image?.outputSize?.height || image?.height || 1);
+  return {
+    aspectRatio: `${width} / ${height}`,
+    width: `${Math.round(width * zoom)}px`,
+    maxWidth: "none",
+    maxHeight: "none",
   };
 }
 

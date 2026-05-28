@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { mkdir, readFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
+import { requireCurrentUser } from "@/lib/auth";
 import { listGeneratedImages } from "@/lib/generated-history";
 import { getGeneratedDir } from "@/lib/image-utils";
 import { writeJsonAtomic } from "@/lib/local-json-store";
@@ -18,6 +19,7 @@ const generatedImagePayloadMessages = {
 
 export async function GET(request: Request) {
   try {
+    const user = await requireCurrentUser();
     const { searchParams } = new URL(request.url);
     const limit = boundedListNumber(searchParams.get("limit"), 20, 1, generatedImageListMaxLimit);
     const offset = boundedListNumber(searchParams.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER);
@@ -27,7 +29,16 @@ export async function GET(request: Request) {
       .split(",")
       .map((item) => item.trim())
       .filter(Boolean);
-    return NextResponse.json(await listGeneratedImages({ limit, offset, projectId, requestIds, trashOnly }));
+    const ownerUserId = user.role === "owner" ? searchParams.get("ownerUserId") || undefined : user.id;
+    return NextResponse.json(await listGeneratedImages({
+      limit,
+      offset,
+      projectId,
+      ownerUserId,
+      includeUnowned: user.role === "owner",
+      requestIds,
+      trashOnly,
+    }));
   } catch (error) {
     return NextResponse.json({ error: generatedImageErrorMessage("读取图片列表失败", error) }, { status: 500 });
   }
@@ -35,6 +46,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const user = await requireCurrentUser();
     const body = await parseGeneratedImagePayload(request, "update");
     const fileName = body.fileName || "";
 
@@ -46,14 +58,18 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "图片文件名不合法。" }, { status: 400 });
     }
 
+    const dir = getGeneratedDir();
+    const metadataPath = path.join(dir, `${fileName}.json`);
+    const current = await readGeneratedMetadata(metadataPath);
+    if (!canManageGeneratedImage(user, current)) {
+      return NextResponse.json({ error: "只能操作自己账号下的图片。" }, { status: 403 });
+    }
+
     if (body.action === "restore") {
       const restored = await restoreGeneratedImage(fileName);
       return NextResponse.json({ ok: true, ...restored });
     }
 
-    const dir = getGeneratedDir();
-    const metadataPath = path.join(dir, `${fileName}.json`);
-    const current = await readGeneratedMetadata(metadataPath);
     const next = {
       ...current,
       ...(body.metadata || {}),
@@ -73,6 +89,7 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const user = await requireCurrentUser();
     const body = await parseGeneratedImagePayload(request, "delete");
     const fileName = body.fileName || "";
 
@@ -87,6 +104,10 @@ export async function DELETE(request: Request) {
     const dir = getGeneratedDir();
     const imagePath = path.join(dir, fileName);
     const metadataPath = path.join(dir, `${fileName}.json`);
+    const current = await readGeneratedMetadata(metadataPath);
+    if (!canManageGeneratedImage(user, current)) {
+      return NextResponse.json({ error: "只能删除自己账号下的图片。" }, { status: 403 });
+    }
 
     if (body.permanent || fileName.startsWith(`${generatedTrashDirName}/`)) {
       await unlink(imagePath).catch(() => {});
@@ -210,6 +231,11 @@ async function readGeneratedMetadata(metadataPath: string) {
   } catch {
     return {};
   }
+}
+
+function canManageGeneratedImage(user: { id: string; role: "owner" | "user" }, metadata: Record<string, unknown>) {
+  if (user.role === "owner") return true;
+  return typeof metadata.ownerUserId === "string" && metadata.ownerUserId === user.id;
 }
 
 function isSafeGeneratedRelativePath(fileName: string) {

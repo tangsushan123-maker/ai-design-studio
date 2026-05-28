@@ -22,6 +22,7 @@ import { getAnalysisModel, resolveImageModel, supportsConfigurableImageInputFide
 import { getOpenAI } from "@/lib/openai";
 import { assertSupportedImage, getImageRatio } from "@/lib/request-guards";
 import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
+import { withCurrentConfigUser } from "@/lib/request-config-user";
 
 export const runtime = "nodejs";
 
@@ -67,6 +68,7 @@ type DesignOptimizeInput = {
 };
 
 export async function POST(request: Request) {
+  return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
   try {
@@ -220,6 +222,8 @@ export async function POST(request: Request) {
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
   }
+
+  });
 }
 
 async function parseMultipartInput(request: Request): Promise<DesignOptimizeInput> {

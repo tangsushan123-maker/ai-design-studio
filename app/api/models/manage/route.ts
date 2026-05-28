@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { deleteModelCacheItem, getOpenAIConfig, saveLocalConfig, upsertModelCacheItem } from "@/lib/local-config";
+import { requireCurrentUser } from "@/lib/auth";
+import { deleteModelCacheItem, getOpenAIConfig, runWithConfigUser, saveLocalConfig, upsertModelCacheItem } from "@/lib/local-config";
 import { inferModelCapabilities, type ModelCapability, type ModelCatalogItem } from "@/lib/openai-defaults";
 
 export const runtime = "nodejs";
@@ -14,6 +15,8 @@ const modelManagePayloadMessages = {
 
 export async function POST(request: Request) {
   try {
+    const user = await requireCurrentUser();
+    return await runWithConfigUser(user, async () => {
     const body = await parseModelManagePayload(request, "save");
     const id = body.id?.trim();
     if (!id) {
@@ -68,6 +71,7 @@ export async function POST(request: Request) {
       imageModel: nextSaved.imageModel,
       videoModel: nextSaved.videoModel,
     });
+    });
   } catch (error) {
     if (error instanceof InvalidModelManagePayloadError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
@@ -78,6 +82,8 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const user = await requireCurrentUser();
+    return await runWithConfigUser(user, async () => {
     const body = await parseModelManagePayload(request, "delete");
     const id = body.id?.trim();
     if (!id) {
@@ -93,6 +99,7 @@ export async function DELETE(request: Request) {
       textModel: config.textModel,
       imageModel: config.imageModel,
       videoModel: config.videoModel,
+    });
     });
   } catch (error) {
     if (error instanceof InvalidModelManagePayloadError) {

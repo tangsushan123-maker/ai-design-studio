@@ -1,10 +1,14 @@
 "use client";
 
 import { FolderOpen, Plus, RefreshCcw } from "lucide-react";
+import { AccountSwitcher } from "@/components/account-switcher";
 
 export type ProjectHomeItem = {
   id: string;
   name: string;
+  ownerUserId?: string;
+  ownerEmail?: string;
+  ownerName?: string;
   updatedAt?: string;
   assetCount?: number;
   coverUrl?: string;
@@ -12,6 +16,7 @@ export type ProjectHomeItem = {
 
 export function ProjectHomeScreen({
   activeProjectId,
+  activeProjectOwnerUserId = "",
   busy,
   formatUpdatedAt,
   onCreate,
@@ -24,10 +29,11 @@ export function ProjectHomeScreen({
   projects,
 }: {
   activeProjectId: string;
+  activeProjectOwnerUserId?: string;
   busy: boolean;
   formatUpdatedAt: (value: string) => string;
   onCreate: () => void;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, ownerUserId?: string) => void;
   onRefreshProjects: () => void;
   onShowProjects: () => void;
   pickerOpen: boolean;
@@ -45,7 +51,12 @@ export function ProjectHomeScreen({
             <div className="text-[20px] font-semibold text-white/92">AI 设计工作台</div>
             <div className="apple-caption mt-1 truncate">先选择项目，再进入节点画布。</div>
           </div>
-          <span className="apple-pill shrink-0 px-2.5 py-1 text-[11px]">{busy ? "准备中" : "就绪"}</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="apple-pill px-2.5 py-1 text-[11px]">{busy ? "准备中" : "就绪"}</span>
+            <div className="w-[116px]">
+              <AccountSwitcher compact expanded />
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2">
@@ -92,12 +103,14 @@ export function ProjectHomeScreen({
             ) : null}
             {projects.length ? (
               <div className="space-y-2">
-                {projects.map((project) => (
+                {projects.map((project) => {
+                  const active = isActiveProjectItem(project, activeProjectId, activeProjectOwnerUserId);
+                  return (
                   <button
-                    className={`apple-interactive-card flex w-full items-center gap-3 p-3 text-left ${project.id === activeProjectId ? "is-selected" : ""}`}
+                    className={`apple-interactive-card flex w-full items-center gap-3 p-3 text-left ${active ? "is-selected" : ""}`}
                     disabled={projectActionsDisabled}
-                    key={project.id}
-                    onClick={() => onOpen(project.id)}
+                    key={projectItemKey(project)}
+                    onClick={() => onOpen(project.id, project.ownerUserId)}
                     type="button"
                   >
                     {project.coverUrl ? (
@@ -114,11 +127,12 @@ export function ProjectHomeScreen({
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-semibold text-white/84">{project.name}</span>
                       <span className="apple-caption mt-0.5 block truncate">
-                        {(project.assetCount || 0)} 素材 · {project.updatedAt ? formatUpdatedAt(project.updatedAt) : "刚刚"}
+                        {project.ownerEmail ? `${project.ownerName || project.ownerEmail} · ` : ""}{(project.assetCount || 0)} 素材 · {project.updatedAt ? formatUpdatedAt(project.updatedAt) : "刚刚"}
                       </span>
                     </span>
                   </button>
-                ))}
+                );
+                })}
               </div>
             ) : projectListLoading ? (
               <div className="apple-empty-state px-4 py-8 text-center text-[12px] text-white/46">正在加载项目...</div>
@@ -130,4 +144,14 @@ export function ProjectHomeScreen({
       </section>
     </main>
   );
+}
+
+function projectItemKey(project: ProjectHomeItem) {
+  return `${project.ownerUserId || "current"}:${project.id}`;
+}
+
+function isActiveProjectItem(project: ProjectHomeItem, activeProjectId: string, activeProjectOwnerUserId = "") {
+  if (project.id !== activeProjectId) return false;
+  if (!activeProjectOwnerUserId) return true;
+  return (project.ownerUserId || "") === activeProjectOwnerUserId;
 }

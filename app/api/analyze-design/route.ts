@@ -4,10 +4,12 @@ import { diagnosisToDisplayText, extractProtectionFromText, safeParseDiagnosis }
 import { getAnalysisModel } from "@/lib/model-config";
 import { getOpenAI } from "@/lib/openai";
 import { assertSupportedImage } from "@/lib/request-guards";
+import { withCurrentConfigUser } from "@/lib/request-config-user";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  return await withCurrentConfigUser(async () => {
   try {
     const formData = await request.formData();
     const image = formData.get("image");
@@ -82,4 +84,6 @@ export async function POST(request: Request) {
     const apiError = toApiError(error, "分析失败。");
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
   }
+
+  });
 }

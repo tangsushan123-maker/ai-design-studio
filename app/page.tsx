@@ -1,8 +1,11 @@
+import { getCurrentUser } from "@/lib/auth";
 import { getOpenAIConfig } from "@/lib/local-config";
+import { runWithConfigUser } from "@/lib/local-config";
 import WorkbenchClient from "./workbench-client";
 
 export default async function Page() {
-  const config = getOpenAIConfig();
+  const user = await getCurrentUser();
+  const config = runWithConfigUser(user, () => getOpenAIConfig());
 
   return (
     <WorkbenchClient

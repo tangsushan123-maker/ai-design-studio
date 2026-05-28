@@ -13,6 +13,8 @@ export type GeneratedHistoryOptions = {
   limit?: number;
   offset?: number;
   projectId?: string;
+  ownerUserId?: string;
+  includeUnowned?: boolean;
   requestIds?: string[];
   trashOnly?: boolean;
 };
@@ -37,6 +39,10 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
     const requestIdSet = new Set((options.requestIds || []).map((item) => item.trim()).filter(Boolean));
     const taskIdSet = new Set([...requestIdSet].map((item) => item.replace(/^req_/, "task_")));
     const scopedEntries = fileEntries.filter((entry) => {
+      if (options.ownerUserId) {
+        const ownerUserId = stringValue(entry.savedMetadata.ownerUserId);
+        if (ownerUserId !== options.ownerUserId && !(options.includeUnowned && !ownerUserId)) return false;
+      }
       if (options.projectId && stringValue(entry.savedMetadata.projectId) !== options.projectId) return false;
       if (!requestIdSet.size) return true;
       const sourceRequestId = stringValue(entry.savedMetadata.sourceRequestId);
@@ -98,6 +104,9 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
           deletedAt: stringValue(savedMetadata.deletedAt),
           originalFileName: stringValue(savedMetadata.originalFileName),
           projectId: stringValue(savedMetadata.projectId),
+          ownerUserId: stringValue(savedMetadata.ownerUserId),
+          ownerEmail: stringValue(savedMetadata.ownerEmail),
+          ownerName: stringValue(savedMetadata.ownerName),
           parentImageId: stringValue(savedMetadata.parentImageId),
           rootImageId: stringValue(savedMetadata.rootImageId),
           branchId: stringValue(savedMetadata.branchId),

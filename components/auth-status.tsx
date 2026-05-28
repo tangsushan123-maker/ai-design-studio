@@ -7,11 +7,18 @@ export async function AuthStatus() {
 
   return (
     <div className="auth-status" aria-label="当前账号">
-      <ShieldCheck size={14} aria-hidden="true" />
-      <span className="auth-status__name">{user.name}</span>
+      <div className="auth-status__identity">
+        <ShieldCheck className="auth-status__icon" size={14} aria-hidden="true" />
+        <span className="auth-status__text">
+          <span className="auth-status__label">当前账号</span>
+          <span className="auth-status__name">{user.name || user.email}</span>
+          <span className="auth-status__email">{user.email}</span>
+        </span>
+      </div>
       <form action="/api/auth/logout" method="post">
-        <button className="auth-status__button" type="submit" title="退出登录" aria-label="退出登录">
+        <button className="auth-status__button" type="submit" title="退出并切换账号" aria-label="退出并切换账号">
           <LogOut size={14} aria-hidden="true" />
+          <span>切换账号</span>
         </button>
       </form>
     </div>

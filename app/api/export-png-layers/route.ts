@@ -10,6 +10,7 @@ import { ensureGeneratedDir, getGeneratedDir, getGeneratedProjectRelativeDir, ge
 import { resolveImageModel } from "@/lib/model-config";
 import { getOpenAI } from "@/lib/openai";
 import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromJson, type TaskRunTrace } from "@/lib/task-run-ledger";
+import { withCurrentConfigUser } from "@/lib/request-config-user";
 
 export const runtime = "nodejs";
 
@@ -71,6 +72,7 @@ type ExportLayerSpec = {
 };
 
 export async function POST(request: Request) {
+  return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
   try {
@@ -195,6 +197,8 @@ export async function POST(request: Request) {
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
   }
+
+  });
 }
 
 class InvalidPngLayerExportPayloadError extends Error {}
