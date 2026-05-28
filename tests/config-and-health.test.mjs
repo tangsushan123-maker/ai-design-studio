@@ -818,6 +818,9 @@ describe("Bounded local IO", () => {
     assert.equal(adminAccountsSource.includes("async function readJsonFile"), false);
     assert.equal(materialLibrariesSource.includes("projectLibraryReadConcurrency = 8"), true);
     assert.equal(materialLibrariesSource.includes("mapWithConcurrency(users, projectLibraryReadConcurrency"), true);
+    assert.equal(materialLibrariesSource.includes("function flattenProjectLibraries"), true);
+    assert.equal(materialLibrariesSource.includes("store.projects.flatMap"), false);
+    assert.equal(materialLibrariesSource.includes("libraries.flat()"), false);
     assert.equal(materialLibrariesSource.includes("createSharedRootProjectStoreLoader"), true);
     assert.equal(materialLibrariesSource.includes("pending ||= readRootProjectStore()"), true);
     assert.equal(materialLibrariesSource.includes("readProjectLibraries(user.id, loadRootProjectStore)"), true);
@@ -1635,6 +1638,10 @@ describe("Workflow canvas performance", () => {
     assert.equal(workbenchSource.includes('updateNodeParam(selectedNode.id, "aspectRatio", value)'), true);
     assert.equal(workbenchSource.includes("function reusableTextToImageNode()"), true);
     assert.equal(workbenchSource.includes("已复用现有文生图节点并开始运行。"), true);
+    assert.equal(workbenchSource.includes("function taskCandidateImagesFromNodes"), true);
+    assert.equal(workbenchSource.includes("nodesRef.current.flatMap(taskCandidateImagesFromNode)"), false);
+    assert.equal(workbenchSource.includes("scoped.map((task) => task.requestId).filter"), false);
+    assert.equal(workbenchSource.includes("const next = current.flatMap((task) =>"), false);
     assert.equal(workbenchSource.includes("creativeStartBusyRef.current"), true);
     assert.equal(workbenchSource.includes("apple-button max-w-full truncate rounded-full px-2.5 py-1 text-[10px]"), false);
     assert.equal(workbenchSource.includes("apple-button rounded-full px-2.5 py-1 text-[10px]"), false);

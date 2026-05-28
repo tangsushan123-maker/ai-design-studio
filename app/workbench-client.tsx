@@ -419,6 +419,22 @@ function countImagesInResultGroup(images: ImageAsset[], resultGroupId: string | 
   return count;
 }
 
+function taskRequestIds(tasks: TaskRecord[]) {
+  const requestIds: string[] = [];
+  for (const task of tasks) {
+    if (task.requestId) requestIds.push(task.requestId);
+  }
+  return requestIds;
+}
+
+function taskCandidateImagesFromNodes(nodes: FlowNode[]) {
+  const images: ImageAsset[] = [];
+  for (const node of nodes) {
+    images.push(...taskCandidateImagesFromNode(node));
+  }
+  return images;
+}
+
 export default function WorkbenchClient({
   initialImages = [],
   initialHistoryHasMore = false,
@@ -1809,7 +1825,7 @@ function NodeWorkflowWorkbench({
     if (!scoped.length) return;
     dismissedTaskRefsRef.current = markDismissedTaskRefs(projectId, scoped);
     if (options.clearBackend !== false) {
-      const requestIds = scoped.map((task) => task.requestId).filter((id): id is string => Boolean(id));
+      const requestIds = taskRequestIds(scoped);
       if (requestIds.length) {
         void fetch("/api/task-runs", {
           method: "PATCH",
@@ -1871,7 +1887,7 @@ function NodeWorkflowWorkbench({
 
   function clearCanvas() {
     dismissNodeIds(nodesRef.current.map((node) => node.id));
-    dismissResultImages(nodesRef.current.flatMap(taskCandidateImagesFromNode));
+    dismissResultImages(taskCandidateImagesFromNodes(nodesRef.current));
     tasks.filter(isTaskActivelyRunning).forEach((task) => {
       taskAbortControllersRef.current[task.id]?.abort();
       void notifyBackendTaskCancelled(task);
@@ -4448,7 +4464,8 @@ function NodeWorkflowWorkbench({
     setNodes((current) => current.map((node) => removeImageFromNode(node, fileName)));
     setTasks((current) => {
       const removedTasks: TaskRecord[] = [];
-      const next = current.flatMap((task) => {
+      const next: TaskRecord[] = [];
+      for (const task of current) {
         const outputs = (task.outputs || []).filter((item) => !imageMatchesGeneratedFile(item, fileName));
         const resultRemoved = task.result ? imageMatchesGeneratedFile(task.result, fileName) : false;
         const nextTask = {
@@ -4460,10 +4477,10 @@ function NodeWorkflowWorkbench({
         };
         if ((task.status === "completed" || task.status === "failed" || task.status === "cancelled") && !nextTask.outputs.length && !nextTask.result) {
           removedTasks.push(task);
-          return [];
+          continue;
         }
-        return [nextTask];
-      });
+        next.push(nextTask);
+      }
       if (removedTasks.length) dismissTaskRecords(removedTasks);
       tasksRef.current = next;
       return next;

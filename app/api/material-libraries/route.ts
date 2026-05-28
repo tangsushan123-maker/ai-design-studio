@@ -102,7 +102,8 @@ async function readProjectLibraries(userId: string, loadRootProjectStore: RootPr
     store = await loadRootProjectStore();
   }
   if (!Array.isArray(store.projects)) return [];
-  return store.projects.flatMap((project) => {
+  const libraries: MaterialLibraryRecord[] = [];
+  for (const project of store.projects) {
     const fallback = createEmptyMaterialLibrary({
       id: `${project.id}_library`,
       name: `${project.name || "项目"}素材库`,
@@ -110,15 +111,24 @@ async function readProjectLibraries(userId: string, loadRootProjectStore: RootPr
       ownerProjectId: project.id,
     });
     const normalized = normalizeMaterialLibraryRecord(project.knowledge?.materialLibrary, fallback);
-    return [{ ...normalized, ownerProjectId: project.id }];
-  });
+    libraries.push({ ...normalized, ownerProjectId: project.id });
+  }
+  return libraries;
 }
 
 async function readAllProjectLibraries() {
   const users = await listAuthUsers();
   const loadRootProjectStore = createSharedRootProjectStoreLoader();
   const libraries = await mapWithConcurrency(users, projectLibraryReadConcurrency, (user) => readProjectLibraries(user.id, loadRootProjectStore));
-  return libraries.flat();
+  return flattenProjectLibraries(libraries);
+}
+
+function flattenProjectLibraries(libraryGroups: MaterialLibraryRecord[][]) {
+  const libraries: MaterialLibraryRecord[] = [];
+  for (const group of libraryGroups) {
+    libraries.push(...group);
+  }
+  return libraries;
 }
 
 function createSharedRootProjectStoreLoader(): RootProjectStoreLoader {
