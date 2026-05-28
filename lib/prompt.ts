@@ -370,9 +370,25 @@ export function buildDesignDirectorImagePrompt(
       `User request: ${compactPromptText(request.prompt, 520)}`,
       `Purpose/audience: ${brief.communicationGoal}; ${brief.audience}.`,
     ]),
+    promptSection("Structured poster planning", [
+      `Inferred design type: ${brief.imageType}.`,
+      `Inferred use scene: ${brief.useScene}.`,
+      `Inferred audience: ${brief.audience}.`,
+      `Communication goal: ${brief.communicationGoal}.`,
+      `Industry/style rules: ${brief.industryRules}.`,
+    ]),
+    promptSection("Planned visible copy", plannedVisibleCopyLines(brief, request.prompt, hasExplicitCopy)),
     promptSection("Canvas", [
       `Native ${ratio.label}, target ${ratio.targetWidth}x${ratio.targetHeight}; full composition. No cropping, no side blur padding, no frosted edges.`,
       `Keep ${importantElementsLabel(request.prompt)} complete inside 10-15% safe margins.`,
+    ]),
+    promptSection("Scene and layout execution", [
+      `Primary visual elements: ${direction.mainVisual || brief.mainVisualConcept}.`,
+      `Layout zones: ${direction.layout || brief.layout}.`,
+      `Color/style system: ${direction.palette || brief.colorSystem}.`,
+      `Typography tone: ${brief.typographyTone}; ${direction.typography}.`,
+      `Whitespace/safety: ${brief.whitespaceAndSafety}.`,
+      "Do not merely draw words from the user request; execute the planned copy, visual elements, layout zones, palette, and commercial hierarchy above.",
     ]),
     promptSection("Selected design direction", [
       `${direction.name} - ${direction.concept}`,
@@ -401,6 +417,20 @@ export function buildDesignDirectorImagePrompt(
       buildContextAwareAvoidLine(request.prompt),
     ]),
   ].filter(Boolean).join("\n");
+}
+
+function plannedVisibleCopyLines(brief: DesignDirectorBrief, prompt: string, hasExplicitCopy: boolean) {
+  const noVisiblePolicy = resolveNoVisibleOutputPolicy(prompt);
+  if (noVisiblePolicy.noText) return ["No visible copy; reserve clean negative space for real-font layout later."];
+  return [
+    hasExplicitCopy
+      ? "User provided explicit copy: keep the user's title/copy meaning and do not invent real contact information."
+      : "No explicit copy was provided: use the following planned short commercial copy instead of simply repeating the raw user prompt.",
+    `Headline: ${brief.title}.`,
+    brief.subtitle ? `Subheadline: ${brief.subtitle}.` : "",
+    brief.sellingPoints.length ? `Selling points: ${brief.sellingPoints.slice(0, 3).join(" / ")}.` : "",
+    "Use at most one headline, one subheadline, and up to three short selling points. Do not invent phone numbers, addresses, QR codes, prices, dates, hospital/company names, or legal claims.",
+  ].filter(Boolean);
 }
 
 export function buildTextToImagePrompt(request: DesignRequest) {

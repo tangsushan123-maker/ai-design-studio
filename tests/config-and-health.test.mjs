@@ -1115,6 +1115,12 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("normalizeDesignDirectorBrief"), true);
     assert.equal(routeSource.includes("selectPromptDirections"), true);
     assert.equal(routeSource.includes("designBrief"), true);
+    assert.equal(promptSource.includes("Structured poster planning"), true);
+    assert.equal(promptSource.includes("Planned visible copy"), true);
+    assert.equal(promptSource.includes("No explicit copy was provided: use the following planned short commercial copy"), true);
+    assert.equal(promptSource.includes("Headline: ${brief.title}."), true);
+    assert.equal(promptSource.includes("Scene and layout execution"), true);
+    assert.equal(promptSource.includes("Do not merely draw words from the user request; execute the planned copy"), true);
     assert.equal(routeSource.includes('const textToImageFitMode = "strict_full_bleed"'), true);
     assert.equal(routeSource.includes("buildNativeRatioRetryPrompt"), true);
     assert.equal(routeSource.includes("\"smart_outpaint\""), false);
