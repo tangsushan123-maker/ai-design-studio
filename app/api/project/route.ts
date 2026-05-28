@@ -217,33 +217,78 @@ function createBlankProject(): StoredProject {
 async function readStore(userId: string): Promise<ProjectStore> {
   const scopedProjectsPath = userDataPath(userId, "projects.local.json");
   const scopedLegacyProjectPath = userDataPath(userId, "project.local.json");
-  const store =
+  const scopedStore =
     await readProjectStoreFile(scopedProjectsPath) ||
-    await readProjectStoreFile(`${scopedProjectsPath}.bak`) ||
+    await readProjectStoreFile(`${scopedProjectsPath}.bak`);
+  const rootStore =
     await readProjectStoreFile(rootProjectsPath) ||
     await readProjectStoreFile(rootProjectsBackupPath);
-  if (store) {
-    const legacy =
-      (await readProjectFile(scopedLegacyProjectPath)) ||
-      (await readProjectFile(`${scopedLegacyProjectPath}.bak`)) ||
-      (await readProjectFile(rootLegacyProjectPath)) ||
-      (await readProjectFile(rootLegacyProjectBackupPath));
-    return reconcileStoreWithLegacyProject(store, legacy);
+  const scopedLegacy =
+    (await readProjectFile(scopedLegacyProjectPath)) ||
+    (await readProjectFile(`${scopedLegacyProjectPath}.bak`));
+  const rootLegacy =
+    (await readProjectFile(rootLegacyProjectPath)) ||
+    (await readProjectFile(rootLegacyProjectBackupPath));
+
+  if (scopedStore) {
+    const scoped = reconcileStoreWithLegacyProject(scopedStore, scopedLegacy);
+    const migrated = mergeLegacyRootStore(scoped, rootStore, rootLegacy);
+    if (migrated.projects.length !== scoped.projects.length || migrated.activeProjectId !== scoped.activeProjectId) {
+      await writeStore(userId, migrated);
+    }
+    return migrated;
+  }
+
+  if (rootStore) {
+    const migrated = reconcileStoreWithLegacyProject(rootStore, rootLegacy);
+    await writeStore(userId, migrated);
+    return migrated;
   }
 
   try {
-    const legacy =
-      (await readProjectFile(scopedLegacyProjectPath)) ||
-      (await readProjectFile(`${scopedLegacyProjectPath}.bak`)) ||
-      (await readProjectFile(rootLegacyProjectPath)) ||
-      (await readProjectFile(rootLegacyProjectBackupPath));
+    const legacy = scopedLegacy || rootLegacy;
     if (!legacy) throw new Error("No legacy project");
     const project = normalizeStoredProject({ ...createBlankProject(), ...legacy, id: legacy.id || "local-project" });
-    return { activeProjectId: project.id, projects: [project] };
+    const migrated = { activeProjectId: project.id, projects: [project] };
+    await writeStore(userId, migrated);
+    return migrated;
   } catch {}
 
   const blank = createBlankProject();
   return { activeProjectId: blank.id, projects: [blank] };
+}
+
+function mergeLegacyRootStore(scoped: ProjectStore, rootStore: ProjectStore | null, rootLegacy: StoredProject | null): ProjectStore {
+  const rootProjects = rootStore?.projects || [];
+  const rootActiveProjectId = rootStore?.activeProjectId || rootLegacy?.id || "";
+  const legacyProject = rootLegacy ? [normalizeStoredProject({ ...createBlankProject(), ...rootLegacy, id: rootLegacy.id || "local-project" })] : [];
+  const incoming = [...rootProjects, ...legacyProject].map(normalizeStoredProject);
+  if (!incoming.length) return scoped;
+
+  const byId = new Map(scoped.projects.map((project) => [project.id, normalizeStoredProject(project)]));
+  let changed = false;
+  for (const project of incoming) {
+    const current = byId.get(project.id);
+    if (!current) {
+      byId.set(project.id, project);
+      changed = true;
+      continue;
+    }
+    const merged = mergeMostCompleteProjectState(current, project);
+    if (merged !== current) {
+      byId.set(project.id, merged);
+      changed = true;
+    }
+  }
+  if (!changed) return scoped;
+
+  const projects = [...byId.values()].sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+  const activeProjectId = projects.some((project) => project.id === scoped.activeProjectId)
+    ? scoped.activeProjectId
+    : projects.some((project) => project.id === rootActiveProjectId)
+      ? rootActiveProjectId
+      : projects[0].id;
+  return { activeProjectId, projects };
 }
 
 async function writeStore(userId: string, store: ProjectStore) {
