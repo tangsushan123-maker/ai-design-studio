@@ -251,7 +251,6 @@ import {
   resolveVisibleProjectInfoRequests,
   sanitizeCreativeDirectionPrompt,
   sanitizeLegacyImageToImagePrompt,
-  sanitizeProjectMemoryForPrompt,
   shouldUseProjectPromptContext,
 } from "@/components/workbench/workbench-prompt-policy";
 import {
@@ -303,6 +302,7 @@ import {
 import { projectCapacitySummary } from "@/components/workbench/workbench-project-capacity";
 import {
   assetNames,
+  buildProjectConstraintText,
   buildProjectLibraryContext,
   buildProjectKnowledgeFromState,
   extractColorValues,
@@ -7973,98 +7973,6 @@ function persistProjectPayloadForLifecycleExit(payloadText: string) {
       keepalive: canUseKeepalive,
     }).catch(() => {});
   } catch {}
-}
-
-function buildProjectConstraintText(
-  text: string,
-  profile: ProjectProfile,
-  textProtectionMode: boolean,
-  taskContextNotes?: string,
-  visibleRequestText?: string,
-  brandAssets: ImageAsset[] = [],
-) {
-  const visibleRequests = resolveVisibleProjectInfoRequests(visibleRequestText || text);
-  const hiddenRequests = resolveNoVisibleProjectOutputPolicy(visibleRequestText || "");
-  const brandAssetContext = buildBrandAssetContextPack(profile, brandAssets, visibleRequestText || text);
-  const projectMemory = sanitizeProjectMemoryForPrompt(text.trim(), visibleRequestText || "");
-  const canMentionTextAssets = !hiddenRequests.noText;
-  const profileNotes = [
-    canMentionTextAssets && visibleRequests.organization && profile.organizationName ? `机构名称：${profile.organizationName}` : "",
-    projectProfileColors(profile).length ? `品牌色：${projectProfileColors(profile).join("、")}` : "",
-    !hiddenRequests.noLogo && visibleRequests.logo && profile.logoName ? `用户要求 Logo：${profile.logoName}` : "",
-    !hiddenRequests.noContact && visibleRequests.phone && profile.phone ? `用户要求电话：${profile.phone}` : "",
-    !hiddenRequests.noContact && visibleRequests.address && profile.address ? `用户要求地址：${profile.address}` : "",
-    !hiddenRequests.noQr && visibleRequests.qr && profile.qrCodeNote ? `用户要求二维码：${profile.qrCodeNote}` : "",
-    canMentionTextAssets && visibleRequests.copy && profile.commonCopy ? `常用文案：${profile.commonCopy}` : "",
-    !hiddenRequests.noText && profile.forbiddenContent ? `禁改内容：${profile.forbiddenContent}` : "",
-    profile.styleNotes ? `风格说明：${profile.styleNotes}` : "",
-    profile.keepFace ? "保护人脸/人物识别度。" : "",
-    profile.keepMainSubject ? "保护主体、产品和主视觉识别度。" : "",
-    profile.onlyEditMaskedArea ? "onlyEditMaskedArea：局部修改时只允许修改涂抹区域。" : "",
-  ].filter(Boolean);
-  const notes = [projectMemory, brandAssetContext, ...profileNotes, taskContextNotes || ""].filter(Boolean).join("\n");
-  if (!textProtectionMode) return notes;
-  return [
-    notes,
-    hiddenRequests.noText ? "用户要求无文字/纯背景：项目记忆、项目文案、机构名、电话地址只作为后台资料，禁止上画。" : "",
-    hiddenRequests.noLogo ? "用户要求不要 Logo：项目 Logo 和机构品牌标识禁止上画。" : "",
-    hiddenRequests.noQr ? "用户要求不要二维码：二维码和扫码占位禁止上画。" : "",
-    "规则：只保护用户明确要求或原图真实存在的文字/Logo/二维码；项目记忆不自动上画。",
-    "成图完整铺满目标尺寸，不要白边、托板、相框边或故意留白。",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function buildBrandAssetContextPack(profile: ProjectProfile, brandAssets: ImageAsset[], visibleRequestText = "") {
-  const usage = normalizeBrandAssetUsage(profile.brandAssetUsage);
-  const logoAssets = findBrandAssets(brandAssets, "logo");
-  const ipAssets = findBrandAssets(brandAssets, "ip");
-  const qrAssets = findBrandAssets(brandAssets, "qrcode");
-  const backgroundAssets = findBrandAssets(brandAssets, "background");
-  const primaryColors = extractColorValues(profile.primaryColors || profile.brandColors);
-  const secondaryColors = Array.from(new Set([
-    ...extractColorValues(profile.secondaryColors),
-    ...extractColorValues(profile.accentColors),
-    ...extractColorValues(profile.backgroundColors),
-    ...extractColorValues(profile.textColors),
-    ...extractColorValues(profile.colorPalettes),
-  ]));
-  const visibleRequests = resolveVisibleProjectInfoRequests(visibleRequestText);
-  const hiddenRequests = resolveNoVisibleProjectOutputPolicy(visibleRequestText);
-  const lines = [
-    "【项目素材】",
-    !hiddenRequests.noText && visibleRequests.organization && profile.organizationName ? `机构名称：${profile.organizationName}` : "",
-    usage.usePrimaryColors && primaryColors.length ? `项目主色：${primaryColors.join("、")}` : "",
-    usage.useSecondaryColors && secondaryColors.length ? `辅助配色：${secondaryColors.join("、")}` : "",
-    !hiddenRequests.noLogo && usage.useLogo && (profile.logoName || logoAssets.length) ? `Logo：${[profile.logoName, assetNames(logoAssets)].filter(Boolean).join("；")}` : "",
-    usage.useIpImage && ipAssets.length ? `IP形象：${assetNames(ipAssets)}` : "",
-    !hiddenRequests.noContact && usage.useContact && profile.phone ? `电话：${profile.phone}` : "",
-    !hiddenRequests.noContact && usage.useContact && profile.address ? `地址：${profile.address}` : "",
-    !hiddenRequests.noQr && usage.useQrCode && (profile.qrCodeNote || qrAssets.length) ? `二维码：${[profile.qrCodeNote, assetNames(qrAssets)].filter(Boolean).join("；")}` : "",
-    !hiddenRequests.noText && usage.useCopy && visibleRequests.copy && profile.commonCopy ? `常用宣传语：${splitProfileLines(profile.commonCopy).join("；")}` : "",
-    usage.useForbiddenRules && profile.forbiddenContent ? `禁止事项：${splitProfileLines(profile.forbiddenContent).join("；")}` : "",
-    backgroundAssets.length ? `常用背景：${assetNames(backgroundAssets)}` : "",
-    visibleRequests.phone && !profile.phone ? "用户要求电话但项目资料未填写电话：请提示缺少电话，不要编造。" : "",
-    visibleRequests.address && !profile.address ? "用户要求地址但项目资料未填写地址：请提示缺少地址，不要编造。" : "",
-    visibleRequests.logo && !profile.logoName && !logoAssets.length ? "用户要求 Logo 但项目素材库未提供 Logo：不要编造 Logo。" : "",
-    visibleRequests.qr && !profile.qrCodeNote && !qrAssets.length ? "用户要求二维码但项目素材库未提供二维码：不要生成假二维码。" : "",
-    "调用规则：只用当前项目素材；电话/地址/Logo/二维码只有用户明确要求或开关启用才上画；缺失则不编造。",
-    missingBrandAssetWarning(profile, brandAssets),
-  ].filter(Boolean);
-  return lines.length > 3 ? lines.join("\n") : "";
-}
-
-function missingBrandAssetWarning(profile: ProjectProfile, brandAssets: ImageAsset[]) {
-  const missing = [
-    projectProfileColors(profile).length ? "" : "主色",
-    findBrandAssets(brandAssets, "logo").length || profile.logoName ? "" : "Logo",
-    profile.phone || profile.address ? "" : "联系方式",
-    findBrandAssets(brandAssets, "ip").length ? "" : "IP形象",
-  ].filter(Boolean);
-  return missing.length
-    ? `当前项目还没有完整品牌资产，建议补充${missing.join("、")}，生成结果会更准确。缺少品牌素材时，生成结果只能作为灵感初稿，不能当正式交付稿。`
-    : "";
 }
 
 function buildProfileProtectionContext(
