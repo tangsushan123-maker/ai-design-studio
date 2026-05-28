@@ -5,6 +5,7 @@ const authCookieName = "design_studio_session";
 const publicPrefixes = [
   "/login",
   "/api/auth",
+  "/generated",
   "/_next",
 ];
 
