@@ -2572,10 +2572,18 @@ function NodeWorkflowWorkbench({
   }
 
   async function fetchTaskHistoryOutputsByRequests(requestIds: string[], taskProjectId = projectId) {
-    const uniqueRequestIds = [...new Set(requestIds.map((item) => item.trim()).filter(Boolean))];
+    const uniqueRequestIds: string[] = [];
+    const taskIdToRequestId = new Map<string, string>();
+    const seenRequestIds = new Set<string>();
+    for (const item of requestIds) {
+      const requestId = item.trim();
+      if (!requestId || seenRequestIds.has(requestId)) continue;
+      seenRequestIds.add(requestId);
+      uniqueRequestIds.push(requestId);
+      taskIdToRequestId.set(requestId.replace(/^req_/, "task_"), requestId);
+    }
     const empty = new Map<string, ImageAsset[]>();
     if (!uniqueRequestIds.length || !taskProjectId) return empty;
-    const taskIdToRequestId = new Map(uniqueRequestIds.map((requestId) => [requestId.replace(/^req_/, "task_"), requestId]));
     const params = new URLSearchParams({
       projectId: taskProjectId,
       requestIds: uniqueRequestIds.join(","),

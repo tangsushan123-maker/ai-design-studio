@@ -1769,6 +1769,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("refreshProjectHistory"), true);
     assert.equal(workbenchSource.includes("imageBelongsToProject"), true);
     assert.equal(workbenchSource.includes("fetchTaskHistoryOutputsByRequests"), true);
+    assert.equal(workbenchSource.includes("const seenRequestIds = new Set<string>()"), true);
+    assert.equal(workbenchSource.includes("new Set(requestIds.map"), false);
+    assert.equal(workbenchSource.includes("new Map(uniqueRequestIds.map"), false);
     assert.equal(workbenchSource.includes("任务记录未完整写入，但已从项目结果库核验到图片"), true);
     assert.equal(workbenchSource.includes("image.sourceRequestId === task.requestId"), true);
     assert.equal(workbenchSource.includes("image.sourceNodeId === task.nodeId"), true);
