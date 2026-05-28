@@ -180,9 +180,7 @@ import {
   maskEditorDraftPrefix,
   maxTextReferenceImages,
   projectCapacityJsonWarningBytes,
-  projectLifecycleKeepaliveLimitBytes,
   projectSnapshotIntervalMs,
-  projectSnapshotLimit,
   projectStorageKey,
   quickActions,
   resizePresets,
@@ -248,7 +246,6 @@ import {
 import {
   normalizeProjectKind,
   projectAssetUploadLabel,
-  projectSnapshotStorageKey,
   stripProjectRuntimeState,
 } from "@/components/workbench/workbench-project-helpers";
 import {
@@ -301,11 +298,13 @@ import {
   markDismissedImageKeys,
   markDismissedNodeRefs,
   markDismissedTaskRefs,
+  persistProjectPayloadForLifecycleExit,
   readProjectSaveError,
   readProjectTaskCache,
   stringifyProjectPayload,
   unmarkDismissedImageKeys,
   writeProjectLocalCache,
+  writeProjectSnapshot,
   writeProjectTaskCache,
 } from "@/components/workbench/workbench-project-storage";
 import { projectCapacitySummary } from "@/components/workbench/workbench-project-capacity";
@@ -7694,67 +7693,4 @@ function migrateLegacyNodeParams(kind: NodeKind, originalKind: unknown, params: 
     prompt: stringParam(params.prompt) || qualityEnhanceDefaultPrompt(enhancementMode),
     model: stringParam(params.model),
   };
-}
-
-function readProjectSnapshots(projectId: string): ProjectSnapshot[] {
-  try {
-    const raw = window.localStorage.getItem(projectSnapshotStorageKey(projectId));
-    const parsed = raw ? JSON.parse(raw) as unknown : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item): item is ProjectSnapshot => Boolean(item && typeof item === "object" && (item as ProjectSnapshot).id))
-      .slice(0, projectSnapshotLimit);
-  } catch {
-    return [];
-  }
-}
-
-function writeProjectSnapshot(projectId: string, payload: ProjectPayload, reason: ProjectSnapshot["reason"]) {
-  if (!payload.nodes?.length && !payload.assets?.length && !payload.assetText) {
-    return readProjectSnapshots(projectId).length;
-  }
-  const stablePayload = stripProjectRuntimeState(payload);
-  const jsonBytes = stringifyProjectPayload(stablePayload).length;
-  const snapshot: ProjectSnapshot = {
-    id: `snapshot_${Date.now()}_${Math.random().toString(16).slice(2, 7)}`,
-    projectId: stablePayload.id || projectId || "local-project",
-    projectName: stablePayload.name || "AI 设计项目",
-    createdAt: new Date().toISOString(),
-    reason,
-    nodeCount: stablePayload.nodes?.length || 0,
-    taskCount: stablePayload.runs?.length || 0,
-    jsonBytes,
-    storageMode: "file",
-  };
-  const snapshots = [snapshot, ...readProjectSnapshots(projectId)]
-    .filter((item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index)
-    .slice(0, projectSnapshotLimit);
-  try {
-    window.localStorage.setItem(projectSnapshotStorageKey(projectId), JSON.stringify(snapshots));
-  } catch {
-    try {
-      window.localStorage.setItem(projectSnapshotStorageKey(projectId), JSON.stringify(snapshots.slice(0, 2)));
-    } catch {}
-  }
-  return snapshots.length;
-}
-
-function persistProjectPayloadForLifecycleExit(payloadText: string) {
-  if (typeof window === "undefined") return;
-  const canUseKeepalive = payloadText.length <= projectLifecycleKeepaliveLimitBytes;
-  try {
-    if (canUseKeepalive && typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
-      const accepted = navigator.sendBeacon("/api/project", new Blob([payloadText], { type: "application/json" }));
-      if (accepted) return;
-    }
-  } catch {}
-
-  try {
-    void fetch("/api/project", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: payloadText,
-      keepalive: canUseKeepalive,
-    }).catch(() => {});
-  } catch {}
 }
