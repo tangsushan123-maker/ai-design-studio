@@ -287,6 +287,7 @@ import {
 } from "@/components/workbench/workbench-task-helpers";
 import {
   imageSourceDismissedForProject,
+  isFiniteViewport,
   loadDismissedImageKeySet,
   loadDismissedTaskRefs,
   markDismissedImageKeys,
@@ -7743,17 +7744,6 @@ function normalizeRestoredCanvasPositions(nodes: FlowNode[]) {
       },
     };
   });
-}
-
-function isFiniteViewport(viewport?: ProjectPayload["viewport"]): viewport is NonNullable<ProjectPayload["viewport"]> {
-  return Boolean(
-    viewport &&
-    Number.isFinite(viewport.x) &&
-    Number.isFinite(viewport.y) &&
-    Number.isFinite(viewport.zoom) &&
-    viewport.zoom >= 0.08 &&
-    viewport.zoom <= 3,
-  );
 }
 
 function mergePendingFacts(current: ProjectFactCandidate[], incoming: ProjectFactCandidate[]) {

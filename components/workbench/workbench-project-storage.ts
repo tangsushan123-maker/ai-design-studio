@@ -223,3 +223,14 @@ export async function readProjectSaveError(response: Response) {
     return `项目保存失败（HTTP ${response.status}）：${text.slice(0, 180) || "接口没有返回错误详情"}`;
   }
 }
+
+export function isFiniteViewport(viewport?: ProjectPayload["viewport"]): viewport is NonNullable<ProjectPayload["viewport"]> {
+  return Boolean(
+    viewport &&
+    Number.isFinite(viewport.x) &&
+    Number.isFinite(viewport.y) &&
+    Number.isFinite(viewport.zoom) &&
+    viewport.zoom >= 0.08 &&
+    viewport.zoom <= 3,
+  );
+}
