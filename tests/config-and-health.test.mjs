@@ -1255,10 +1255,12 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("referenceManifest"), true);
     assert.equal(routeSource.includes("referenceImage_"), true);
     assert.equal(routeSource.includes("brandAsset_"), true);
-    assert.equal(routeSource.includes("readImageInput(formData, `referenceImage_${index}`"), true);
-    assert.equal(routeSource.includes("readImageInput(formData, `brandAsset_${index}`"), true);
+    assert.equal(routeSource.includes("const textReferenceInputReadConcurrency = 4"), true);
+    assert.equal(routeSource.includes("mapWithConcurrency(inputs, textReferenceInputReadConcurrency"), true);
+    assert.equal(routeSource.includes("fileKey: `referenceImage_${index}`"), true);
+    assert.equal(routeSource.includes("fileKey: `brandAsset_${index}`"), true);
     assert.equal(routeSource.includes("slice(0, 5)"), true);
-    assert.equal(routeSource.includes("index <= 5"), true);
+    assert.equal(routeSource.includes("for (let index = 1; index <= 5"), false);
     assert.equal(routeSource.includes("buildPromptsFromDesignPlan"), true);
     assert.equal(routeSource.includes("Never use the raw user sentence as visible poster copy"), true);
     assert.equal(routeSource.includes("文生图/图片参考编辑"), true);

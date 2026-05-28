@@ -35,8 +35,12 @@ import { normalizeProtectionContext } from "@/lib/design-production";
 import { inspectImageQuality } from "@/lib/image-quality";
 import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, taskTraceFromJson, type TaskRunTrace } from "@/lib/task-run-ledger";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
+import { mapWithConcurrency } from "@/lib/async-utils";
 
 export const runtime = "nodejs";
+const textReferenceInputReadConcurrency = 4;
+type UploadedReferenceImage = { buffer: Buffer; fileName: string; mimeType: string };
+type ReferenceImageInput = { fileKey: string; urlKey: string; fallbackFileName: string };
 
 export async function POST(request: Request) {
   return await withCurrentConfigUser(async () => {
@@ -1011,20 +1015,32 @@ function parseProtectionContext(value: FormDataEntryValue | null) {
   }
 }
 
-async function readReferenceImages(formData: FormData) {
-  const refs: Array<{ buffer: Buffer; fileName: string; mimeType: string }> = [];
-  for (let index = 1; index <= 5; index += 1) {
-    const item = await readImageInput(formData, `referenceImage_${index}`, `referenceImageUrl_${index}`, `text-reference-${index}.png`);
-    if (item) refs.push(item);
-  }
-  for (let index = 1; index <= 3; index += 1) {
-    const item = await readImageInput(formData, `brandAsset_${index}`, `brandAssetUrl_${index}`, `brand-asset-${index}.png`);
-    if (item) refs.push(item);
-  }
-  return refs;
+async function readReferenceImages(formData: FormData): Promise<UploadedReferenceImage[]> {
+  const inputs: ReferenceImageInput[] = [
+    ...Array.from({ length: 5 }, (_, offset) => {
+      const index = offset + 1;
+      return {
+        fileKey: `referenceImage_${index}`,
+        urlKey: `referenceImageUrl_${index}`,
+        fallbackFileName: `text-reference-${index}.png`,
+      };
+    }),
+    ...Array.from({ length: 3 }, (_, offset) => {
+      const index = offset + 1;
+      return {
+        fileKey: `brandAsset_${index}`,
+        urlKey: `brandAssetUrl_${index}`,
+        fallbackFileName: `brand-asset-${index}.png`,
+      };
+    }),
+  ];
+  const refs = await mapWithConcurrency(inputs, textReferenceInputReadConcurrency, (input) => (
+    readImageInput(formData, input.fileKey, input.urlKey, input.fallbackFileName)
+  ));
+  return refs.filter((item): item is UploadedReferenceImage => item !== null);
 }
 
-async function readImageInput(formData: FormData, fileKey: string, urlKey: string, fallbackFileName: string) {
+async function readImageInput(formData: FormData, fileKey: string, urlKey: string, fallbackFileName: string): Promise<UploadedReferenceImage | null> {
   const file = formData.get(fileKey);
   const sourceUrl = String(formData.get(urlKey) ?? "");
   if (file instanceof File) {
