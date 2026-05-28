@@ -1379,6 +1379,11 @@ textarea:focus-visible {
   color: var(--label-primary);
 }
 
+.account-menu {
+  position: relative;
+  width: 100%;
+}
+
 .account-switcher {
   display: inline-flex;
   width: 100%;
@@ -1411,6 +1416,81 @@ textarea:focus-visible {
   padding: 0 10px;
 }
 
+.account-menu__panel {
+  position: absolute;
+  left: calc(100% + 10px);
+  bottom: 0;
+  z-index: 80;
+  width: 190px;
+  border: 1px solid var(--separator);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.11), rgb(255 255 255 / 0.055)),
+    color-mix(in srgb, var(--background-elevated) 94%, black);
+  box-shadow: 0 22px 60px rgb(0 0 0 / 0.34);
+  padding: 7px;
+  backdrop-filter: blur(28px) saturate(160%);
+}
+
+.account-menu__panel--expanded {
+  left: 0;
+  bottom: calc(100% + 8px);
+}
+
+.account-menu__identity {
+  border-bottom: 1px solid var(--separator);
+  margin-bottom: 5px;
+  padding: 8px 9px 10px;
+}
+
+.account-menu__name {
+  display: block;
+  overflow: hidden;
+  color: var(--label-primary);
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu__role {
+  display: block;
+  margin-top: 3px;
+  color: var(--label-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.account-menu__item {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--label-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 9px;
+  text-align: left;
+  text-decoration: none;
+  transition:
+    background 160ms var(--ease-standard),
+    color 160ms var(--ease-standard);
+}
+
+.account-menu__item:hover {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--label-primary);
+}
+
+.account-menu__item--danger {
+  color: var(--danger);
+}
+
 @media (max-width: 640px) {
   .auth-status {
     left: 12px;
@@ -1422,5 +1502,12 @@ textarea:focus-visible {
   .auth-status__name,
   .auth-status__email {
     max-width: calc(100vw - 196px);
+  }
+
+  .account-menu__panel,
+  .account-menu__panel--expanded {
+    bottom: calc(100% + 8px);
+    left: 0;
+    width: min(220px, calc(100vw - 28px));
   }
 }
