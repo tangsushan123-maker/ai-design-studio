@@ -66,7 +66,7 @@ export async function PATCH(request: Request) {
     }
 
     if (body.action === "restore") {
-      const restored = await restoreGeneratedImage(fileName);
+      const restored = await restoreGeneratedImage(fileName, current);
       return NextResponse.json({ ok: true, ...restored });
     }
 
@@ -110,12 +110,14 @@ export async function DELETE(request: Request) {
     }
 
     if (body.permanent || fileName.startsWith(`${generatedTrashDirName}/`)) {
-      await unlink(imagePath).catch(() => {});
-      await unlink(metadataPath).catch(() => {});
+      await Promise.all([
+        unlink(imagePath).catch(() => {}),
+        unlink(metadataPath).catch(() => {}),
+      ]);
       return NextResponse.json({ ok: true, fileName, permanent: true });
     }
 
-    const trashFileName = await moveGeneratedImageToTrash(fileName);
+    const trashFileName = await moveGeneratedImageToTrash(fileName, current);
 
     return NextResponse.json({ ok: true, fileName, trashFileName, trashed: true });
   } catch (error) {
@@ -151,7 +153,7 @@ async function parseGeneratedImagePayload(request: Request, mode: "update" | "de
   }
 }
 
-async function moveGeneratedImageToTrash(fileName: string) {
+async function moveGeneratedImageToTrash(fileName: string, current: Record<string, unknown>) {
   const dir = getGeneratedDir();
   const sourceImagePath = path.join(dir, fileName);
   const sourceMetadataPath = path.join(dir, `${fileName}.json`);
@@ -161,7 +163,6 @@ async function moveGeneratedImageToTrash(fileName: string) {
   await mkdir(path.dirname(trashImagePath), { recursive: true });
   await rename(sourceImagePath, trashImagePath);
 
-  const current = await readGeneratedMetadata(sourceMetadataPath);
   await writeJsonAtomic(trashMetadataPath, {
     ...current,
     trashed: true,
@@ -173,14 +174,13 @@ async function moveGeneratedImageToTrash(fileName: string) {
   return trashFileName;
 }
 
-async function restoreGeneratedImage(fileName: string) {
+async function restoreGeneratedImage(fileName: string, current: Record<string, unknown>) {
   if (!fileName.startsWith(`${generatedTrashDirName}/`)) {
     throw new Error("只能恢复回收站里的图片。");
   }
   const dir = getGeneratedDir();
   const sourceImagePath = path.join(dir, fileName);
   const sourceMetadataPath = path.join(dir, `${fileName}.json`);
-  const current = await readGeneratedMetadata(sourceMetadataPath);
   const originalFileName = typeof current.originalFileName === "string" && current.originalFileName
     ? current.originalFileName
     : fileName.replace(new RegExp(`^${generatedTrashDirName}/`), "");

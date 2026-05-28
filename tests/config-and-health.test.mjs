@@ -692,6 +692,17 @@ describe("Generated image serving", () => {
     assert.equal(generatedImagesRouteSource.includes('readFile(metadataPath, "utf8")'), false);
     assert.equal(generatedImagesRouteSource.includes("JSON.parse(raw)"), false);
   });
+
+  it("reuses generated image metadata already loaded for permission checks", async () => {
+    const generatedImagesRouteSource = await readFile(new URL("../app/api/generated-images/route.ts", import.meta.url), "utf8");
+
+    assert.equal(generatedImagesRouteSource.includes("restoreGeneratedImage(fileName, current)"), true);
+    assert.equal(generatedImagesRouteSource.includes("moveGeneratedImageToTrash(fileName, current)"), true);
+    assert.equal(generatedImagesRouteSource.includes("async function restoreGeneratedImage(fileName: string, current: Record<string, unknown>)"), true);
+    assert.equal(generatedImagesRouteSource.includes("async function moveGeneratedImageToTrash(fileName: string, current: Record<string, unknown>)"), true);
+    assert.equal(generatedImagesRouteSource.includes("await Promise.all([\n        unlink(imagePath).catch(() => {}),\n        unlink(metadataPath).catch(() => {}),\n      ])"), true);
+    assert.equal(generatedImagesRouteSource.includes("const current = await readGeneratedMetadata(sourceMetadataPath)"), false);
+  });
 });
 
 describe("Local JSON storage", () => {
