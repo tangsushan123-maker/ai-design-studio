@@ -72,11 +72,12 @@ export async function testConfiguredModel(kind: ModelTestKind, model: string): P
     : kind === "video"
       ? await testVideoModel(modelId)
       : await testTextModel(openai, modelId);
+  const existingModel = existingModelFor(modelId, config.modelsCache);
   await upsertModelCacheItem({
-    ...existingModelFor(modelId, config.modelsCache),
+    ...existingModel,
     id: modelId,
-    label: existingModelFor(modelId, config.modelsCache)?.label || modelId,
-    capabilities: Array.from(new Set([...(existingModelFor(modelId, config.modelsCache)?.capabilities || []), kind])),
+    label: existingModel?.label || modelId,
+    capabilities: mergeCapabilities(existingModel?.capabilities || [], [kind]),
     testStatus: result.ok ? "passed" : "failed",
     lastTestedAt: new Date().toISOString(),
     lastTestMessage: result.message,
@@ -97,11 +98,22 @@ export function mergeModelCatalog(seedModels: ModelCatalogItem[], remoteModels: 
       testStatus: item.testStatus || previous.testStatus,
       lastTestedAt: previous.lastTestedAt || item.lastTestedAt,
       lastTestMessage: previous.lastTestMessage || item.lastTestMessage,
-      capabilities: Array.from(new Set([...previous.capabilities, ...item.capabilities])),
+      capabilities: mergeCapabilities(previous.capabilities, item.capabilities),
       description: previous.description || item.description,
     });
   });
   return Array.from(merged.values());
+}
+
+function mergeCapabilities(a: ModelCapability[], b: ModelCapability[]) {
+  const capabilities: ModelCapability[] = [];
+  const seen = new Set<ModelCapability>();
+  for (const item of [...a, ...b]) {
+    if (seen.has(item)) continue;
+    seen.add(item);
+    capabilities.push(item);
+  }
+  return capabilities;
 }
 
 function createModelOpenAIClient() {

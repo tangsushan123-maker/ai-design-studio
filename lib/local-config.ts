@@ -435,8 +435,19 @@ function normalizeModelCatalogItem(item: ModelCatalogItem): ModelCatalogItem {
   const normalizedCapabilities = shouldTrustInference ? inferred : capabilities.length ? capabilities : inferred;
   return {
     ...item,
-    capabilities: Array.from(new Set(normalizedCapabilities.length ? normalizedCapabilities : ["unknown"])),
+    capabilities: uniqueModelCapabilities(normalizedCapabilities.length ? normalizedCapabilities : ["unknown"]),
   };
+}
+
+function uniqueModelCapabilities(values: ModelCapability[]) {
+  const capabilities: ModelCapability[] = [];
+  const seen = new Set<ModelCapability>();
+  for (const value of values) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    capabilities.push(value);
+  }
+  return capabilities;
 }
 
 function isModelCapability(value: unknown): value is ModelCapability {

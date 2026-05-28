@@ -772,6 +772,8 @@ describe("Local JSON storage", () => {
     assert.equal(configSource.includes("const normalizedModelCache = input.modelsCache === undefined ? null : normalizeModelCache(input.modelsCache)"), true);
     assert.equal(configSource.includes("value.filter(isModelCatalogItem).map(normalizeModelCatalogItem)"), false);
     assert.equal(configSource.includes("input.modelsCache.filter(isModelCatalogItem).length"), false);
+    assert.equal(configSource.includes("function uniqueModelCapabilities"), true);
+    assert.equal(configSource.includes("Array.from(new Set(normalizedCapabilities"), false);
   });
 });
 
@@ -2250,13 +2252,17 @@ describe("Account navigation", () => {
 
 describe("Collection normalization performance", () => {
   it("keeps hot array cleanup paths single-pass", async () => {
-    const [projectSystemSource, promptSource, assetLibrarySource, referenceRemakeSource, maskEditSource, imageRequestSource] = await Promise.all([
+    const [projectSystemSource, promptSource, assetLibrarySource, referenceRemakeSource, maskEditSource, imageRequestSource, brandContextSource, modelCatalogSource, providerDetectorSource, imageQualitySource] = await Promise.all([
       readFile(new URL("../lib/project-system.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/prompt.ts", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/asset-library-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/api/reference-remake/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/mask-edit-image/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/workbench-image-requests.ts", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/workbench-brand-context.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/model-catalog.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/provider-detector.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/image-quality.ts", import.meta.url), "utf8"),
     ]);
 
     assert.equal(projectSystemSource.includes("value.filter((item): item is string"), false);
@@ -2265,6 +2271,14 @@ describe("Collection normalization performance", () => {
     assert.equal(projectSystemSource.includes("normalizeProjectAssetRecords"), true);
     assert.equal(promptSource.includes("source.sellingPoints.map(cleanPromptText).filter(Boolean)"), false);
     assert.equal(assetLibrarySource.includes("Array.from(new Set((matches || []).map"), false);
+    assert.equal(brandContextSource.includes("function secondaryProfileColors"), true);
+    assert.equal(brandContextSource.includes("const secondaryColors = Array.from(new Set(["), false);
+    assert.equal(modelCatalogSource.includes("existingModelFor(modelId, config.modelsCache)"), true);
+    assert.equal(modelCatalogSource.match(/existingModelFor\(modelId, config\.modelsCache\)/g)?.length, 1);
+    assert.equal(modelCatalogSource.includes("Array.from(new Set([...previous.capabilities"), false);
+    assert.equal(providerDetectorSource.includes("Array.from(new Set([...a, ...b])).filter"), false);
+    assert.equal(imageQualitySource.includes("function uniqueActions"), true);
+    assert.equal(imageQualitySource.includes("Array.from(new Set(actions))"), false);
     assert.equal(imageRequestSource.includes(".flatMap((value) => Array.isArray(value) ? value : value ? [value] : [])"), false);
     assert.equal(referenceRemakeSource.includes("data.image_layers.map(stringValue).filter(Boolean)"), false);
     assert.equal(referenceRemakeSource.includes("data.risks.map(stringValue).filter(Boolean)"), false);

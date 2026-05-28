@@ -573,7 +573,13 @@ function mergeModels(models: ModelCatalogItem[]) {
 }
 
 function mergeCapabilities(a: ModelCapability[], b: ModelCapability[]) {
-  const next = Array.from(new Set([...a, ...b])).filter((item) => item !== "unknown");
+  const next: ModelCapability[] = [];
+  const seen = new Set<ModelCapability>();
+  for (const item of [...a, ...b]) {
+    if (item === "unknown" || seen.has(item)) continue;
+    seen.add(item);
+    next.push(item);
+  }
   return next.length ? next : ["unknown" as ModelCapability];
 }
 

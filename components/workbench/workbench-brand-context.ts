@@ -348,13 +348,7 @@ function buildBrandAssetContextPack(profile: ProjectProfile, brandAssets: ImageA
   const qrAssets = findBrandAssets(brandAssets, "qrcode");
   const backgroundAssets = findBrandAssets(brandAssets, "background");
   const primaryColors = extractColorValues(profile.primaryColors || profile.brandColors);
-  const secondaryColors = Array.from(new Set([
-    ...extractColorValues(profile.secondaryColors),
-    ...extractColorValues(profile.accentColors),
-    ...extractColorValues(profile.backgroundColors),
-    ...extractColorValues(profile.textColors),
-    ...extractColorValues(profile.colorPalettes),
-  ]));
+  const secondaryColors = secondaryProfileColors(profile);
   const visibleRequests = resolveVisibleProjectInfoRequests(visibleRequestText);
   const hiddenRequests = resolveNoVisibleProjectOutputPolicy(visibleRequestText);
   const lines = [
@@ -378,6 +372,20 @@ function buildBrandAssetContextPack(profile: ProjectProfile, brandAssets: ImageA
     missingBrandAssetWarning(profile, brandAssets),
   ].filter(Boolean);
   return lines.length > 3 ? lines.join("\n") : "";
+}
+
+function secondaryProfileColors(profile: ProjectProfile) {
+  const colors = new Set<string>();
+  for (const value of [
+    profile.secondaryColors,
+    profile.accentColors,
+    profile.backgroundColors,
+    profile.textColors,
+    profile.colorPalettes,
+  ]) {
+    for (const color of extractColorValues(value)) colors.add(color);
+  }
+  return Array.from(colors);
 }
 
 function missingBrandAssetWarning(profile: ProjectProfile, brandAssets: ImageAsset[]) {

@@ -237,7 +237,7 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
       ? `${width}×${height}｜${deliverability.label}`
       : statusLabel(status, width, height, is4kTarget),
     issues,
-    actions: actions.length ? Array.from(new Set(actions)) : ["下载原图"],
+    actions: actions.length ? uniqueActions(actions) : ["下载原图"],
     width,
     height,
     ratio,
@@ -277,6 +277,17 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
     fourKCheckItems,
     checkedAt: new Date().toISOString(),
   };
+}
+
+function uniqueActions(actions: string[]) {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const action of actions) {
+    if (seen.has(action)) continue;
+    seen.add(action);
+    unique.push(action);
+  }
+  return unique;
 }
 
 export async function compareImageClarity(beforeInput: Buffer | string, afterInput: Buffer | string) {

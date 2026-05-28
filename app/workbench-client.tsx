@@ -435,6 +435,17 @@ function taskCandidateImagesFromNodes(nodes: FlowNode[]) {
   return images;
 }
 
+function mergeImageIdList(currentIds: string[] | undefined, nextIds: string[]) {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const id of [...(currentIds || []), ...nextIds]) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
 export default function WorkbenchClient({
   initialImages = [],
   initialHistoryHasMore = false,
@@ -4553,7 +4564,7 @@ function NodeWorkflowWorkbench({
 
   function appendNextImageIds(image: ImageAsset, nextIds: string[]) {
     const key = imageKey(image);
-    const patchIds = Array.from(new Set([...(image.nextImageIds || []), ...nextIds].filter(Boolean)));
+    const patchIds = mergeImageIdList(image.nextImageIds, nextIds);
     if (!patchIds.length) return;
     const updateImage = (item: ImageAsset): ImageAsset => (imageKey(item) === key ? { ...item, nextImageIds: patchIds } : item);
     setHistoryImages((current) => current.map(updateImage));
