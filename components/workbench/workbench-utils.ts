@@ -23,6 +23,11 @@ export function stringParam(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+export function numericParam(value: unknown, fallback = 0) {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : fallback;
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 export function inferRatioFromPrompt(prompt: string): AspectRatioValue | null {
   if (!prompt.trim()) return null;
   if (/小红书|3[:：]4/.test(prompt)) return "3:4";
