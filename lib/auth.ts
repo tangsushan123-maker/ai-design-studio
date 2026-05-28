@@ -123,7 +123,7 @@ export function getSessionCookieOptions() {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureSessionCookie(),
     path: "/",
     maxAge: sessionMaxAgeSeconds,
   };
@@ -133,10 +133,17 @@ export function getClearedSessionCookieOptions() {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureSessionCookie(),
     path: "/",
     maxAge: 0,
   };
+}
+
+function shouldUseSecureSessionCookie() {
+  const explicit = process.env.AUTH_COOKIE_SECURE?.trim().toLowerCase();
+  if (explicit === "true" || explicit === "1") return true;
+  if (explicit === "false" || explicit === "0") return false;
+  return /^https:\/\//i.test(process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "");
 }
 
 export function userDataPath(userId: string, fileName: string) {
