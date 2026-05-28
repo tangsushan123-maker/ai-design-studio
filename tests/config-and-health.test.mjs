@@ -13,7 +13,7 @@ import { imageSourceDetailLines, imageSourceSummary, shortImageTraceId } from ".
 import { taskMatchesSearch, taskSearchText } from "../lib/workbench-tasks.ts";
 
 async function readWorkbenchSource() {
-  const [clientSource, configSource, nodeCatalogSource, labelSource, imageCollectionSource, composerHelperSource, operationParamSource, textReferenceSource, upscaleSource, nodePromptSource, projectHelperSource, promptPolicySource, imageLifecycleSource, nodeUiSource] = await Promise.all([
+  const [clientSource, configSource, nodeCatalogSource, labelSource, imageCollectionSource, composerHelperSource, operationParamSource, textReferenceSource, upscaleSource, nodePromptSource, projectHelperSource, promptPolicySource, imageLifecycleSource, nodeUiSource, imageRequestSource] = await Promise.all([
     readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-config.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-node-catalog.tsx", import.meta.url), "utf8"),
@@ -28,8 +28,9 @@ async function readWorkbenchSource() {
     readFile(new URL("../components/workbench/workbench-prompt-policy.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-image-lifecycle.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-node-ui.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/workbench/workbench-image-requests.ts", import.meta.url), "utf8"),
   ]);
-  return `${clientSource}\n${configSource}\n${nodeCatalogSource}\n${labelSource}\n${imageCollectionSource}\n${composerHelperSource}\n${operationParamSource}\n${textReferenceSource}\n${upscaleSource}\n${nodePromptSource}\n${projectHelperSource}\n${promptPolicySource}\n${imageLifecycleSource}\n${nodeUiSource}`;
+  return `${clientSource}\n${configSource}\n${nodeCatalogSource}\n${labelSource}\n${imageCollectionSource}\n${composerHelperSource}\n${operationParamSource}\n${textReferenceSource}\n${upscaleSource}\n${nodePromptSource}\n${projectHelperSource}\n${promptPolicySource}\n${imageLifecycleSource}\n${nodeUiSource}\n${imageRequestSource}`;
 }
 
 describe("OpenAI defaults", () => {
