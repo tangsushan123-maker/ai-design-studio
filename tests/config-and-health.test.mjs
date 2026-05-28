@@ -659,6 +659,29 @@ describe("Generated image serving", () => {
     assert.equal(imageUtilsSource.includes("getImageVariantUrl("), false);
   });
 
+  it("reuses saved buffer sizes instead of restatting generated files", async () => {
+    const saveRoutes = [
+      "../app/api/generate-image/route.ts",
+      "../app/api/edit-image/route.ts",
+      "../app/api/fuse-images/route.ts",
+      "../app/api/reference-remake/route.ts",
+      "../app/api/redraw-upscale-image/route.ts",
+      "../app/api/design-optimize/route.ts",
+      "../app/api/mask-edit-image/route.ts",
+    ];
+    const [imageUtilsSource, ...routeSources] = await Promise.all([
+      readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8"),
+      ...saveRoutes.map((routePath) => readFile(new URL(routePath, import.meta.url), "utf8")),
+    ]);
+    const combinedRouteSource = routeSources.join("\n");
+
+    assert.equal(imageUtilsSource.includes("fileSizeBytes: buffer.byteLength"), true);
+    assert.equal(combinedRouteSource.includes("stat(saved.path)"), false);
+    assert.equal(combinedRouteSource.includes("savedStat.size"), false);
+    assert.equal(combinedRouteSource.includes("comparisonStat.size"), false);
+    assert.equal(combinedRouteSource.includes("fileSizeBytes: saved.fileSizeBytes"), true);
+  });
+
   it("checks generated image restore conflicts without reading image files", async () => {
     const generatedImagesRouteSource = await readFile(new URL("../app/api/generated-images/route.ts", import.meta.url), "utf8");
 

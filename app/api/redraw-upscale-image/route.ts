@@ -21,7 +21,6 @@ import { buildHdRedrawPrompt } from "@/lib/prompt";
 import { inspectImageQuality } from "@/lib/image-quality";
 import { imageRequestOptions, runQueuedImageModelRequestWithRetry } from "@/lib/image-request-queue";
 import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, taskTraceFromJson, type TaskRunTrace } from "@/lib/task-run-ledger";
-import { stat } from "node:fs/promises";
 import sharp from "sharp";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
 
@@ -131,12 +130,11 @@ export async function POST(request: Request) {
       projectId: input.protectionContext?.version?.projectId || taskTrace?.projectId,
       storageKind: "results",
     });
-    const savedStat = await stat(saved.path);
     const qualityCheck = await inspectImageQuality(saved.path, {
       quality: effectiveQuality,
       ratio,
       expectedSize: outputSize,
-      fileSizeBytes: savedStat.size,
+      fileSizeBytes: saved.fileSizeBytes,
       aspectRatio: outputRatioLabel,
       protectionContext: input.protectionContext,
       sourceImage: input.imageBuffer,
@@ -159,7 +157,7 @@ export async function POST(request: Request) {
       outputSize: { width: actual.width, height: actual.height },
       expectedOutputSize: outputSize,
       qualityCheck,
-      fileSizeBytes: savedStat.size,
+      fileSizeBytes: saved.fileSizeBytes,
       source: "ai-hd-redraw",
       sourceCompareUrl: input.sourceCompareUrl,
       savedPath: saved.path,

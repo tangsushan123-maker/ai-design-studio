@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { toFile } from "openai/uploads";
 import sharp from "sharp";
-import { stat } from "node:fs/promises";
 import { toApiError } from "@/lib/api-errors";
 import type { QualityValue } from "@/lib/design-options";
 import type { ProtectionContext } from "@/lib/design-production";
@@ -152,12 +151,11 @@ export async function POST(request: Request) {
       projectId: taskTrace?.projectId,
       storageKind: "results",
     });
-    const savedStat = await stat(saved.path);
     const qualityCheck = await inspectImageQuality(saved.path, {
       quality: input.quality,
       ratio: targetDesignRatio,
       expectedSize: outputSize,
-      fileSizeBytes: savedStat.size,
+      fileSizeBytes: saved.fileSizeBytes,
       aspectRatio: outputRatioLabel,
       operation: "reference_remake",
       protectionContext: buildReferenceRemakeProtectionContext(effectiveAnalysis),
@@ -179,7 +177,7 @@ export async function POST(request: Request) {
       outputSize: { width: actual.width, height: actual.height },
       expectedOutputSize: outputSize,
       qualityCheck,
-      fileSizeBytes: savedStat.size,
+      fileSizeBytes: saved.fileSizeBytes,
       savedPath: saved.path,
       durationMs: Date.now() - startedAt,
       projectId: taskTrace?.projectId,

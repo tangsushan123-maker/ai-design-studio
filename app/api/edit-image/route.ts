@@ -29,7 +29,6 @@ import { assertSupportedImage, getImageRatio } from "@/lib/request-guards";
 import { parseProtectionContext } from "@/lib/design-production";
 import { inspectImageQuality } from "@/lib/image-quality";
 import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
-import { stat } from "node:fs/promises";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
 
 export const runtime = "nodejs";
@@ -162,12 +161,11 @@ export async function POST(request: Request) {
         projectId: protectionContext.version?.projectId || taskTrace?.projectId,
         storageKind: "results",
       });
-      const savedStat = await stat(saved.path);
       const qualityCheck = await inspectImageQuality(saved.path, {
         quality,
         ratio,
         expectedSize: outputSize,
-        fileSizeBytes: savedStat.size,
+        fileSizeBytes: saved.fileSizeBytes,
         aspectRatio: outputRatioLabel,
         protectionContext,
       });
@@ -188,7 +186,7 @@ export async function POST(request: Request) {
         outputSize: { width: actual.width, height: actual.height },
         expectedOutputSize: outputSize,
         qualityCheck,
-        fileSizeBytes: savedStat.size,
+        fileSizeBytes: saved.fileSizeBytes,
         savedPath: saved.path,
         durationMs: Date.now() - startedAt,
         projectId: protectionContext.version?.projectId || taskTrace?.projectId,
@@ -348,12 +346,11 @@ export async function POST(request: Request) {
           projectId: protectionContext.version?.projectId || taskTrace?.projectId,
           storageKind: "results",
         });
-        const savedStat = await stat(saved.path);
         const savedQualityCheck = await inspectImageQuality(saved.path, {
           quality,
           ratio,
           expectedSize: outputSize,
-          fileSizeBytes: savedStat.size,
+          fileSizeBytes: saved.fileSizeBytes,
           aspectRatio: outputRatioLabel,
           protectionContext,
           operation: isOutpaint ? "outpaint" : isAiResize ? "resize" : "image_to_image",
@@ -399,7 +396,7 @@ export async function POST(request: Request) {
           outputSize: { width: final.actual.width, height: final.actual.height },
           expectedOutputSize: outputSize,
           qualityCheck,
-          fileSizeBytes: savedStat.size,
+          fileSizeBytes: saved.fileSizeBytes,
           savedPath: saved.path,
           durationMs: Date.now() - startedAt,
           projectId: protectionContext.version?.projectId || taskTrace?.projectId,
@@ -454,12 +451,11 @@ export async function POST(request: Request) {
         projectId: protectionContext.version?.projectId || taskTrace?.projectId,
         storageKind: "results",
       });
-      const savedStat = await stat(saved.path);
       const savedQualityCheck = await inspectImageQuality(saved.path, {
         quality,
         ratio,
         expectedSize: outputSize,
-        fileSizeBytes: savedStat.size,
+        fileSizeBytes: saved.fileSizeBytes,
         aspectRatio: outputRatioLabel,
         protectionContext,
         operation: isOutpaint ? "outpaint" : isAiResize ? "resize" : "image_to_image",
@@ -484,7 +480,7 @@ export async function POST(request: Request) {
         outputSize: { width: final.actual.width, height: final.actual.height },
         expectedOutputSize: outputSize,
         qualityCheck,
-        fileSizeBytes: savedStat.size,
+        fileSizeBytes: saved.fileSizeBytes,
         savedPath: saved.path,
         durationMs: Date.now() - startedAt,
         projectId: protectionContext.version?.projectId || taskTrace?.projectId,

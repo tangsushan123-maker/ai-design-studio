@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { toFile } from "openai/uploads";
-import { stat } from "node:fs/promises";
 import sharp from "sharp";
 import { toApiError } from "@/lib/api-errors";
 import type { QualityValue } from "@/lib/design-options";
@@ -113,12 +112,11 @@ export async function POST(request: Request) {
       projectId: taskTrace?.projectId,
       storageKind: "results",
     });
-    const savedStat = await stat(saved.path);
     const qualityCheck = await inspectImageQuality(saved.path, {
       quality: input.quality,
       ratio: sourceRatio,
       expectedSize: outputSize,
-      fileSizeBytes: savedStat.size,
+      fileSizeBytes: saved.fileSizeBytes,
       aspectRatio: outputRatioLabel,
       operation: "design_optimize",
       protectionContext: buildDesignOptimizationProtectionContext(analysis),
@@ -140,7 +138,7 @@ export async function POST(request: Request) {
       outputSize: { width: actual.width, height: actual.height },
       expectedOutputSize: outputSize,
       qualityCheck,
-      fileSizeBytes: savedStat.size,
+      fileSizeBytes: saved.fileSizeBytes,
       savedPath: saved.path,
       durationMs: Date.now() - startedAt,
       projectId: taskTrace?.projectId,
@@ -180,7 +178,6 @@ export async function POST(request: Request) {
         projectId: taskTrace?.projectId,
         storageKind: "results",
       });
-      const comparisonStat = await stat(comparisonSaved.path);
       const comparisonMeta = await readImageMetadata(comparisonPng);
       const comparisonPayload = {
         id: comparisonSaved.fileName,
@@ -198,7 +195,7 @@ export async function POST(request: Request) {
         generatedAt: payload.generatedAt,
         outputSize: { width: comparisonMeta.width, height: comparisonMeta.height },
         expectedOutputSize: { width: comparisonMeta.width, height: comparisonMeta.height },
-        fileSizeBytes: comparisonStat.size,
+        fileSizeBytes: comparisonSaved.fileSizeBytes,
         savedPath: comparisonSaved.path,
         durationMs: Date.now() - startedAt,
         projectId: taskTrace?.projectId,

@@ -103,6 +103,7 @@ export async function saveImageBuffer(
     originalUrl: publicUrl,
     thumbnailUrl: variants.thumbnailUrl,
     previewUrl: variants.previewUrl,
+    fileSizeBytes: buffer.byteLength,
   };
 }
 
