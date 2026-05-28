@@ -365,6 +365,7 @@ import type {
 import type { ModelCatalogItem } from "@/lib/openai-defaults";
 
 const projectResourceNormalizeConcurrency = 4;
+const batchImageMutationConcurrency = 3;
 
 export default function WorkbenchClient({
   initialImages = [],
@@ -4412,10 +4413,8 @@ function NodeWorkflowWorkbench({
       setStatus(permanent ? "没有可彻底删除的回收站图片。" : "没有可批量清理的未保护图片。");
       return;
     }
-    let success = 0;
-    for (const image of candidates) {
-      if (await deleteHistoryImage(image, { permanent, quiet: true, skipTrashRefresh: true })) success += 1;
-    }
+    const results = await mapWithConcurrency(candidates, batchImageMutationConcurrency, (image) => deleteHistoryImage(image, { permanent, quiet: true, skipTrashRefresh: true }));
+    const success = results.filter(Boolean).length;
     const failed = candidates.length - success;
     const skipped = uniqueImages.length - candidates.length;
     if (!permanent) void loadImageManagerTrash(true);
@@ -4449,10 +4448,8 @@ function NodeWorkflowWorkbench({
       setStatus("没有可恢复的回收站图片。");
       return;
     }
-    let success = 0;
-    for (const image of candidates) {
-      if (await restoreHistoryImage(image, { quiet: true, skipReload: true })) success += 1;
-    }
+    const results = await mapWithConcurrency(candidates, batchImageMutationConcurrency, (image) => restoreHistoryImage(image, { quiet: true, skipReload: true }));
+    const success = results.filter(Boolean).length;
     const failed = candidates.length - success;
     const skipped = uniqueImages.length - candidates.length;
     void loadImageManagerHistory(true);

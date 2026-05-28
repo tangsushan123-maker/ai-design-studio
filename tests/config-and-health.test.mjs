@@ -1683,6 +1683,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("runConfirmedBatchAction"), true);
     assert.equal(workbenchUiSource.includes("runConfirmedRowAction"), true);
     assert.equal(workbenchUiSource.includes("loadingMoreKey"), true);
+    assert.equal(workbenchSource.includes("batchImageMutationConcurrency = 3"), true);
+    assert.equal(workbenchSource.includes("mapWithConcurrency(candidates, batchImageMutationConcurrency"), true);
     assert.equal(workbenchUiSource.includes("确认彻删"), true);
     assert.equal(workbenchUiSource.includes("确认移入回收站"), true);
     assert.equal(workbenchUiSource.includes("\"恢复中\""), true);
