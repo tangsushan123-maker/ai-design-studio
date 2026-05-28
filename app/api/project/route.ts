@@ -52,7 +52,7 @@ export async function GET(request: Request) {
   if (mode === "list") {
     if (isOwner) {
       const ownerStores = await readAllOwnerProjectStores(user.id);
-      const projects = ownerStores.flatMap((entry) => entry.store.projects.map((project) => withProjectOwner(project, entry.owner)));
+      const projects = ownerProjectsFromStores(ownerStores);
       const sortedProjects = projects.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
       const activeProjectId = ownerStores.find((entry) => entry.owner.id === user.id)?.store.activeProjectId || store.activeProjectId;
       return NextResponse.json({
@@ -146,7 +146,7 @@ export async function POST(request: Request) {
     };
     await writeStore(targetUserId, nextStore);
     const responseProjects = user.role === "owner"
-      ? summarizeProjects((await readAllOwnerProjectStores(user.id)).flatMap((entry) => entry.store.projects.map((item) => withProjectOwner(item, entry.owner))))
+      ? summarizeProjects(ownerProjectsFromStores(await readAllOwnerProjectStores(user.id)))
       : summarizeProjects(nextStore.projects);
     return NextResponse.json({ ok: true, project, projects: responseProjects, activeProjectId: nextStore.activeProjectId });
   } catch (error) {
@@ -196,7 +196,7 @@ export async function DELETE(request: Request) {
     };
     await writeStore(targetUserId, nextStore);
     const responseProjects = user.role === "owner"
-      ? summarizeProjects((await readAllOwnerProjectStores(user.id)).flatMap((entry) => entry.store.projects.map((item) => withProjectOwner(item, entry.owner))))
+      ? summarizeProjects(ownerProjectsFromStores(await readAllOwnerProjectStores(user.id)))
       : summarizeProjects(nextStore.projects);
     return NextResponse.json({ ok: true, activeProjectId: nextStore.activeProjectId, projects: responseProjects });
   } catch (error) {
@@ -286,10 +286,7 @@ async function readStore(userId: string, options: { includeRootMigration?: boole
 
 async function readAllOwnerProjectStores(currentUserId: string) {
   const users = await listAuthUsers();
-  const orderedUsers = [
-    ...users.filter((user) => user.id === currentUserId),
-    ...users.filter((user) => user.id !== currentUserId),
-  ];
+  const orderedUsers = orderUsersWithCurrentFirst(users, currentUserId);
   const entries = await mapWithConcurrency(
     orderedUsers,
     ownerProjectStoreReadConcurrency,
@@ -302,7 +299,29 @@ async function readAllOwnerProjectStores(currentUserId: string) {
       return projects.length ? { owner, store: { ...store, projects } } : null;
     },
   );
-  return entries.filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  return compactProjectStoreEntries(entries);
+}
+
+function orderUsersWithCurrentFirst<T extends { id: string }>(users: T[], currentUserId: string) {
+  let currentUser: T | null = null;
+  const orderedUsers: T[] = [];
+  for (const user of users) {
+    if (user.id === currentUserId) {
+      currentUser = user;
+    } else {
+      orderedUsers.push(user);
+    }
+  }
+  if (currentUser) orderedUsers.unshift(currentUser);
+  return orderedUsers;
+}
+
+function compactProjectStoreEntries<T>(entries: Array<T | null>) {
+  const compacted: T[] = [];
+  for (const entry of entries) {
+    if (entry) compacted.push(entry);
+  }
+  return compacted;
 }
 
 function isMeaningfulProject(project: StoredProject) {
@@ -343,6 +362,16 @@ function withProjectOwner(project: StoredProject, owner: { id: string; email: st
     ownerEmail: owner.email,
     ownerName: owner.name,
   };
+}
+
+function ownerProjectsFromStores(ownerStores: Awaited<ReturnType<typeof readAllOwnerProjectStores>>) {
+  const projects: StoredProject[] = [];
+  for (const entry of ownerStores) {
+    for (const project of entry.store.projects) {
+      projects.push(withProjectOwner(project, entry.owner));
+    }
+  }
+  return projects;
 }
 
 async function fileExists(filePath: string) {

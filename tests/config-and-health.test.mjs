@@ -809,6 +809,12 @@ describe("Bounded local IO", () => {
     assert.equal(projectRouteSource.includes("readJsonWithBackup<ProjectStore | null>(filePath, null)"), true);
     assert.equal(projectRouteSource.includes("readJsonWithBackup<StoredProject | null>(filePath, null)"), true);
     assert.equal(projectRouteSource.includes('readFile(filePath, "utf-8")'), false);
+    assert.equal(projectRouteSource.includes("ownerProjectsFromStores"), true);
+    assert.equal(projectRouteSource.includes("orderUsersWithCurrentFirst"), true);
+    assert.equal(projectRouteSource.includes("compactProjectStoreEntries"), true);
+    assert.equal(projectRouteSource.includes("ownerStores.flatMap"), false);
+    assert.equal(projectRouteSource.includes("readAllOwnerProjectStores(user.id)).flatMap"), false);
+    assert.equal(projectRouteSource.includes("users.filter((user) => user.id"), false);
     assert.equal(projectRouteSource.includes("rootProjectsBackupPath"), false);
     assert.equal(projectRouteSource.includes("rootLegacyProjectBackupPath"), false);
     assert.equal(projectRouteSource.includes("readProjectStoreFile(`${scopedProjectsPath}.bak`)"), false);
