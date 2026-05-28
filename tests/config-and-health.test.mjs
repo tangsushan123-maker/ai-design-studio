@@ -763,6 +763,9 @@ describe("Bounded local IO", () => {
     assert.equal(adminAccountsSource.includes("async function readJsonFile"), false);
     assert.equal(materialLibrariesSource.includes("projectLibraryReadConcurrency = 8"), true);
     assert.equal(materialLibrariesSource.includes("mapWithConcurrency(users, projectLibraryReadConcurrency"), true);
+    assert.equal(materialLibrariesSource.includes("createSharedRootProjectStoreLoader"), true);
+    assert.equal(materialLibrariesSource.includes("pending ||= readRootProjectStore()"), true);
+    assert.equal(materialLibrariesSource.includes("readProjectLibraries(user.id, loadRootProjectStore)"), true);
     assert.equal(projectRouteSource.includes("ownerProjectStoreReadConcurrency = 8"), true);
     assert.equal(projectRouteSource.includes("mapWithConcurrency("), true);
     assert.equal(projectRouteSource.includes('import { readJsonWithBackup, writeJsonAtomic } from "@/lib/local-json-store"'), true);

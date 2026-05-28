@@ -24,6 +24,12 @@ type StoredProjectForLibraries = {
   };
 };
 
+type ProjectLibraryStore = {
+  projects?: StoredProjectForLibraries[];
+};
+
+type RootProjectStoreLoader = () => Promise<ProjectLibraryStore>;
+
 type StyleLibraryStore = {
   libraries: MaterialLibraryRecord[];
 };
@@ -89,11 +95,11 @@ async function parseMaterialLibraryPayload(request: Request): Promise<Partial<Ma
   }
 }
 
-async function readProjectLibraries(userId: string) {
+async function readProjectLibraries(userId: string, loadRootProjectStore: RootProjectStoreLoader = readRootProjectStore) {
   const scopedProjectsPath = userDataPath(userId, "projects.local.json");
-  let store = await readJsonWithBackup<{ projects?: StoredProjectForLibraries[] }>(scopedProjectsPath, {});
+  let store = await readJsonWithBackup<ProjectLibraryStore>(scopedProjectsPath, {});
   if (!Array.isArray(store.projects) || !store.projects.length) {
-    store = await readJsonWithBackup<{ projects?: StoredProjectForLibraries[] }>(rootProjectsPath, {});
+    store = await loadRootProjectStore();
   }
   if (!Array.isArray(store.projects)) return [];
   return store.projects.flatMap((project) => {
@@ -110,8 +116,21 @@ async function readProjectLibraries(userId: string) {
 
 async function readAllProjectLibraries() {
   const users = await listAuthUsers();
-  const libraries = await mapWithConcurrency(users, projectLibraryReadConcurrency, (user) => readProjectLibraries(user.id));
+  const loadRootProjectStore = createSharedRootProjectStoreLoader();
+  const libraries = await mapWithConcurrency(users, projectLibraryReadConcurrency, (user) => readProjectLibraries(user.id, loadRootProjectStore));
   return libraries.flat();
+}
+
+function createSharedRootProjectStoreLoader(): RootProjectStoreLoader {
+  let pending: Promise<ProjectLibraryStore> | undefined;
+  return () => {
+    pending ||= readRootProjectStore();
+    return pending;
+  };
+}
+
+async function readRootProjectStore() {
+  return readJsonWithBackup<ProjectLibraryStore>(rootProjectsPath, {});
 }
 
 async function readStyleLibraries() {
