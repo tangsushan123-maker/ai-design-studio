@@ -6407,7 +6407,6 @@ function ChatComposer({
     : "";
   const canSubmit = Boolean(effectiveModel) && (selectedPromptNode ? canSubmitComposerForNode(selectedPromptNode, displayPrompt) : Boolean(prompt.trim()));
   const anyMenuOpen = uploadMenuOpen || modelMenuOpen || ratioMenuOpen || qualityMenuOpen || brandMenuOpen;
-  const starterPrompts = composerStarterPrompts(selectedPromptNode);
   const apiSetupMessage = !hasKey
     ? "还没有配置 API Key，配置后才能生成图片。"
     : !effectiveModel
@@ -6497,20 +6496,6 @@ function ChatComposer({
               <Link className="rounded-full border border-[#ffe1a0]/24 bg-[#ffe1a0]/10 px-2 py-0.5 font-semibold text-[#ffe1a0] hover:bg-[#ffe1a0]/16" href="/settings">
                 去设置
               </Link>
-            </div>
-          ) : null}
-          {!displayPrompt.trim() && starterPrompts.length ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {starterPrompts.map((item) => (
-                <button
-                  className="apple-button max-w-full truncate rounded-full px-2.5 py-1 text-[11px] text-white/58 hover:text-white/82"
-                  key={item}
-                  onClick={() => onPromptChange(item)}
-                  type="button"
-                >
-                  {item}
-                </button>
-              ))}
             </div>
           ) : null}
         </div>
@@ -10557,21 +10542,6 @@ function composerHelperTextForNode(node: FlowNode) {
   if (node.data.kind === "png_layers") return "连接成品图后，底部点运行即可生成背景、文字、人物三层 PNG。";
   if (node.data.kind === "output") return "下载、复制或保存结果。";
   return "";
-}
-
-function composerStarterPrompts(node: FlowNode | null) {
-  if (node && node.data.kind !== "text_to_image") {
-    if (node.data.kind === "image_to_image") return ["保留主体，换成更高级的商业海报", "做一版更简洁的电商主图", "强化光影和层次，文字不要乱改"];
-    if (node.data.kind === "design_optimize") return ["提升版式层级，标题更清楚", "保留信息，做成高级商业风格", "减弱杂乱元素，增强留白"];
-    if (node.data.kind === "hd_redraw") return ["保持构图，提升文字、边缘和细节", "产品和 Logo 不变，增强质感", "去掉模糊和白边，输出高清成品"];
-    if (node.data.kind === "mask_edit") return ["去掉选中区域并补全背景", "把选中区域改成更干净的背景", "只修改涂抹区域，其它不变"];
-    return [];
-  }
-  return [
-    "做一张高端电商产品主图，主体突出，背景干净，商业质感强",
-    "做一张门店活动海报，标题醒目，信息层级清楚，适合朋友圈传播",
-    "做一张国潮风人物海报，电影级光影，画面有冲击力",
-  ];
 }
 
 function canSubmitComposerForNode(node: FlowNode, prompt: string) {

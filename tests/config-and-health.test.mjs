@@ -1237,6 +1237,11 @@ describe("Workflow canvas performance", () => {
     assert.equal(workbenchSource.includes("apple-caption shrink-0 text-[11px]"), true);
     assert.equal(workbenchSource.includes('truncate text-[11px] text-white/38">{textReferenceRoleDescription'), true);
     assert.equal(workbenchSource.includes("apple-pill px-2 py-1 text-[11px]"), true);
+    assert.equal(workbenchSource.includes("composerStarterPrompts"), false);
+    assert.equal(workbenchSource.includes("做一张高端电商产品主图"), false);
+    assert.equal(workbenchSource.includes("做一张门店活动海报"), false);
+    assert.equal(workbenchSource.includes("做一张国潮风人物海报"), false);
+    assert.equal(workbenchSource.includes("!displayPrompt.trim() && starterPrompts.length"), false);
     assert.equal(workbenchSource.includes("apple-button max-w-full truncate rounded-full px-2.5 py-1 text-[10px]"), false);
     assert.equal(workbenchSource.includes("apple-button rounded-full px-2.5 py-1 text-[10px]"), false);
     assert.equal(workbenchSource.includes("apple-button px-2 py-1.5 text-[10px]"), false);
