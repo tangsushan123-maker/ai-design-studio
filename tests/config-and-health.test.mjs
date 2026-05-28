@@ -13,7 +13,7 @@ import { imageSourceDetailLines, imageSourceSummary, shortImageTraceId } from ".
 import { taskMatchesSearch, taskSearchText } from "../lib/workbench-tasks.ts";
 
 async function readWorkbenchSource() {
-  const [clientSource, configSource, nodeCatalogSource, labelSource, imageCollectionSource, composerHelperSource, operationParamSource, textReferenceSource] = await Promise.all([
+  const [clientSource, configSource, nodeCatalogSource, labelSource, imageCollectionSource, composerHelperSource, operationParamSource, textReferenceSource, upscaleSource] = await Promise.all([
     readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-config.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-node-catalog.tsx", import.meta.url), "utf8"),
@@ -22,8 +22,9 @@ async function readWorkbenchSource() {
     readFile(new URL("../components/workbench/workbench-composer-helpers.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-operation-params.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-text-references.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/workbench/workbench-upscale.ts", import.meta.url), "utf8"),
   ]);
-  return `${clientSource}\n${configSource}\n${nodeCatalogSource}\n${labelSource}\n${imageCollectionSource}\n${composerHelperSource}\n${operationParamSource}\n${textReferenceSource}`;
+  return `${clientSource}\n${configSource}\n${nodeCatalogSource}\n${labelSource}\n${imageCollectionSource}\n${composerHelperSource}\n${operationParamSource}\n${textReferenceSource}\n${upscaleSource}`;
 }
 
 describe("OpenAI defaults", () => {
