@@ -80,7 +80,7 @@ import {
   uniqueImageAssets,
   uniqueImagesByKey,
 } from "@/components/workbench/workbench-image-collection";
-import { largePreviewFrameStyle, pngLayerDisplayName, pngLayerPreviewImage, zoomedPreviewFrameStyle } from "@/components/workbench/workbench-image-display";
+import { pngLayerDisplayName } from "@/components/workbench/workbench-image-display";
 import { findDataImagePath, imageDeletionProtection, imageForComparison, stripImageFile } from "@/components/workbench/workbench-image-lifecycle";
 import { compactThumbStyle, imageNodePreviewMetrics, shouldShowCheckerboard } from "@/components/workbench/workbench-image-metrics";
 import {
@@ -141,7 +141,7 @@ import { LightboxActionPanel } from "@/components/workbench/lightbox-action-pane
 import { LightboxDeliveryPanel, type LightboxEditTool } from "@/components/workbench/lightbox-delivery-panel";
 import { LightboxEditPanels } from "@/components/workbench/lightbox-edit-panels";
 import { LightboxInfoPanel } from "@/components/workbench/lightbox-info-panel";
-import { LightboxPreviewToolbar } from "@/components/workbench/lightbox-preview-toolbar";
+import { LightboxPreviewPanel } from "@/components/workbench/lightbox-preview-panel";
 import { LightboxVersionPanel } from "@/components/workbench/lightbox-version-panel";
 import { ImageManagerPanel } from "@/components/workbench/image-manager-panel";
 import { NodeResultsPanel } from "@/components/workbench/node-results-panel";
@@ -163,10 +163,7 @@ import { PngLayerResultSection } from "@/components/workbench/png-layer-result-s
 import { ProjectLibraryPanel } from "@/components/workbench/project-library-panel";
 import { SmartRecommendations } from "@/components/workbench/smart-recommendations";
 import { NodeMenu, QuickMenu } from "@/components/workbench/workbench-menus";
-import {
-  ImageComparisonSlider,
-  type PngLayerExportResult,
-} from "@/components/workbench/result-preview-tools";
+import { type PngLayerExportResult } from "@/components/workbench/result-preview-tools";
 import { TaskCenter } from "@/components/workbench/task-center";
 import { TextReferenceInspector } from "@/components/workbench/text-reference-inspector";
 import {
@@ -6680,10 +6677,6 @@ function ImageLightbox({
     compareBefore
     && (image.nodeOperation === "hd_redraw" || image.nodeOperation === "upscale_4k" || image.nodeOperation === "mask_edit" || image.nodeOperation === "design_optimize" || image.mode?.includes("画质增强") || image.mode?.includes("局部") || image.mode?.includes("设计优化")),
   );
-  const previewFrameStyle = previewZoom
-    ? zoomedPreviewFrameStyle(image, previewZoom)
-    : largePreviewFrameStyle(image);
-
   async function runAction(label: string, action: () => void | Promise<void>) {
     if (activeActionLabel) return;
     setConfirmLightboxAction("");
@@ -6728,40 +6721,16 @@ function ImageLightbox({
           </div>
         </div>
         <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-white/[0.025] lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="min-h-0 p-2 sm:p-3">
-            <LightboxPreviewToolbar previewZoom={previewZoom} onPreviewZoomChange={setPreviewZoom} />
-            <div className={`relative h-[calc(100%-46px)] min-h-[320px] overflow-auto bg-transparent p-2 ${previewZoom ? "flex items-start justify-start" : "flex items-center justify-center"}`}>
-              <div className="relative mx-auto overflow-hidden rounded-[18px] border border-white/10 bg-transparent shadow-[0_20px_70px_rgba(0,0,0,0.32)]" style={previewFrameStyle}>
-                {activePngLayer ? (
-                  <div className="relative h-full w-full">
-                    <ImageFrame
-                      alt={activePngLayer.name || activePngLayer.filename}
-                      className="h-full w-full border-0 bg-transparent"
-                      fit="contain"
-                      image={pngLayerPreviewImage(activePngLayer)}
-                      loading="eager"
-                      preserveRatio={false}
-                      showCheckerboard
-                      variant="original"
-                      style={{ height: "100%" }}
-                    />
-                    <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/14 bg-black/45 px-2.5 py-1 text-[11px] font-semibold text-white/82 backdrop-blur-xl">
-                      {pngLayerDisplayName(activePngLayer)}
-                    </div>
-                  </div>
-                ) : showQualityComparison && compareBefore ? (
-                  <ImageComparisonSlider
-                    after={image}
-                    before={compareBefore}
-                    split={compareSplit}
-                    onSplitChange={setCompareSplit}
-                  />
-                ) : (
-                  <ImageFrame alt={image.fileName || image.id} className="h-full w-full border-0 bg-transparent" fit="contain" image={image} loading="eager" preserveRatio={false} variant="original" style={{ height: "100%" }} />
-                )}
-            </div>
-          </div>
-          </div>
+          <LightboxPreviewPanel
+            activePngLayer={activePngLayer}
+            compareBefore={compareBefore}
+            compareSplit={compareSplit}
+            image={image}
+            previewZoom={previewZoom}
+            showQualityComparison={showQualityComparison}
+            onCompareSplitChange={setCompareSplit}
+            onPreviewZoomChange={setPreviewZoom}
+          />
           <aside className="min-h-0 overflow-auto border-t border-white/10 bg-white/[0.06] p-3 backdrop-blur-2xl sm:p-4 lg:border-l lg:border-t-0">
             <div className="space-y-3">
               <LightboxActionPanel
