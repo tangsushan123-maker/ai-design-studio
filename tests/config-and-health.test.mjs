@@ -13,14 +13,15 @@ import { imageSourceDetailLines, imageSourceSummary, shortImageTraceId } from ".
 import { taskMatchesSearch, taskSearchText } from "../lib/workbench-tasks.ts";
 
 async function readWorkbenchSource() {
-  const [clientSource, configSource, nodeCatalogSource, labelSource, imageCollectionSource] = await Promise.all([
+  const [clientSource, configSource, nodeCatalogSource, labelSource, imageCollectionSource, composerHelperSource] = await Promise.all([
     readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-config.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-node-catalog.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-labels.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/workbench/workbench-image-collection.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/workbench/workbench-composer-helpers.ts", import.meta.url), "utf8"),
   ]);
-  return `${clientSource}\n${configSource}\n${nodeCatalogSource}\n${labelSource}\n${imageCollectionSource}`;
+  return `${clientSource}\n${configSource}\n${nodeCatalogSource}\n${labelSource}\n${imageCollectionSource}\n${composerHelperSource}`;
 }
 
 describe("OpenAI defaults", () => {
