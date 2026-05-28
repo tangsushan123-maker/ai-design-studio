@@ -656,6 +656,17 @@ describe("Local JSON storage", () => {
   });
 });
 
+describe("TypeScript quality gates", () => {
+  it("keeps unused code checks enabled in the default typecheck", async () => {
+    const tsconfigSource = await readFile(new URL("../tsconfig.json", import.meta.url), "utf8");
+    const tsconfig = JSON.parse(tsconfigSource);
+
+    assert.equal(tsconfig.compilerOptions.strict, true);
+    assert.equal(tsconfig.compilerOptions.noUnusedLocals, true);
+    assert.equal(tsconfig.compilerOptions.noUnusedParameters, true);
+  });
+});
+
 describe("Remote image import security", () => {
   it("blocks local and private image URLs before server-side fetches", async () => {
     const routeSource = await readFile(new URL("../app/api/import-image/route.ts", import.meta.url), "utf8");
