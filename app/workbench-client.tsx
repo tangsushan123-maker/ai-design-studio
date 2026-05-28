@@ -271,7 +271,7 @@ import {
 } from "@/components/workbench/workbench-node-ui";
 import { appendDataUrlToForm, appendImageToForm, imageFromSingleResponse, imageSourcePayloadForPngLayerExport, imagesFromResponse } from "@/components/workbench/workbench-image-requests";
 import { copyImageToClipboard, copyTextToClipboard, downloadImageFile, downloadRemoteFile } from "@/components/workbench/workbench-file-actions";
-import { readResponseErrorMessage } from "@/components/workbench/workbench-response";
+import { readResponseErrorMessage, withClientTimeout } from "@/components/workbench/workbench-response";
 import {
   buildTaskRecoveredCompletionPatch,
   hasTaskResultNodesOnCanvasFromNodes,
@@ -7972,23 +7972,6 @@ function persistProjectPayloadForLifecycleExit(payloadText: string) {
       keepalive: canUseKeepalive,
     }).catch(() => {});
   } catch {}
-}
-
-function withClientTimeout<T>(promise: Promise<T>, ms: number, message: string) {
-  return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      reject(new Error(message));
-    }, ms);
-    promise
-      .then((value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      })
-      .catch((error) => {
-        window.clearTimeout(timer);
-        reject(error);
-      });
-  });
 }
 
 function buildProjectConstraintText(
