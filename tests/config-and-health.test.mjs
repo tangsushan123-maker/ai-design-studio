@@ -1736,6 +1736,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(routeSource.includes('taskRunErrorMessage("读取任务记录失败", error)'), true);
     assert.equal(routeSource.includes('taskRunErrorMessage("更新任务记录失败", error)'), true);
     assert.equal(routeSource.includes("emptyTaskRunSummary"), true);
+    assert.equal(routeSource.includes("function taskRunSummary"), true);
+    assert.equal(routeSource.includes("runs.filter((run) => run.state"), false);
+    assert.equal(routeSource.includes("list.map((item) => stringValue(item))"), false);
     assert.equal(routeSource.includes("projectId"), true);
     assert.equal(routeSource.includes('action === "delete"'), true);
     assert.equal(routeSource.includes('action === "clear_finished"'), true);

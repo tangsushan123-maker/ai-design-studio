@@ -11,14 +11,7 @@ export async function GET(request: Request) {
     const requestIds = normalizeRequestIds(url.searchParams.get("requestIds"), undefined);
     const projectId = url.searchParams.get("projectId") || undefined;
     const runs = await listTaskRuns(requestIds, { projectId });
-    const summary = {
-      total: runs.length,
-      waiting: runs.filter((run) => run.state === "waiting").length,
-      active: runs.filter((run) => run.state === "active").length,
-      finished: runs.filter((run) => run.state === "finished").length,
-      failed: runs.filter((run) => run.state === "failed").length,
-      cancelled: runs.filter((run) => run.state === "cancelled").length,
-    };
+    const summary = taskRunSummary(runs);
     return NextResponse.json({ runs, summary });
   } catch (error) {
     return NextResponse.json({ error: taskRunErrorMessage("读取任务记录失败", error), runs: [], summary: emptyTaskRunSummary() }, { status: 500 });
@@ -75,7 +68,14 @@ async function parseTaskRunPayload(request: Request): Promise<Record<string, unk
 
 function normalizeRequestIds(value: unknown, fallback: unknown) {
   const list = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : [fallback];
-  return list.map((item) => stringValue(item)).filter((item): item is string => Boolean(item)).slice(0, taskRunRequestIdLimit);
+  const requestIds: string[] = [];
+  for (const item of list) {
+    const requestId = stringValue(item);
+    if (!requestId) continue;
+    requestIds.push(requestId);
+    if (requestIds.length >= taskRunRequestIdLimit) break;
+  }
+  return requestIds;
 }
 
 function stringValue(value: unknown) {
@@ -96,4 +96,13 @@ function emptyTaskRunSummary() {
     failed: 0,
     cancelled: 0,
   };
+}
+
+function taskRunSummary(runs: Awaited<ReturnType<typeof listTaskRuns>>) {
+  const summary = emptyTaskRunSummary();
+  summary.total = runs.length;
+  for (const run of runs) {
+    summary[run.state] += 1;
+  }
+  return summary;
 }
