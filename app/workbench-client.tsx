@@ -394,6 +394,31 @@ function countTextReferenceEdges(edges: FlowEdge[], targetNodeId: string | null 
   return count;
 }
 
+function countEdgesFromSource(edges: FlowEdge[], sourceNodeId: string) {
+  let count = 0;
+  for (const edge of edges) {
+    if (edge.source === sourceNodeId) count += 1;
+  }
+  return count;
+}
+
+function countSuccessfulResults(results: readonly unknown[]) {
+  let count = 0;
+  for (const result of results) {
+    if (result) count += 1;
+  }
+  return count;
+}
+
+function countImagesInResultGroup(images: ImageAsset[], resultGroupId: string | null | undefined) {
+  if (!resultGroupId) return 0;
+  let count = 0;
+  for (const image of images) {
+    if (image.resultGroupId === resultGroupId) count += 1;
+  }
+  return count;
+}
+
 export default function WorkbenchClient({
   initialImages = [],
   initialHistoryHasMore = false,
@@ -1549,13 +1574,19 @@ function NodeWorkflowWorkbench({
   }
 
   function buildCreativeProjectContext(kind: ProjectKind = projectKind): CreativeBriefInput["projectContext"] {
+    const assetNames: string[] = [];
+    for (const asset of projectAssets) {
+      const name = asset.fileName || asset.materialType || asset.mode || asset.id;
+      if (name) assetNames.push(name);
+      if (assetNames.length >= 12) break;
+    }
     return {
       projectId,
       projectName,
       projectKind: kind,
       assetText: projectContextText,
       assetCount: projectAssets.length,
-      assetNames: projectAssets.map((asset) => asset.fileName || asset.materialType || asset.mode || asset.id).filter(Boolean).slice(0, 12),
+      assetNames,
       publicStyleNames: publicStyleLibraries
         .filter((library) => projectKnowledge.selection.activePublicStyleLibraryIds.includes(library.id))
         .map((library) => library.name),
@@ -1574,7 +1605,8 @@ function NodeWorkflowWorkbench({
   }
 
   function hasMaterialLibraryContent() {
-    const profileSignals = [
+    let profileSignals = 0;
+    for (const value of [
       projectProfile.brandColors,
       projectProfile.logoName,
       projectProfile.phone,
@@ -1582,7 +1614,9 @@ function NodeWorkflowWorkbench({
       projectProfile.qrCodeNote,
       projectProfile.commonCopy,
       projectProfile.styleNotes,
-    ].filter((value) => value.trim()).length;
+    ]) {
+      if (value.trim()) profileSignals += 1;
+    }
     const meaningfulAssetText = projectAssetText.trim() && !/^待联网补全/.test(projectAssetText.trim());
     return Boolean(projectAssets.length || projectKnowledge.materialLibrary.items.length || profileSignals >= 2 || meaningfulAssetText);
   }
@@ -2006,7 +2040,7 @@ function NodeWorkflowWorkbench({
   }
 
   function nextTreeChildPosition(source: FlowNode, options: { xGap?: number; yOffset?: number } = {}) {
-    const branchIndex = edges.filter((edge) => edge.source === source.id).length;
+    const branchIndex = countEdgesFromSource(edges, source.id);
     const x = source.position.x + (options.xGap || nodeAutoSpacingX(source));
     const y = source.position.y + (options.yOffset ?? 12) + branchIndex * treeBranchVerticalGap;
     return avoidNodeOverlap({ x, y });
@@ -2140,7 +2174,11 @@ function NodeWorkflowWorkbench({
         await persistGeneratedMetadata(outputs);
         if (activeProjectIdRef.current === taskProjectId) {
           if (sourceImage) {
-            const nextIds = outputs.map((item) => item.id || item.fileName || item.url).filter(Boolean);
+            const nextIds: string[] = [];
+            for (const item of outputs) {
+              const id = item.id || item.fileName || item.url;
+              if (id) nextIds.push(id);
+            }
             appendNextImageIds(sourceImage, nextIds);
           }
           setHistoryImages((current) => mergeImages(outputs, current));
@@ -3260,11 +3298,13 @@ function NodeWorkflowWorkbench({
   }
 
   function restoreProjectHistoryOutputNodes(images: ImageAsset[], targetProjectId: string) {
-    const candidates = images
-      .filter((image) => imageBelongsToProject(image, targetProjectId) && isUserFacingResultImage(image))
-      .filter((image) => !imageSourceDismissedForProject(targetProjectId, image))
-      .filter((image) => uniqueImagesNotOnCanvas([image]).length > 0)
-      .slice(0, 16);
+    const projectImages: ImageAsset[] = [];
+    for (const image of images) {
+      if (!imageBelongsToProject(image, targetProjectId) || !isUserFacingResultImage(image)) continue;
+      if (imageSourceDismissedForProject(targetProjectId, image)) continue;
+      projectImages.push(image);
+    }
+    const candidates = uniqueImagesNotOnCanvas(projectImages).slice(0, 16);
     if (!candidates.length) return 0;
     const grouped = new Map<string, { task: Pick<TaskRecord, "id" | "requestId" | "nodeId" | "nodeName" | "type">; images: ImageAsset[] }>();
     candidates.forEach((image) => {
@@ -3304,19 +3344,22 @@ function NodeWorkflowWorkbench({
   }
 
   function uniqueImagesNotOnCanvas(images: ImageAsset[]) {
-    const existingKeys = new Set(
-      nodesRef.current
-        .flatMap(taskCandidateImagesFromNode)
-        .map(imageKey)
-        .filter(Boolean),
-    );
+    const existingKeys = new Set<string>();
+    for (const node of nodesRef.current) {
+      for (const image of taskCandidateImagesFromNode(node)) {
+        const key = imageKey(image);
+        if (key) existingKeys.add(key);
+      }
+    }
     const seen = new Set<string>();
-    return images.filter((image) => {
+    const uniqueImages: ImageAsset[] = [];
+    for (const image of images) {
       const key = imageKey(image);
-      if (!key || seen.has(key) || existingKeys.has(key) || dismissedImageKeysRef.current.has(key)) return false;
+      if (!key || seen.has(key) || existingKeys.has(key) || dismissedImageKeysRef.current.has(key)) continue;
       seen.add(key);
-      return true;
-    });
+      uniqueImages.push(image);
+    }
+    return uniqueImages;
   }
 
   function resultBranchYPositions(sourceY: number, images: ImageAsset[]) {
@@ -3442,7 +3485,7 @@ function NodeWorkflowWorkbench({
       ? {
           ...image,
           branchId: `branch_${branchSeed}`,
-          branchLabel: `方案 ${historyImages.filter((item) => item.resultGroupId === (image.resultGroupId || image.sourceTaskId)).length + 1}`,
+          branchLabel: `方案 ${countImagesInResultGroup(historyImages, image.resultGroupId || image.sourceTaskId) + 1}`,
           parentImageId: image.id,
         }
       : image;
@@ -4449,7 +4492,7 @@ function NodeWorkflowWorkbench({
       return;
     }
     const results = await mapWithConcurrency(candidates, batchImageMutationConcurrency, (image) => deleteHistoryImage(image, { permanent, quiet: true, skipTrashRefresh: true }));
-    const success = results.filter(Boolean).length;
+    const success = countSuccessfulResults(results);
     const failed = candidates.length - success;
     const skipped = uniqueImages.length - candidates.length;
     if (!permanent) void loadImageManagerTrash(true);
@@ -4484,7 +4527,7 @@ function NodeWorkflowWorkbench({
       return;
     }
     const results = await mapWithConcurrency(candidates, batchImageMutationConcurrency, (image) => restoreHistoryImage(image, { quiet: true, skipReload: true }));
-    const success = results.filter(Boolean).length;
+    const success = countSuccessfulResults(results);
     const failed = candidates.length - success;
     const skipped = uniqueImages.length - candidates.length;
     void loadImageManagerHistory(true);

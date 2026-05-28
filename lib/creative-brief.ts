@@ -477,7 +477,9 @@ function inferSellingPoints(prompt: string, industry: string) {
   if (industry === "医疗健康") return ["专业可信", "流程清晰", "服务安全感", "预约咨询便利"];
   if (industry === "科技馆/科普活动") return ["体验感", "互动性", "知识收获", "亲子友好"];
   if (industry === "科技服务") return ["效率提升", "创新感", "稳定可靠", "清晰价值"];
-  return [prompt, "主题明确", "视觉完整", "便于传播"].filter(Boolean).slice(0, 4);
+  const points = prompt ? [prompt] : [];
+  points.push("主题明确", "视觉完整", "便于传播");
+  return points.slice(0, 4);
 }
 
 function inferVisualStyle(prompt: string, industry: string) {
@@ -517,23 +519,24 @@ function caveatsFromMissing(missingMaterials: string[]) {
 
 function normalizeDirections(value: unknown, fallback: CreativeDirection[], missingMaterials: string[]) {
   if (!Array.isArray(value)) return fallback;
-  const items = value
-    .map((item, index) => {
-      if (!item || typeof item !== "object") return null;
-      const source = item as Partial<CreativeDirection>;
-      const id = source.id === "B" || index === 1 ? "B" : "A";
-      const base = fallback[index] || fallback[id === "A" ? 0 : 1];
-      return {
-        id,
-        title: cleanText(source.title) || base.title,
-        strategy: cleanText(source.strategy) || base.strategy,
-        prompt: cleanText(source.prompt) || base.prompt,
-        caveats: normalizeStringArray(source.caveats).length ? normalizeStringArray(source.caveats) : caveatsFromMissing(missingMaterials),
-        missingMaterials: normalizeStringArray(source.missingMaterials).length ? normalizeStringArray(source.missingMaterials) : missingMaterials,
-      } satisfies CreativeDirection;
-    })
-    .filter((item): item is CreativeDirection => Boolean(item))
-    .slice(0, 2);
+  const items: CreativeDirection[] = [];
+  for (let index = 0; index < value.length && items.length < 2; index += 1) {
+    const item = value[index];
+    if (!item || typeof item !== "object") continue;
+    const source = item as Partial<CreativeDirection>;
+    const id = source.id === "B" || index === 1 ? "B" : "A";
+    const base = fallback[index] || fallback[id === "A" ? 0 : 1];
+    const caveats = normalizeStringArray(source.caveats);
+    const sourceMissingMaterials = normalizeStringArray(source.missingMaterials);
+    items.push({
+      id,
+      title: cleanText(source.title) || base.title,
+      strategy: cleanText(source.strategy) || base.strategy,
+      prompt: cleanText(source.prompt) || base.prompt,
+      caveats: caveats.length ? caveats : caveatsFromMissing(missingMaterials),
+      missingMaterials: sourceMissingMaterials.length ? sourceMissingMaterials : missingMaterials,
+    });
+  }
   if (items.length === 2) return items;
   return fallback;
 }
@@ -542,6 +545,9 @@ function normalizeImageUnderstanding(value: unknown, fallback: CreativeImageUnde
   if (input.mode !== "single_image") return undefined;
   const source = value && typeof value === "object" ? value as Partial<CreativeImageUnderstanding> : {};
   const base = fallback || buildImageUnderstanding(input, "通用商业传播", "商业设计图", titleFromPrompt(input.userPrompt || "", input.mode));
+  const keepElements = normalizeStringArray(source.keepElements);
+  const optimizations = normalizeStringArray(source.optimizations);
+  const creativeDirections = normalizeStringArray(source.creativeDirections);
   return {
     designType: cleanText(source.designType) || base.designType,
     industry: cleanText(source.industry) || base.industry,
@@ -550,31 +556,41 @@ function normalizeImageUnderstanding(value: unknown, fallback: CreativeImageUnde
     mainColors: cleanText(source.mainColors) || base.mainColors,
     layoutStructure: cleanText(source.layoutStructure) || base.layoutStructure,
     coreTextsAndSellingPoints: cleanText(source.coreTextsAndSellingPoints) || base.coreTextsAndSellingPoints,
-    keepElements: normalizeStringArray(source.keepElements).length ? normalizeStringArray(source.keepElements) : base.keepElements,
-    optimizations: normalizeStringArray(source.optimizations).length ? normalizeStringArray(source.optimizations) : base.optimizations,
-    creativeDirections: normalizeStringArray(source.creativeDirections).length ? normalizeStringArray(source.creativeDirections) : base.creativeDirections,
+    keepElements: keepElements.length ? keepElements : base.keepElements,
+    optimizations: optimizations.length ? optimizations : base.optimizations,
+    creativeDirections: creativeDirections.length ? creativeDirections : base.creativeDirections,
   };
 }
 
 function normalizeIdeaCompletion(value: unknown, fallback?: CreativeIdeaCompletion) {
   if (!fallback) return undefined;
   const source = value && typeof value === "object" ? value as Partial<CreativeIdeaCompletion> : {};
+  const coreSellingPoints = normalizeStringArray(source.coreSellingPoints);
+  const possibleTitles = normalizeStringArray(source.possibleTitles);
+  const creativeDirections = normalizeStringArray(source.creativeDirections);
+  const materialsToCollect = normalizeStringArray(source.materialsToCollect);
   return {
     industry: cleanText(source.industry) || fallback.industry,
     targetAudience: cleanText(source.targetAudience) || fallback.targetAudience,
     communicationGoal: cleanText(source.communicationGoal) || fallback.communicationGoal,
-    coreSellingPoints: normalizeStringArray(source.coreSellingPoints).length ? normalizeStringArray(source.coreSellingPoints) : fallback.coreSellingPoints,
-    possibleTitles: normalizeStringArray(source.possibleTitles).length ? normalizeStringArray(source.possibleTitles) : fallback.possibleTitles,
+    coreSellingPoints: coreSellingPoints.length ? coreSellingPoints : fallback.coreSellingPoints,
+    possibleTitles: possibleTitles.length ? possibleTitles : fallback.possibleTitles,
     visualStyle: cleanText(source.visualStyle) || fallback.visualStyle,
-    creativeDirections: normalizeStringArray(source.creativeDirections).length ? normalizeStringArray(source.creativeDirections) : fallback.creativeDirections,
-    materialsToCollect: normalizeStringArray(source.materialsToCollect).length ? normalizeStringArray(source.materialsToCollect) : fallback.materialsToCollect,
+    creativeDirections: creativeDirections.length ? creativeDirections : fallback.creativeDirections,
+    materialsToCollect: materialsToCollect.length ? materialsToCollect : fallback.materialsToCollect,
   };
 }
 
 function normalizeStringArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.map((item) => cleanText(item)).filter(Boolean).slice(0, 12)
-    : [];
+  if (!Array.isArray(value)) return [];
+  const items: string[] = [];
+  for (const item of value) {
+    const text = cleanText(item);
+    if (!text) continue;
+    items.push(text);
+    if (items.length >= 12) break;
+  }
+  return items;
 }
 
 function isCreativeStartMode(value: unknown): value is CreativeStartMode {

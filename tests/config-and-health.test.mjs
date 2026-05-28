@@ -1368,6 +1368,12 @@ describe("Text-to-image references", () => {
     assert.equal(workbenchSource.includes("function countTextReferenceEdges"), true);
     assert.equal(workbenchSource.includes("edges.filter((edge) => edge.target === connection.target && isTextReferenceTargetHandle(edge.targetHandle)).length"), false);
     assert.equal(workbenchSource.includes("edges.filter((edge) => edge.target === selectedTextNode.id && isTextReferenceTargetHandle(edge.targetHandle)).length"), false);
+    assert.equal(workbenchSource.includes("function countEdgesFromSource"), true);
+    assert.equal(workbenchSource.includes("edges.filter((edge) => edge.source === source.id).length"), false);
+    assert.equal(workbenchSource.includes("function countSuccessfulResults"), true);
+    assert.equal(workbenchSource.includes("results.filter(Boolean).length"), false);
+    assert.equal(workbenchSource.includes("function countEnabledUsage"), true);
+    assert.equal(workbenchSource.includes("uniqueImagesNotOnCanvas([image])"), false);
     assert.equal(creativeBriefRouteSource.includes("getAnalysisModel"), true);
     assert.equal(creativeBriefRouteSource.includes("getImageModel"), false);
     assert.equal(routeSource.includes("buildDesignPlanPrompt"), true);

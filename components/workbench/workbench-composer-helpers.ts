@@ -103,5 +103,9 @@ export function nodeCreationHint(type: NodeKind, fromImage: boolean) {
 function textReferencePreviewCount(node: FlowNode) {
   const refs = node.data.textReferencePreviews;
   if (!Array.isArray(refs)) return 0;
-  return refs.filter((item) => Boolean(item && typeof item === "object" && "image" in item && item.image)).length;
+  let count = 0;
+  for (const item of refs) {
+    if (item && typeof item === "object" && "image" in item && item.image) count += 1;
+  }
+  return count;
 }

@@ -180,6 +180,7 @@ export function normalizeDesignPlan(value: unknown, fallback: DesignPlan): Desig
   const reference = source.referenceAnalysis && typeof source.referenceAnalysis === "object" ? source.referenceAnalysis as Partial<DesignPlan["referenceAnalysis"]> : {};
   const layout = source.layoutPlan && typeof source.layoutPlan === "object" ? source.layoutPlan as Partial<DesignPlan["layoutPlan"]> : {};
   const visual = source.visualPlan && typeof source.visualPlan === "object" ? source.visualPlan as Partial<DesignPlan["visualPlan"]> : {};
+  const people = normalizePeople(copy.people, fallback.copywriting.people);
   return {
     taskType: "poster_design",
     industry: clean(source.industry) || fallback.industry,
@@ -190,7 +191,7 @@ export function normalizeDesignPlan(value: unknown, fallback: DesignPlan): Desig
       subtitle: sanitizePosterCopy(copy.subtitle, fallback.copywriting.subtitle, "subtitle"),
       thirdText: sanitizePosterCopy(copy.thirdText, fallback.copywriting.thirdText, "body"),
       bodyText: sanitizePosterCopyArray(copy.bodyText, fallback.copywriting.bodyText).slice(0, 8),
-      people: Array.isArray(copy.people) ? copy.people.filter((item) => item && typeof item === "object").slice(0, 8) as Array<Record<string, string>> : fallback.copywriting.people,
+      people,
       brand: sanitizePosterCopy(copy.brand, fallback.copywriting.brand, "brand"),
     },
     referenceAnalysis: {
@@ -249,8 +250,8 @@ export function designPlanToImagePrompt(plan: DesignPlan) {
 
 function buildVisibleCopyPrompt(plan: DesignPlan) {
   const copy = plan.copywriting;
-  const body = Array.isArray(copy.bodyText) ? copy.bodyText.filter(Boolean) : [];
-  const people = Array.isArray(copy.people) ? copy.people.filter(Boolean) : [];
+  const body = truthyStrings(copy.bodyText);
+  const peopleLabel = peopleInformationLabel(copy.people);
   return [
     "Visible poster copy to render directly in the image, with professional typography and layout:",
     copy.brand ? `Brand / top label: ${copy.brand}` : "",
@@ -258,9 +259,41 @@ function buildVisibleCopyPrompt(plan: DesignPlan) {
     copy.subtitle ? `Subtitle, secondary hierarchy: ${copy.subtitle}` : "",
     copy.thirdText ? `Support line: ${copy.thirdText}` : "",
     body.length ? `Body / selling points, grouped instead of piled up: ${body.join(" / ")}` : "",
-    people.length ? `People information, small structured labels: ${people.map((item) => Object.values(item).filter(Boolean).join(" ")).filter(Boolean).join(" / ")}` : "",
+    peopleLabel ? `People information, small structured labels: ${peopleLabel}` : "",
     "Do not render the user's instruction sentence. Render only the planned visible copy above.",
   ].filter(Boolean).join("\n");
+}
+
+function normalizePeople(value: unknown, fallback: Array<Record<string, string>>) {
+  if (!Array.isArray(value)) return fallback;
+  const people: Array<Record<string, string>> = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    people.push(item as Record<string, string>);
+    if (people.length >= 8) break;
+  }
+  return people;
+}
+
+function truthyStrings(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const items: string[] = [];
+  for (const item of value) {
+    if (item) items.push(String(item));
+  }
+  return items;
+}
+
+function peopleInformationLabel(people: Array<Record<string, string>>) {
+  const labels: string[] = [];
+  for (const person of people) {
+    const parts: string[] = [];
+    for (const value of Object.values(person)) {
+      if (value) parts.push(String(value));
+    }
+    if (parts.length) labels.push(parts.join(" "));
+  }
+  return labels.join(" / ");
 }
 
 function buildImagePromptFromFallback(input: {

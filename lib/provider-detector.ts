@@ -697,7 +697,12 @@ function sanitizeMessage(message: string) {
 }
 
 function uniqueStrings(values: Array<string | undefined>) {
-  return Array.from(new Set(values.map((value) => value?.trim() || "").filter(Boolean)));
+  const unique = new Set<string>();
+  for (const value of values) {
+    const item = value?.trim();
+    if (item) unique.add(item);
+  }
+  return Array.from(unique);
 }
 
 function isAuthStatus(status?: number) {

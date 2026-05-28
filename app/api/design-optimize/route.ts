@@ -631,7 +631,11 @@ function designStrengthLabel(strength: DesignOptimizationStrength) {
 
 function stringArray(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) return fallback;
-  const items = value.map(stringValue).filter(Boolean);
+  const items: string[] = [];
+  for (const item of value) {
+    const text = stringValue(item);
+    if (text) items.push(text);
+  }
   return items.length ? items : fallback;
 }
 

@@ -126,20 +126,45 @@ export function normalizeProjectProfile(value: unknown): ProjectProfile {
 }
 
 export function projectProfileColors(profile: ProjectProfile) {
-  return Array.from(new Set([
-    ...extractColorValues(profile.primaryColors),
-    ...extractColorValues(profile.secondaryColors),
-    ...extractColorValues(profile.accentColors),
-    ...extractColorValues(profile.backgroundColors),
-    ...extractColorValues(profile.textColors),
-    ...extractColorValues(profile.brandColors),
-    ...extractColorValues(profile.colorPalettes),
-  ]));
+  const colors = new Set<string>();
+  for (const value of [
+    profile.primaryColors,
+    profile.secondaryColors,
+    profile.accentColors,
+    profile.backgroundColors,
+    profile.textColors,
+    profile.brandColors,
+    profile.colorPalettes,
+  ]) {
+    for (const color of extractColorValues(value)) colors.add(color);
+  }
+  return Array.from(colors);
 }
 
 export function extractColorValues(value: string) {
   const matches = value.match(/#[0-9a-f]{3}(?:[0-9a-f]{3})?\b|rgba?\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)/gi);
-  return Array.from(new Set((matches || []).map((item) => item.trim())));
+  const colors = new Set<string>();
+  for (const item of matches || []) {
+    const color = item.trim();
+    if (color) colors.add(color);
+  }
+  return Array.from(colors);
+}
+
+function countPositiveValues(values: readonly number[]) {
+  let count = 0;
+  for (const value of values) {
+    if (value > 0) count += 1;
+  }
+  return count;
+}
+
+function countEnabledUsage(usage: BrandAssetUsage) {
+  let count = 0;
+  for (const enabled of Object.values(usage)) {
+    if (enabled) count += 1;
+  }
+  return count;
 }
 
 export function normalizeBrandAssetUsage(value: unknown): BrandAssetUsage {
@@ -168,7 +193,7 @@ export function summarizeBrandAssets(profile: ProjectProfile, brandAssets: Image
   const copyCount = splitProfileLines(profile.commonCopy).length;
   const ruleCount = splitProfileLines(profile.forbiddenContent).length;
   const hasContact = Boolean(profile.phone.trim() || profile.address.trim());
-  const totalCount = [
+  const totalCount = countPositiveValues([
     colors.length,
     logoCount,
     ipCount,
@@ -176,9 +201,9 @@ export function summarizeBrandAssets(profile: ProjectProfile, brandAssets: Image
     hasContact ? 1 : 0,
     copyCount,
     ruleCount,
-  ].filter(Boolean).length;
+  ]);
   const usage = normalizeBrandAssetUsage(profile.brandAssetUsage);
-  const activeCount = Object.values(usage).filter(Boolean).length;
+  const activeCount = countEnabledUsage(usage);
   return {
     activeCount,
     totalCount,
@@ -199,7 +224,11 @@ export function summarizeBrandAssets(profile: ProjectProfile, brandAssets: Image
 }
 
 export function countBrandAssets(assets: ImageAsset[], kind: "logo" | "ip" | "qrcode" | "background") {
-  return assets.filter((asset) => assetMatchesBrandKind(asset, kind)).length;
+  let count = 0;
+  for (const asset of assets) {
+    if (assetMatchesBrandKind(asset, kind)) count += 1;
+  }
+  return count;
 }
 
 export function findBrandAssets(assets: ImageAsset[], kind: "logo" | "ip" | "qrcode" | "background") {
