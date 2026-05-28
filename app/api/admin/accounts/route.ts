@@ -1,11 +1,14 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { mapWithConcurrency } from "@/lib/async-utils";
 import { adminDeleteAuthUser, adminUpsertAuthUser, AuthInputError, listAuthUsers, requireCurrentUser, userDataPath, type AuthUser } from "@/lib/auth";
 import { writeJsonAtomic } from "@/lib/local-json-store";
 import { maskApiKey } from "@/lib/local-config";
 
 export const runtime = "nodejs";
+
+const accountSummaryReadConcurrency = 8;
 
 type StoredProject = {
   id: string;
@@ -38,7 +41,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const revealUserId = url.searchParams.get("revealUserId") || "";
   const users = await listAuthUsers();
-  const accounts = await Promise.all(users.map((user) => buildAccountSummary(user, currentUser, revealUserId === user.id)));
+  const accounts = await mapWithConcurrency(users, accountSummaryReadConcurrency, (user) => buildAccountSummary(user, currentUser, revealUserId === user.id));
   return NextResponse.json({ ok: true, currentUserId: currentUser.id, accounts });
 }
 

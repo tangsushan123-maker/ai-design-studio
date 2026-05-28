@@ -1,6 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { mapWithConcurrency } from "@/lib/async-utils";
 import { listAuthUsers, requireCurrentUser, userDataPath } from "@/lib/auth";
 import { writeJsonAtomic } from "@/lib/local-json-store";
 import {
@@ -15,6 +16,7 @@ const rootProjectsPath = path.join(process.cwd(), "projects.local.json");
 const rootLegacyProjectPath = path.join(process.cwd(), "project.local.json");
 const rootProjectsBackupPath = `${rootProjectsPath}.bak`;
 const rootLegacyProjectBackupPath = `${rootLegacyProjectPath}.bak`;
+const ownerProjectStoreReadConcurrency = 8;
 
 type StoredProject = {
   id: string;
@@ -294,15 +296,17 @@ async function readAllOwnerProjectStores(currentUserId: string) {
     ...users.filter((user) => user.id === currentUserId),
     ...users.filter((user) => user.id !== currentUserId),
   ];
-  const entries = await Promise.all(
-    orderedUsers.map(async (owner) => {
+  const entries = await mapWithConcurrency(
+    orderedUsers,
+    ownerProjectStoreReadConcurrency,
+    async (owner) => {
       const includeRootMigration = owner.id === currentUserId;
       const hasScopedStore = await fileExists(userDataPath(owner.id, "projects.local.json")) || await fileExists(userDataPath(owner.id, "project.local.json"));
       if (!includeRootMigration && !hasScopedStore) return null;
       const store = await readStore(owner.id, { includeRootMigration });
       const projects = store.projects.filter(isMeaningfulProject);
       return projects.length ? { owner, store: { ...store, projects } } : null;
-    }),
+    },
   );
   return entries.filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
 }

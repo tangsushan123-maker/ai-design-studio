@@ -1,5 +1,6 @@
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { mapWithConcurrency } from "@/lib/async-utils";
 import { listAuthUsers, requireCurrentUser, userDataPath } from "@/lib/auth";
 import { readJsonWithBackup, writeJsonAtomic } from "@/lib/local-json-store";
 import {
@@ -13,6 +14,7 @@ export const runtime = "nodejs";
 
 const rootProjectsPath = path.join(process.cwd(), "projects.local.json");
 const styleLibrariesPath = path.join(process.cwd(), "style-libraries.local.json");
+const projectLibraryReadConcurrency = 8;
 
 type StoredProjectForLibraries = {
   id: string;
@@ -108,7 +110,7 @@ async function readProjectLibraries(userId: string) {
 
 async function readAllProjectLibraries() {
   const users = await listAuthUsers();
-  const libraries = await Promise.all(users.map((user) => readProjectLibraries(user.id)));
+  const libraries = await mapWithConcurrency(users, projectLibraryReadConcurrency, (user) => readProjectLibraries(user.id));
   return libraries.flat();
 }
 

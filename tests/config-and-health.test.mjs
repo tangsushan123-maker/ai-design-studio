@@ -678,6 +678,30 @@ describe("TypeScript quality gates", () => {
   });
 });
 
+describe("Bounded local IO", () => {
+  it("limits multi-account JSON reads with a shared concurrency helper", async () => {
+    const [asyncUtilsSource, generatedHistorySource, adminAccountsSource, materialLibrariesSource, projectRouteSource] = await Promise.all([
+      readFile(new URL("../lib/async-utils.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/generated-history.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/admin/accounts/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/material-libraries/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/project/route.ts", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(asyncUtilsSource.includes("export async function mapWithConcurrency"), true);
+    assert.equal(generatedHistorySource.includes('import { mapWithConcurrency } from "./async-utils"'), true);
+    assert.equal(adminAccountsSource.includes("accountSummaryReadConcurrency = 8"), true);
+    assert.equal(adminAccountsSource.includes("mapWithConcurrency(users, accountSummaryReadConcurrency"), true);
+    assert.equal(materialLibrariesSource.includes("projectLibraryReadConcurrency = 8"), true);
+    assert.equal(materialLibrariesSource.includes("mapWithConcurrency(users, projectLibraryReadConcurrency"), true);
+    assert.equal(projectRouteSource.includes("ownerProjectStoreReadConcurrency = 8"), true);
+    assert.equal(projectRouteSource.includes("mapWithConcurrency("), true);
+    assert.equal(adminAccountsSource.includes("Promise.all(users.map"), false);
+    assert.equal(materialLibrariesSource.includes("Promise.all(users.map"), false);
+    assert.equal(projectRouteSource.includes("Promise.all(\n    orderedUsers.map"), false);
+  });
+});
+
 describe("Remote image import security", () => {
   it("blocks local and private image URLs before server-side fetches", async () => {
     const routeSource = await readFile(new URL("../app/api/import-image/route.ts", import.meta.url), "utf8");
