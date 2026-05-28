@@ -983,6 +983,7 @@ function NodeWorkflowWorkbench({
   const taskCleanupTimersRef = useRef<Record<string, number>>({});
   const taskAbortControllersRef = useRef<Record<string, AbortController>>({});
   const taskProjectContextRef = useRef<Record<string, { projectId: string; projectName: string }>>({});
+  const creativeStartBusyRef = useRef(false);
   const canvasFocusTimerRef = useRef<number | null>(null);
   const cancelledTaskIdsRef = useRef<Set<string>>(new Set());
   const projectLoadedRef = useRef(false);
@@ -1158,6 +1159,8 @@ function NodeWorkflowWorkbench({
     [effectiveImageModel, modelInfo, passedImageModelOptions],
   );
   const selectedNode = selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) ?? null : null;
+  const composerDisplayRatio = selectedNode?.data.kind === "text_to_image" ? ratioParam(selectedNode.data.params.aspectRatio) : composerRatio;
+  const composerDisplayQuality = selectedNode?.data.kind === "text_to_image" ? qualityParam(selectedNode.data.params.quality) : composerQuality;
   const isLowZoom = viewportZoom < 0.58;
   const isLargeWorkflow = nodes.length > 50;
   const isPerformanceMode = isLowZoom ||
@@ -2072,13 +2075,14 @@ function NodeWorkflowWorkbench({
   }
 
   async function handleCreativeStartFromIdea(promptOverride?: string) {
-    if (creativeStartBusy) return;
+    if (creativeStartBusyRef.current || creativeStartBusy) return;
     const prompt = (promptOverride || composerPrompt).trim();
     if (!prompt) {
       setStatus("先输入一句想法，例如：做一张胃肠镜广告。");
       document.querySelector<HTMLTextAreaElement>("[data-composer-input='true']")?.focus();
       return;
     }
+    creativeStartBusyRef.current = true;
     setCreativeStartBusy(true);
     setStatus("正在补全需求，先生成临时项目理解。");
     try {
@@ -2092,6 +2096,7 @@ function NodeWorkflowWorkbench({
       setComposerPrompt("");
       setStatus(modelInfo.hasKey && !brief.missingMaterials.length ? "已补全需求，正在生成 A/B 两个灵感方向。" : "已补全需求，创建临时项目和 A/B 两个灵感方向。");
     } finally {
+      creativeStartBusyRef.current = false;
       setCreativeStartBusy(false);
     }
   }
@@ -2465,6 +2470,15 @@ function NodeWorkflowWorkbench({
     }, 1000);
   }
 
+  function reusableTextToImageNode() {
+    return nodes.find((node) =>
+      node.data.kind === "text_to_image" &&
+      node.data.status !== "running" &&
+      !stringParam(node.data.params.prompt).trim() &&
+      !(node.data.outputs || []).length,
+    ) || null;
+  }
+
   function submitComposer() {
     const selectedPromptNode = selectedNode && isComposerDrivenNode(selectedNode.data.kind) ? selectedNode : null;
     const prompt = composerPrompt.trim();
@@ -2487,8 +2501,8 @@ function NodeWorkflowWorkbench({
 
       if (prompt) updateNodeParam(selectedPromptNode.id, "prompt", prompt);
       if (kind === "text_to_image") {
-        updateNodeParam(selectedPromptNode.id, "aspectRatio", composerRatio);
-        updateNodeParam(selectedPromptNode.id, "quality", composerQuality);
+        updateNodeParam(selectedPromptNode.id, "aspectRatio", composerDisplayRatio);
+        updateNodeParam(selectedPromptNode.id, "quality", composerDisplayQuality);
       }
       if (composerModel && isComposerDrivenNode(kind)) updateNodeParam(selectedPromptNode.id, "model", composerModel);
       setPendingRunNodeId(selectedPromptNode.id);
@@ -2502,8 +2516,36 @@ function NodeWorkflowWorkbench({
       return;
     }
 
+    const reusableNode = reusableTextToImageNode();
+    if (reusableNode) {
+      updateNodeParam(reusableNode.id, "prompt", prompt);
+      updateNodeParam(reusableNode.id, "aspectRatio", composerRatio);
+      updateNodeParam(reusableNode.id, "quality", composerQuality);
+      if (composerModel) updateNodeParam(reusableNode.id, "model", composerModel);
+      setSelectedNodeId(reusableNode.id);
+      setPendingRunNodeId(reusableNode.id);
+      setComposerPrompt("");
+      setStatus("已复用现有文生图节点并开始运行。");
+      return;
+    }
+
     void handleCreativeStartFromIdea(prompt);
     return;
+  }
+
+  function changeComposerRatio(value: AspectRatioValue) {
+    setComposerRatio(value);
+    if (selectedNode?.data.kind === "text_to_image") updateNodeParam(selectedNode.id, "aspectRatio", value);
+  }
+
+  function changeComposerQuality(value: QualityValue) {
+    setComposerQuality(value);
+    if (selectedNode?.data.kind === "text_to_image") updateNodeParam(selectedNode.id, "quality", value);
+  }
+
+  function changeComposerModel(value: string) {
+    setComposerModel(value);
+    if (selectedNode && isComposerDrivenNode(selectedNode.data.kind)) updateNodeParam(selectedNode.id, "model", value);
   }
 
   function addQuickNode(sourceNodeId: string, type: NodeKind, targetHandle: string, paramsOverride: Record<string, unknown> = {}) {
@@ -5565,16 +5607,16 @@ function NodeWorkflowWorkbench({
           model={composerModel}
           modelOptions={passedImageModelOptions}
           prompt={composerPrompt}
-          quality={composerQuality}
-          ratio={composerRatio}
+          quality={composerDisplayQuality}
+          ratio={composerDisplayRatio}
           selectedNode={selectedNode}
-          onModelChange={setComposerModel}
+          onModelChange={changeComposerModel}
           onBrandUsageChange={(usage) => setProjectProfile((current) => ({ ...current, brandAssetUsage: normalizeBrandAssetUsage(usage) }))}
           onImageFile={addComposerImageAsReference}
           onPasteHint={() => setStatus("可以使用系统截图后直接 Command/Ctrl+V 粘贴，或把图片拖到画布里。")}
           onPromptChange={setComposerPrompt}
-          onQualityChange={setComposerQuality}
-          onRatioChange={setComposerRatio}
+          onQualityChange={changeComposerQuality}
+          onRatioChange={changeComposerRatio}
           onSubmit={submitComposer}
         />
 

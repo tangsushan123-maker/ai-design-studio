@@ -1242,6 +1242,15 @@ describe("Workflow canvas performance", () => {
     assert.equal(workbenchSource.includes("做一张门店活动海报"), false);
     assert.equal(workbenchSource.includes("做一张国潮风人物海报"), false);
     assert.equal(workbenchSource.includes("!displayPrompt.trim() && starterPrompts.length"), false);
+    assert.equal(workbenchSource.includes("const composerDisplayRatio = selectedNode?.data.kind === \"text_to_image\" ? ratioParam(selectedNode.data.params.aspectRatio) : composerRatio;"), true);
+    assert.equal(workbenchSource.includes("const composerDisplayQuality = selectedNode?.data.kind === \"text_to_image\" ? qualityParam(selectedNode.data.params.quality) : composerQuality;"), true);
+    assert.equal(workbenchSource.includes('ratio={composerDisplayRatio}'), true);
+    assert.equal(workbenchSource.includes('quality={composerDisplayQuality}'), true);
+    assert.equal(workbenchSource.includes('function changeComposerRatio(value: AspectRatioValue)'), true);
+    assert.equal(workbenchSource.includes('updateNodeParam(selectedNode.id, "aspectRatio", value)'), true);
+    assert.equal(workbenchSource.includes("function reusableTextToImageNode()"), true);
+    assert.equal(workbenchSource.includes("已复用现有文生图节点并开始运行。"), true);
+    assert.equal(workbenchSource.includes("creativeStartBusyRef.current"), true);
     assert.equal(workbenchSource.includes("apple-button max-w-full truncate rounded-full px-2.5 py-1 text-[10px]"), false);
     assert.equal(workbenchSource.includes("apple-button rounded-full px-2.5 py-1 text-[10px]"), false);
     assert.equal(workbenchSource.includes("apple-button px-2 py-1.5 text-[10px]"), false);
