@@ -308,6 +308,7 @@ import {
   buildProjectKnowledgeFromState,
   getCurrentProjectBrandAssets,
   imageAssetToProjectAssetRecord,
+  mergePendingFacts,
   mergeProjectAssetRecords,
   mergeProjectLibraryAssets,
   normalizeBrandAssetUsage,
@@ -7743,16 +7744,6 @@ function normalizeRestoredCanvasPositions(nodes: FlowNode[]) {
         y: Math.round((position.y - offsetY) * 100) / 100,
       },
     };
-  });
-}
-
-function mergePendingFacts(current: ProjectFactCandidate[], incoming: ProjectFactCandidate[]) {
-  const seen = new Set<string>();
-  return [...current, ...incoming].filter((item) => {
-    const key = `${item.field}:${item.value.trim()}:${item.sourceUrl || item.sourceLabel}`;
-    if (!item.value.trim() || seen.has(key)) return false;
-    seen.add(key);
-    return true;
   });
 }
 
