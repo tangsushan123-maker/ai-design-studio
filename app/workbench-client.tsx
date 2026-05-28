@@ -79,6 +79,7 @@ import {
   sortImagesByGeneratedAt,
   sortImagesByRecency,
   sortResultImagesForDisplay,
+  uniqueImageAssets,
   uniqueImagesByKey,
 } from "@/components/workbench/workbench-image-collection";
 import { imageRatioStyle, largePreviewFrameStyle, pngLayerDisplayName, pngLayerPreviewImage, zoomedPreviewFrameStyle } from "@/components/workbench/workbench-image-display";
@@ -5177,17 +5178,6 @@ function NodeWorkflowWorkbench({
       ) : null}
     </main>
   );
-}
-
-function uniqueImageAssets<T extends Pick<ImageAsset, "fileName" | "id" | "url">>(images: T[]) {
-  const seen = new Set<string>();
-  return images.filter((image) => {
-    const key = image.fileName || image.id || image.url;
-    if (!key) return true;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 const ImageInputNode = memo(function ImageInputNode({ id, data, selected }: NodeProps<FlowNode>) {

@@ -51,6 +51,17 @@ export function uniqueImagesByKey(images: ImageAsset[]) {
   return unique;
 }
 
+export function uniqueImageAssets<T extends Pick<ImageAsset, "fileName" | "id" | "url">>(images: T[]) {
+  const seen = new Set<string>();
+  return images.filter((image) => {
+    const key = imageKey(image);
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function imageKey(image: Pick<ImageAsset, "fileName" | "id" | "url">) {
   return image.fileName || image.id || image.url;
 }
