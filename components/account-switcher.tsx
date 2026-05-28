@@ -5,6 +5,10 @@ import { Repeat2, UserCog, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 type AccountMenuUser = { email?: string; name?: string; role?: "owner" | "user" };
+type AccountSwitcherProps = {
+  compact?: boolean;
+  expanded?: boolean;
+};
 
 let cachedUser: AccountMenuUser | null = null;
 let userLoaded = false;
@@ -24,7 +28,7 @@ async function loadCurrentUser() {
   return cachedUser;
 }
 
-export function AccountSwitcher({ expanded = false }: { expanded?: boolean; compact?: boolean }) {
+export function AccountSwitcher({ compact = false, expanded = false }: AccountSwitcherProps) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<AccountMenuUser | null>(cachedUser);
 
@@ -63,20 +67,29 @@ export function AccountSwitcher({ expanded = false }: { expanded?: boolean; comp
     window.location.assign("/login");
   }
 
+  const menuClassName = `account-menu ${compact ? "account-menu--compact" : ""}`;
+  const buttonClassName = [
+    "account-switcher",
+    compact ? "account-switcher--compact" : "",
+    expanded ? "account-switcher--expanded" : "",
+  ].filter(Boolean).join(" ");
+  const panelClassName = `account-menu__panel ${expanded ? "account-menu__panel--expanded" : ""}`;
+
   return (
-    <div className="account-menu" data-account-menu>
+    <div className={menuClassName} data-account-menu>
       <button
+        aria-label="打开账号菜单"
         aria-expanded={open}
-        className={`account-switcher ${expanded ? "account-switcher--expanded" : ""}`}
+        className={buttonClassName}
         onClick={() => setOpen((value) => !value)}
-        title="账号"
+        title="账号菜单"
         type="button"
       >
         <UserCog size={expanded ? 14 : 15} aria-hidden="true" />
         {expanded ? <span>账号</span> : null}
       </button>
       {open ? (
-        <div className={`account-menu__panel ${expanded ? "account-menu__panel--expanded" : ""}`} role="menu">
+        <div className={panelClassName} role="menu">
           <div className="account-menu__identity">
             <span className="account-menu__name">{displayName}</span>
             <span className="account-menu__role">{isAdmin ? "管理员" : "普通账号"}</span>

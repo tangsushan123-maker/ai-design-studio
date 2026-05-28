@@ -1295,6 +1295,10 @@ textarea:focus-visible {
   width: 100%;
 }
 
+.account-menu--compact {
+  min-width: 0;
+}
+
 .account-switcher {
   display: inline-flex;
   width: 100%;
@@ -1325,6 +1329,12 @@ textarea:focus-visible {
 .account-switcher--expanded {
   min-height: 38px;
   padding: 0 10px;
+}
+
+.account-switcher--compact:not(.account-switcher--expanded) {
+  aspect-ratio: 1;
+  min-height: 40px;
+  width: 40px;
 }
 
 .account-menu__panel {
