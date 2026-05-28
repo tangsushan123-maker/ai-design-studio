@@ -8,6 +8,7 @@ import { readJsonWithBackup } from "./local-json-store";
 
 const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const generatedTrashDirName = "_trash";
+const historyDirectoryReadConcurrency = 16;
 const historyMetadataReadConcurrency = 48;
 const historyFileStatConcurrency = 48;
 const historyImageBuildConcurrency = 8;
@@ -199,14 +200,14 @@ function historyMetadataSortTime(metadata: Record<string, unknown>) {
 
 async function listGeneratedImageFiles(dir: string, base = "", options: { includeTrash?: boolean } = {}): Promise<string[]> {
   const entries = await readdir(path.join(dir, base), { withFileTypes: true });
-  const files = await Promise.all(entries.map(async (entry) => {
+  const files = await mapWithConcurrency(entries, historyDirectoryReadConcurrency, async (entry) => {
     const relative = path.join(base, entry.name);
     if (entry.isDirectory() && entry.name === "_variants") return [];
     if (entry.isDirectory() && entry.name === generatedTrashDirName && !options.includeTrash) return [];
     if (entry.isDirectory()) return listGeneratedImageFiles(dir, relative, options);
     if (entry.isFile() && imageExtensions.has(path.extname(entry.name).toLowerCase())) return [relative];
     return [];
-  }));
+  });
   return files.flat();
 }
 

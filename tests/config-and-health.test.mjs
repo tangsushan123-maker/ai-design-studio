@@ -1645,8 +1645,11 @@ describe("Project stability and task tracing", () => {
     assert.equal(generatedHistorySource.includes("sortTime: historyMetadataSortTime(savedMetadata)"), true);
     assert.equal(generatedHistorySource.includes("cachedFileStat || await stat(fullPath)"), true);
     assert.equal(generatedHistorySource.includes("historySortTime(metadata"), false);
+    assert.equal(generatedHistorySource.includes("historyDirectoryReadConcurrency = 16"), true);
     assert.equal(generatedHistorySource.includes("historyMetadataReadConcurrency = 48"), true);
     assert.equal(generatedHistorySource.includes("historyImageBuildConcurrency = 8"), true);
+    assert.equal(generatedHistorySource.includes("mapWithConcurrency(entries, historyDirectoryReadConcurrency"), true);
+    assert.equal(generatedHistorySource.includes("Promise.all(entries.map"), false);
     assert.equal(generatedHistorySource.includes("mapWithConcurrency("), true);
     assert.equal(workbenchSource.includes("imageMatchesGeneratedFile"), true);
     assert.equal(workbenchSource.includes("applyHistoryFavoriteState"), true);
