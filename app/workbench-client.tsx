@@ -135,6 +135,7 @@ import {
   type ProjectFactCandidate,
   type ProjectKnowledgeBase,
 } from "@/lib/project-system";
+import { mapWithConcurrency } from "@/lib/async-utils";
 import { findSizePresetByLabel } from "@/lib/size-presets";
 import { ImageFrame } from "@/components/workbench/image-frame";
 import { LightboxActionPanel } from "@/components/workbench/lightbox-action-panel";
@@ -363,6 +364,7 @@ import type {
 } from "@/components/workbench/workbench-types";
 import type { ModelCatalogItem } from "@/lib/openai-defaults";
 
+const projectResourceNormalizeConcurrency = 4;
 
 export default function WorkbenchClient({
   initialImages = [],
@@ -1351,26 +1353,29 @@ function NodeWorkflowWorkbench({
   }
 
   async function ensureProjectPayloadResources<T extends ProjectPayload & { setActive?: boolean }>(payload: T): Promise<T> {
-    const imageMap = new Map<string, ImageAsset>();
+    const imageMap = new Map<string, Promise<ImageAsset | null | undefined>>();
     const normalizeImage = async (image: ImageAsset | null | undefined) => {
       if (!image) return image;
       const key = imageKey(image);
-      if (imageMap.has(key)) return imageMap.get(key);
-      const saved = await ensureImageAssetResource(image);
-      imageMap.set(key, saved);
-      return saved;
+      const cached = imageMap.get(key);
+      if (cached) return cached;
+      const pending = ensureImageAssetResource(image);
+      imageMap.set(key, pending);
+      return pending;
     };
 
-    const assets = await Promise.all((payload.assets || []).map((asset) => normalizeImage(asset) as Promise<ImageAsset>));
+    const assets = await mapWithConcurrency(payload.assets || [], projectResourceNormalizeConcurrency, (asset) => normalizeImage(asset) as Promise<ImageAsset>);
     const assetByOldUrl = new Map<string, ImageAsset>();
     (payload.assets || []).forEach((asset, index) => {
       if (asset.url?.startsWith("data:image/") && assets[index]) assetByOldUrl.set(asset.url, assets[index]);
     });
-    const nodes = await Promise.all(
-      (payload.nodes || []).map(async (node) => {
+    const nodes = await mapWithConcurrency(
+      payload.nodes || [],
+      projectResourceNormalizeConcurrency,
+      async (node) => {
         const image = await normalizeImage(node.data.image as ImageAsset | undefined);
         const output = await normalizeImage(node.data.output as ImageAsset | null | undefined);
-        const outputs = await Promise.all((Array.isArray(node.data.outputs) ? node.data.outputs : []).map((item) => normalizeImage(item as ImageAsset) as Promise<ImageAsset>));
+        const outputs = await mapWithConcurrency(Array.isArray(node.data.outputs) ? node.data.outputs : [], projectResourceNormalizeConcurrency, (item) => normalizeImage(item as ImageAsset) as Promise<ImageAsset>);
         const params = await ensureNodeParamResources(node.data.params || {});
         return {
           ...node,
@@ -1382,7 +1387,7 @@ function NodeWorkflowWorkbench({
             outputs,
           },
         };
-      }),
+      },
     );
 
     return {

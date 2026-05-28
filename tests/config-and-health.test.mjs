@@ -1478,6 +1478,11 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("writeProjectLocalCachePointer"), true);
     assert.equal(workbenchSource.includes("isProjectLocalCachePointer"), true);
     assert.equal(workbenchSource.includes("isProjectTaskCachePointer"), true);
+    assert.equal(workbenchSource.includes("projectResourceNormalizeConcurrency = 4"), true);
+    assert.equal(workbenchSource.includes("new Map<string, Promise<ImageAsset | null | undefined>>()"), true);
+    assert.equal(workbenchSource.includes("const pending = ensureImageAssetResource(image)"), true);
+    assert.equal(workbenchSource.includes("mapWithConcurrency(payload.assets || [], projectResourceNormalizeConcurrency"), true);
+    assert.equal(workbenchSource.includes("Promise.all((payload.assets || []).map"), false);
     assert.equal(workbenchSource.includes('storageMode: "file"'), true);
     assert.equal(workbenchSource.includes("payload: stablePayload"), false);
     assert.equal(workbenchSource.includes("完整项目已保存到项目文件；浏览器缓存只保留轻量指针。"), true);
