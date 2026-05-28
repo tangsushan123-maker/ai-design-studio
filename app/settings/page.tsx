@@ -32,6 +32,19 @@ import {
 } from "@/components/settings/settings-status-ui";
 import { DetectionSummary, SetupChecklist, type DetectionResult } from "@/components/settings/settings-diagnostics";
 import { ModelGroup } from "@/components/settings/settings-model-group";
+import {
+  formatServerTime,
+  healthKeyLabel,
+  inferApiUrl,
+  inferProviderId,
+  isRunnableModelCapability,
+  modelKindLabel,
+  modelsFor,
+  nodeRuntimeStatus,
+  normalizeApiUrl,
+  siteFromUrl,
+  type SettingsHealthResponse,
+} from "@/components/settings/settings-page-utils";
 
 type SettingsResponse = {
   hasApiKey: boolean;
@@ -73,18 +86,6 @@ type Status = {
   message: string;
 };
 
-type HealthResponse = {
-  ok?: boolean;
-  hasKey?: boolean;
-  diagnostics?: {
-    nodeVersion?: string;
-    platform?: string;
-    runtime?: string;
-    serverTime?: string;
-  };
-  message?: string;
-};
-
 const customProvider = findProviderPreset("custom");
 const emptyDraft = { id: "", label: "", capability: "text" as ModelCapability };
 const reasoningEfforts: ModelReasoningEffort[] = ["none", "minimal", "low", "medium", "high", "xhigh"];
@@ -124,7 +125,7 @@ export default function SettingsPage() {
   const [detectionResult, setDetectionResult] = useState<DetectionResult | null>(null);
   const [status, setStatus] = useState<Status>({ type: "idle", message: "待配置" });
   const [lastModelTest, setLastModelTest] = useState<ModelTestResponse | null>(null);
-  const [serverHealth, setServerHealth] = useState<HealthResponse | null>(null);
+  const [serverHealth, setServerHealth] = useState<SettingsHealthResponse | null>(null);
   const [savedAt, setSavedAt] = useState("");
   const isBusy = status.type === "loading";
   const passedModels = useMemo(() => modelsCache.filter((model) => model.testStatus === "passed"), [modelsCache]);
@@ -139,7 +140,7 @@ export default function SettingsPage() {
     [groupedModels.image, imageModel],
   );
   const nodeRuntime = useMemo(() => nodeRuntimeStatus(serverHealth?.diagnostics?.nodeVersion), [serverHealth?.diagnostics?.nodeVersion]);
-  const normalizedProviderId = useMemo(() => inferProviderId(providerId, providerSiteUrl, apiBaseUrl), [apiBaseUrl, providerId, providerSiteUrl]);
+  const normalizedProviderId = useMemo(() => inferProviderId(providerId, providerSiteUrl, apiBaseUrl, customProvider.id), [apiBaseUrl, providerId, providerSiteUrl]);
   const effectiveProvider = useMemo(() => findProviderPreset(normalizedProviderId), [normalizedProviderId]);
   const suggestedImageModels = useMemo(() => {
     const existing = new Set(groupedModels.image.map((model) => model.id));
@@ -167,7 +168,7 @@ export default function SettingsPage() {
   async function reloadServerHealth() {
     try {
       const response = await fetch("/api/health-openai");
-      const data = await readSettingsJson<HealthResponse>(response);
+      const data = await readSettingsJson<SettingsHealthResponse>(response);
       setServerHealth(data);
     } catch {
       setServerHealth({
@@ -188,7 +189,7 @@ export default function SettingsPage() {
   }
 
   function applySettings(data: SettingsResponse) {
-    const nextProvider = findProviderPreset(inferProviderId(data.providerId || customProvider.id, data.providerSiteUrl, data.apiBaseUrl));
+    const nextProvider = findProviderPreset(inferProviderId(data.providerId || customProvider.id, data.providerSiteUrl, data.apiBaseUrl, customProvider.id));
     const nextSiteUrl = data.websiteUrl || data.providerSiteUrl || nextProvider.siteUrl || siteFromUrl(data.apiBaseUrl);
     const nextApiUrl = normalizeApiUrl(data.apiBaseUrl || inferApiUrl(nextSiteUrl, nextProvider), nextProvider);
     setProviderId(nextProvider.id);
@@ -577,7 +578,7 @@ export default function SettingsPage() {
                     value={providerSiteUrl}
                     onChange={(event) => {
                       const nextSiteUrl = event.target.value;
-                      const nextProvider = findProviderPreset(inferProviderId(providerId, nextSiteUrl, apiBaseUrl));
+                      const nextProvider = findProviderPreset(inferProviderId(providerId, nextSiteUrl, apiBaseUrl, customProvider.id));
                       setProviderSiteUrl(nextSiteUrl);
                       if (!advancedUrl) setApiBaseUrl(inferApiUrl(nextSiteUrl, nextProvider));
                       markConfigDirty();
@@ -790,74 +791,4 @@ export default function SettingsPage() {
       </section>
     </main>
   );
-}
-
-function healthKeyLabel(health: HealthResponse | null, maskedApiKey: string) {
-  if (health?.hasKey) return maskedApiKey || "服务端已配置";
-  if (health && health.hasKey === false) return "服务端未检测到 Key";
-  return maskedApiKey || "未读取";
-}
-
-function formatServerTime(value?: string) {
-  if (!value) return "未读取";
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return value;
-  return date.toLocaleString("zh-CN");
-}
-
-function nodeRuntimeStatus(version?: string): { detail: string; state: "idle" | "success" | "error" } {
-  if (!version) return { detail: "未读取", state: "idle" };
-  const [major = 0, minor = 0] = version.split(".").map(Number);
-  const supported = major > 20 || (major === 20 && minor >= 9);
-  return {
-    detail: supported ? `v${version} · 已满足 >=20.9` : `v${version} · 需升级到 >=20.9`,
-    state: supported ? "success" : "error",
-  };
-}
-
-function modelsFor(capability: ModelCapability, models: ModelCatalogItem[]) {
-  return models.filter((model) => model.capabilities.includes(capability));
-}
-
-function modelKindLabel(kind: ModelCapability) {
-  if (kind === "image") return "图片模型";
-  if (kind === "video") return "视频模型";
-  if (kind === "embedding") return "Embedding";
-  if (kind === "unknown") return "未知模型";
-  return "文本模型";
-}
-
-function isRunnableModelCapability(kind: ModelCapability): kind is "text" | "image" | "video" {
-  return kind === "text" || kind === "image" || kind === "video";
-}
-
-function inferApiUrl(siteUrl: string, provider: ReturnType<typeof findProviderPreset>) {
-  const value = siteUrl.trim().replace(/\/+$/, "") || provider.apiBaseUrl || "";
-  if (!value) return "";
-  if (/\/(v1|v1beta\/openai)$/i.test(value)) return value;
-  if (provider.id === "gemini" && /generativelanguage\.googleapis\.com$/i.test(value)) return `${value}/v1beta/openai`;
-  if (provider.compatibility === "custom-openai") return `${value}/v1`;
-  return value;
-}
-
-function normalizeApiUrl(value: string, provider: ReturnType<typeof findProviderPreset>) {
-  return inferApiUrl(value, provider);
-}
-
-function inferProviderId(providerId: string, providerSiteUrl: string, apiBaseUrl: string) {
-  const value = `${providerSiteUrl} ${apiBaseUrl}`;
-  if (/yostoken|ccswitch|ccs/i.test(value)) return "ccs";
-  if (/openrouter\.ai/i.test(value)) return "openrouter";
-  if (/generativelanguage\.googleapis\.com/i.test(value)) return "gemini";
-  if (/api\.openai\.com|platform\.openai\.com/i.test(value)) return "openai";
-  return providerId || customProvider.id;
-}
-
-function siteFromUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return `${url.protocol}//${url.host}`;
-  } catch {
-    return value;
-  }
 }

@@ -523,9 +523,10 @@ describe("API error hygiene", () => {
 
 describe("Settings model management", () => {
   it("guards model row actions with busy and delete confirmation states", async () => {
-    const [settingsSource, settingsModelGroupSource, settingsRouteSource, modelsManageSource, modelsRefreshSource, modelsTestSource, providersDetectSource] = await Promise.all([
+    const [settingsSource, settingsModelGroupSource, settingsUtilsSource, settingsRouteSource, modelsManageSource, modelsRefreshSource, modelsTestSource, providersDetectSource] = await Promise.all([
       readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/settings/settings-model-group.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/settings/settings-page-utils.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/settings/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/models/manage/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/models/refresh/route.ts", import.meta.url), "utf8"),
@@ -555,15 +556,15 @@ describe("Settings model management", () => {
     assert.equal(settingsSource.includes("serverHealth"), true);
     assert.equal(settingsSource.includes("reloadServerHealth"), true);
     assert.equal(settingsSource.includes("刷新服务器诊断"), true);
-    assert.equal(settingsSource.includes("nodeRuntimeStatus"), true);
-    assert.equal(settingsSource.includes("已满足 >=20.9"), true);
-    assert.equal(settingsSource.includes("需升级到 >=20.9"), true);
+    assert.equal(settingsUtilsSource.includes("nodeRuntimeStatus"), true);
+    assert.equal(settingsUtilsSource.includes("已满足 >=20.9"), true);
+    assert.equal(settingsUtilsSource.includes("需升级到 >=20.9"), true);
     assert.equal(settingsUiSource.includes("apple-status-success rounded-full border px-2 py-0.5 text-[11px]"), true);
     assert.equal(settingsUiSource.includes("apple-status-danger rounded-full border px-2 py-0.5 text-[11px]"), true);
     assert.equal(settingsUiSource.includes("apple-pill-accent px-2 py-0.5 text-[11px]"), true);
     assert.equal(settingsUiSource.includes("apple-pill px-2 py-1 text-[10px]"), false);
-    assert.equal(settingsSource.includes("healthKeyLabel"), true);
-    assert.equal(settingsSource.includes("formatServerTime"), true);
+    assert.equal(settingsUtilsSource.includes("healthKeyLabel"), true);
+    assert.equal(settingsUtilsSource.includes("formatServerTime"), true);
     assert.equal(settingsRouteSource.includes("settingsErrorMessage"), true);
     assert.equal(settingsRouteSource.includes("parseSettingsPayload"), true);
     assert.equal(settingsRouteSource.includes("InvalidSettingsPayloadError"), true);
