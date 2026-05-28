@@ -246,7 +246,6 @@ import {
   textToImageSubjectScale,
 } from "@/components/workbench/workbench-node-prompts";
 import {
-  isProjectLocalCachePointer,
   normalizeProjectKind,
   projectAssetUploadLabel,
   projectSnapshotStorageKey,
@@ -294,6 +293,7 @@ import {
   taskNeedsServerSync,
 } from "@/components/workbench/workbench-task-helpers";
 import {
+  getStoredProject,
   imageSourceDismissedForProject,
   isFiniteViewport,
   loadDismissedImageKeySet,
@@ -7694,47 +7694,6 @@ function migrateLegacyNodeParams(kind: NodeKind, originalKind: unknown, params: 
     prompt: stringParam(params.prompt) || qualityEnhanceDefaultPrompt(enhancementMode),
     model: stringParam(params.model),
   };
-}
-
-function getStoredProject(serverProject: ProjectPayload | null): ProjectPayload | null {
-  const localProject = readLegacyProjectLocalCache();
-  if (!serverProject) return localProject;
-
-  const stableServerProject = stripProjectRuntimeState(serverProject);
-  const sameProjectLocal = localProject?.id && localProject.id === serverProject.id ? localProject : null;
-  const serverHasCanvas = Boolean(stableServerProject.nodes?.length || stableServerProject.edges?.length);
-  const serverHasProjectData = Boolean(stableServerProject.assets?.length || stableServerProject.assetText || stableServerProject.profile);
-  if (!sameProjectLocal || serverHasCanvas || serverHasProjectData) {
-    return {
-      ...sameProjectLocal,
-      ...stableServerProject,
-      nodes: stableServerProject.nodes?.length ? stableServerProject.nodes : sameProjectLocal?.nodes || [],
-      edges: stableServerProject.edges?.length ? stableServerProject.edges : sameProjectLocal?.edges || [],
-      runs: restoreProjectTasks(stableServerProject.runs?.length ? stableServerProject.runs : sameProjectLocal?.runs || []),
-      assets: stableServerProject.assets?.length ? stableServerProject.assets : sameProjectLocal?.assets || [],
-      projectKind: stableServerProject.projectKind || sameProjectLocal?.projectKind || "formal",
-      assetText: stableServerProject.assetText ?? sameProjectLocal?.assetText ?? "",
-      profile: stableServerProject.profile ?? sameProjectLocal?.profile,
-      knowledge: stableServerProject.knowledge ?? sameProjectLocal?.knowledge,
-      textProtectionMode: stableServerProject.textProtectionMode ?? sameProjectLocal?.textProtectionMode,
-    };
-  }
-  return localProject ? stripProjectRuntimeState(localProject) : null;
-}
-
-function readLegacyProjectLocalCache(): ProjectPayload | null {
-  try {
-    const raw = window.localStorage.getItem(projectStorageKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    if (isProjectLocalCachePointer(parsed)) return null;
-    if (!parsed || typeof parsed !== "object") return null;
-    const candidate = parsed as Partial<ProjectPayload>;
-    const hasProjectShape = Boolean(candidate.id || candidate.name || candidate.nodes?.length || candidate.edges?.length || candidate.assets?.length);
-    return hasProjectShape ? stripProjectRuntimeState(candidate as ProjectPayload) : null;
-  } catch {
-    return null;
-  }
 }
 
 function readProjectSnapshots(projectId: string): ProjectSnapshot[] {
