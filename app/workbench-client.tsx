@@ -369,6 +369,22 @@ const projectResourceNormalizeConcurrency = 4;
 const batchImageMutationConcurrency = 3;
 const metadataPatchConcurrency = 4;
 
+function projectUserFacingImages(images: ImageAsset[], projectId: string) {
+  const visible: ImageAsset[] = [];
+  for (const image of images) {
+    if (imageBelongsToProject(image, projectId) && isUserFacingResultImage(image)) visible.push(image);
+  }
+  return visible;
+}
+
+function countProjectUserFacingImages(images: ImageAsset[], projectId: string) {
+  let count = 0;
+  for (const image of images) {
+    if (imageBelongsToProject(image, projectId) && isUserFacingResultImage(image)) count += 1;
+  }
+  return count;
+}
+
 export default function WorkbenchClient({
   initialImages = [],
   initialHistoryHasMore = false,
@@ -567,7 +583,7 @@ function NodeWorkflowWorkbench({
     canvasInteraction.isNodeDragging ||
     canvasInteraction.isConnecting;
   const loadedProjectImageCount = useMemo(
-    () => historyImages.filter((image) => imageBelongsToProject(image, projectId) && isUserFacingResultImage(image)).length,
+    () => countProjectUserFacingImages(historyImages, projectId),
     [historyImages, projectId],
   );
   const projectImageCount = Math.max(projectHistoryTotal, loadedProjectImageCount);
@@ -6089,7 +6105,7 @@ function RightPanel({
     [selectedNode],
   );
   const selectedOutputs = useMemo(() => sortResultImagesForDisplay(rawSelectedOutputs).filter(isUserFacingResultImage), [rawSelectedOutputs]);
-  const visibleHistoryImages = useMemo(() => historyImages.filter((image) => imageBelongsToProject(image, projectId)).filter(isUserFacingResultImage), [historyImages, projectId]);
+  const visibleHistoryImages = useMemo(() => projectUserFacingImages(historyImages, projectId), [historyImages, projectId]);
   const imageManagerVisibleImages = useMemo(
     () => (imageManagerImages.length ? imageManagerImages : historyImages).filter(isUserFacingResultImage),
     [historyImages, imageManagerImages],

@@ -1626,6 +1626,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("const projectCapacityImageWarning = 200"), true);
     assert.equal(workbenchSource.includes("const projectCapacityJsonWarningBytes = 8 * 1024 * 1024"), true);
     assert.equal(workbenchSource.includes("projectCapacitySummary"), true);
+    assert.equal(workbenchSource.includes("function countProjectUserFacingImages"), true);
+    assert.equal(workbenchSource.includes("historyImages.filter((image) => imageBelongsToProject(image, projectId) && isUserFacingResultImage(image)).length"), false);
+    assert.equal(workbenchSource.includes("historyImages.filter((image) => imageBelongsToProject(image, projectId)).filter(isUserFacingResultImage)"), false);
     assert.equal(workbenchSource.includes("项目体积"), true);
     assert.equal(projectRouteSource.includes("parseProjectPayload"), true);
     assert.equal(projectRouteSource.includes("InvalidProjectPayloadError"), true);
