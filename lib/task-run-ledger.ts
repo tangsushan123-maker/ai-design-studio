@@ -312,9 +312,18 @@ function syntheticMutationRecord(requestId: string, message: string): TaskRunRec
 
 async function readTaskRunStore(): Promise<TaskRunStore> {
   const store = await readJsonWithBackup<TaskRunStore>(taskRunStorePath, { runs: [] });
-  return {
-    runs: Array.isArray(store.runs) ? store.runs.filter(isTaskRunRecord).slice(0, taskRunLimit) : [],
-  };
+  return { runs: normalizeStoredTaskRuns(store.runs) };
+}
+
+function normalizeStoredTaskRuns(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const runs: TaskRunRecord[] = [];
+  for (const item of value) {
+    if (!isTaskRunRecord(item)) continue;
+    runs.push(item);
+    if (runs.length >= taskRunLimit) break;
+  }
+  return runs;
 }
 
 async function writeTaskRunStore(store: TaskRunStore) {
