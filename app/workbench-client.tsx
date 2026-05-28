@@ -250,6 +250,18 @@ import {
   textToImageSafeMargin,
   textToImageSubjectScale,
 } from "@/components/workbench/workbench-node-prompts";
+import {
+  dismissedImageStorageKey,
+  dismissedTaskStorageKey,
+  inferProjectAssetType,
+  isProjectLocalCachePointer,
+  isProjectTaskCachePointer,
+  normalizeProjectKind,
+  projectAssetUploadLabel,
+  projectSnapshotStorageKey,
+  projectTaskStorageKey,
+  resolveProjectAssetMaterialType,
+} from "@/components/workbench/workbench-project-helpers";
 import type {
   BrandAssetSummary,
   BrandAssetUsage,
@@ -8538,31 +8550,6 @@ function styleLibraryReferencePreview(library: MaterialLibrarySummary) {
     .join(" / ");
 }
 
-function inferProjectAssetType(asset: ImageAsset): ProjectAssetRecord["type"] {
-  if (asset.nodeOperation === "output" || asset.source === "history") return "history_result";
-  if (asset.materialType === "Logo") return "logo";
-  if (asset.materialType === "IP形象") return "icon";
-  if (asset.materialType === "背景图") return "background";
-  if (asset.materialType === "二维码") return "icon";
-  if ((asset.fileName || "").toLowerCase().includes("logo")) return "logo";
-  return "image";
-}
-
-function resolveProjectAssetMaterialType(item: ProjectAssetRecord) {
-  if (item.tags.includes("二维码")) return "二维码";
-  if (item.tags.includes("IP形象")) return "IP形象";
-  if (item.type === "logo" || item.tags.includes("Logo")) return "Logo";
-  if (item.type === "background" || item.tags.includes("背景图")) return "背景图";
-  return item.type;
-}
-
-function projectAssetUploadLabel(kind: ProjectAssetUploadKind) {
-  if (kind === "logo") return "Logo";
-  if (kind === "qrcode") return "二维码";
-  if (kind === "ip") return "IP形象";
-  return "背景图";
-}
-
 function stripProjectRuntimeState<T extends ProjectPayload & { setActive?: boolean }>(project: T): T {
   return {
     ...project,
@@ -8612,11 +8599,6 @@ function findDataImagePath(value: unknown, path = "$", visited = new WeakSet<obj
   return "";
 }
 
-function normalizeProjectKind(value: unknown): ProjectKind {
-  if (value === "formal" || value === "temporary" || value === "scratch") return value;
-  return "formal";
-}
-
 function getStoredProject(serverProject: ProjectPayload | null): ProjectPayload | null {
   const localProject = readLegacyProjectLocalCache();
   if (!serverProject) return localProject;
@@ -8656,40 +8638,6 @@ function readLegacyProjectLocalCache(): ProjectPayload | null {
   } catch {
     return null;
   }
-}
-
-function isProjectLocalCachePointer(value: unknown): value is ProjectLocalCachePointer {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      (value as ProjectLocalCachePointer).version === 2 &&
-      (value as ProjectLocalCachePointer).storageMode === "file",
-  );
-}
-
-function isProjectTaskCachePointer(value: unknown): value is ProjectTaskCachePointer {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      (value as ProjectTaskCachePointer).version === 2 &&
-      (value as ProjectTaskCachePointer).storageMode === "file",
-  );
-}
-
-function projectTaskStorageKey(projectId: string) {
-  return `${projectStorageKey}:tasks:${projectId || "local-project"}`;
-}
-
-function dismissedTaskStorageKey(projectId: string) {
-  return `${projectStorageKey}:dismissed-tasks:${projectId || "local-project"}`;
-}
-
-function dismissedImageStorageKey(projectId: string) {
-  return `${projectStorageKey}:dismissed-result-images:${projectId || "local-project"}`;
-}
-
-function projectSnapshotStorageKey(projectId: string) {
-  return `${projectStorageKey}:snapshots:${projectId || "local-project"}`;
 }
 
 function readProjectSnapshots(projectId: string): ProjectSnapshot[] {
