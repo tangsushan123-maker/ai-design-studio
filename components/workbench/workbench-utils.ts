@@ -2,6 +2,7 @@ import { type AspectRatioValue, type QualityValue } from "@/lib/design-options";
 
 export const ratioOptions: AspectRatioValue[] = ["1:1", "4:5", "3:4", "4:3", "16:9", "9:16", "9.75:1", "custom"];
 export const adaptiveRatioOptions: AspectRatioValue[] = ["auto", "1:1", "4:5", "3:4", "4:3", "16:9", "9:16", "9.75:1", "custom"];
+const supportedImageTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 export function sanitizeFileName(value: string) {
   return value
@@ -99,35 +100,32 @@ export function inferRatioFromTargetSize(value: string): AspectRatioValue {
 }
 
 export function isSupportedImageFile(file: File) {
-  return ["image/png", "image/jpeg", "image/webp"].includes(file.type);
+  return supportedImageTypes.has(file.type);
 }
 
 export function hasClipboardImageFile(clipboardData: DataTransfer | null) {
   if (!clipboardData) return false;
-  const supportedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
   const items = Array.from(clipboardData.items || []);
   return (
-    items.some((item) => item.kind === "file" && supportedTypes.has(item.type)) ||
-    Array.from(clipboardData.files || []).some((file) => supportedTypes.has(file.type))
+    items.some((item) => item.kind === "file" && supportedImageTypes.has(item.type)) ||
+    Array.from(clipboardData.files || []).some((file) => supportedImageTypes.has(file.type))
   );
 }
 
 export function hasClipboardImageCandidate(clipboardData: DataTransfer | null) {
   if (!clipboardData) return false;
-  const supportedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
   const items = Array.from(clipboardData.items || []);
   return (
-    items.some((item) => item.kind === "file" && supportedTypes.has(item.type)) ||
-    Array.from(clipboardData.files || []).some((file) => supportedTypes.has(file.type)) ||
+    items.some((item) => item.kind === "file" && supportedImageTypes.has(item.type)) ||
+    Array.from(clipboardData.files || []).some((file) => supportedImageTypes.has(file.type)) ||
     items.some((item) => item.kind === "string" && ["text/html", "text/uri-list"].includes(item.type))
   );
 }
 
 export async function getImageFileFromClipboard(clipboardData: DataTransfer | null) {
   if (!clipboardData) return null;
-  const supportedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
-  const imageItem = Array.from(clipboardData.items || []).find((item) => item.kind === "file" && supportedTypes.has(item.type));
-  const imageBlob = imageItem?.getAsFile() || Array.from(clipboardData.files || []).find((file) => supportedTypes.has(file.type));
+  const imageItem = Array.from(clipboardData.items || []).find((item) => item.kind === "file" && supportedImageTypes.has(item.type));
+  const imageBlob = imageItem?.getAsFile() || Array.from(clipboardData.files || []).find((file) => supportedImageTypes.has(file.type));
   if (imageBlob) return blobToFile(imageBlob, "pasted-image");
 
   const html = await getClipboardString(clipboardData, "text/html");

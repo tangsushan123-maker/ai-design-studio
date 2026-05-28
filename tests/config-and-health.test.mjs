@@ -1496,6 +1496,15 @@ describe("Project public info extraction", () => {
   });
 });
 
+describe("Workbench clipboard utilities", () => {
+  it("shares supported image type checks instead of rebuilding them per call", async () => {
+    const utilsSource = await readFile(new URL("../components/workbench/workbench-utils.ts", import.meta.url), "utf8");
+
+    assert.equal(utilsSource.includes("const supportedImageTypes = new Set"), true);
+    assert.equal(utilsSource.includes("const supportedTypes = new Set"), false);
+  });
+});
+
 describe("Workflow canvas performance", () => {
   it("degrades node, edge, and portal-heavy UI during canvas interactions", async () => {
     const [workbenchSource, workbenchTypesSource, globalsSource] = await Promise.all([
