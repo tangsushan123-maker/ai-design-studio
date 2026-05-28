@@ -1511,6 +1511,17 @@ describe("Project public info extraction", () => {
   });
 });
 
+describe("Design production protection", () => {
+  it("normalizes limited protection arrays in one pass", async () => {
+    const source = await readFile(new URL("../lib/design-production.ts", import.meta.url), "utf8");
+
+    assert.equal(source.includes("function normalizeLimitedItems"), true);
+    assert.equal(source.includes("source.protectedTexts.filter"), false);
+    assert.equal(source.includes("source.protectedAssets.filter"), false);
+    assert.equal(source.includes("source.layers.filter"), false);
+  });
+});
+
 describe("Workbench clipboard utilities", () => {
   it("shares supported image type checks instead of rebuilding them per call", async () => {
     const utilsSource = await readFile(new URL("../components/workbench/workbench-utils.ts", import.meta.url), "utf8");

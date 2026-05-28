@@ -77,18 +77,25 @@ export function normalizeProtectionContext(value: unknown): ProtectionContext {
   const source = value as ProtectionContext;
 
   return {
-    protectedTexts: Array.isArray(source.protectedTexts)
-      ? source.protectedTexts.filter((item) => Boolean(item?.text)).slice(0, 24)
-      : [],
-    protectedAssets: Array.isArray(source.protectedAssets)
-      ? source.protectedAssets.filter((item) => Boolean(item?.label)).slice(0, 16)
-      : [],
-    layers: Array.isArray(source.layers) ? source.layers.filter((item) => Boolean(item?.label)).slice(0, 18) : [],
+    protectedTexts: normalizeLimitedItems(source.protectedTexts, 24, (item) => Boolean(item?.text)),
+    protectedAssets: normalizeLimitedItems(source.protectedAssets, 16, (item) => Boolean(item?.label)),
+    layers: normalizeLimitedItems(source.layers, 18, (item) => Boolean(item?.label)),
     brandProfile: source.brandProfile && typeof source.brandProfile === "object" ? source.brandProfile : undefined,
     designDiagnosis:
       source.designDiagnosis && typeof source.designDiagnosis === "object" ? source.designDiagnosis : undefined,
     version: source.version && typeof source.version === "object" ? source.version : undefined,
   };
+}
+
+function normalizeLimitedItems<T>(value: T[] | undefined, limit: number, isUsable: (item: T) => boolean) {
+  if (!Array.isArray(value)) return [];
+  const items: T[] = [];
+  for (const item of value) {
+    if (!isUsable(item)) continue;
+    items.push(item);
+    if (items.length >= limit) break;
+  }
+  return items;
 }
 
 export function parseProtectionContext(value: FormDataEntryValue | null | undefined): ProtectionContext {
