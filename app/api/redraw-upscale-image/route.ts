@@ -19,6 +19,7 @@ import { assertSupportedImage, getImageRatio } from "@/lib/request-guards";
 import { parseProtectionContext, type ProtectionContext } from "@/lib/design-production";
 import { buildHdRedrawPrompt } from "@/lib/prompt";
 import { inspectImageQuality } from "@/lib/image-quality";
+import { imageRequestOptions, runQueuedImageModelRequestWithRetry } from "@/lib/image-request-queue";
 import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, taskTraceFromJson, type TaskRunTrace } from "@/lib/task-run-ledger";
 import { stat } from "node:fs/promises";
 import sharp from "sharp";
@@ -101,8 +102,9 @@ export async function POST(request: Request) {
     const officialSize = requestedOfficialSize;
     const file = await toFile(input.imageBuffer, input.fileName, { type: input.mimeType });
     const brandFiles = await Promise.all((input.brandReferenceImages || []).map((item, index) => toFile(item.buffer, item.fileName || `brand-asset-${index + 1}.png`, { type: item.mimeType })));
-    const result = await retryTransientImageRequest(() =>
-      openai.images.edit({
+    const result = await runQueuedImageModelRequestWithRetry(
+      { label: `画质增强/${imageModel}` },
+      () => openai.images.edit({
         model: imageModel,
         image: brandFiles.length ? ([file, ...brandFiles] as never) : file,
         prompt,
@@ -112,7 +114,7 @@ export async function POST(request: Request) {
         output_format: "png",
         background: "opaque",
         n: 1,
-      }),
+      }, imageRequestOptions()),
     );
 
     const item = result.data?.[0];
@@ -456,23 +458,4 @@ async function imageResultToBuffer(base64?: string | null, url?: string | null) 
   const response = await fetch(url);
   if (!response.ok) throw new Error("下载 AI 重绘图片失败。");
   return Buffer.from(await response.arrayBuffer());
-}
-
-async function retryTransientImageRequest<T>(run: () => Promise<T>, maxAttempts = 2) {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      return await run();
-    } catch (error) {
-      lastError = error;
-      if (attempt >= maxAttempts || !isTransientImageError(error)) break;
-      await new Promise((resolve) => setTimeout(resolve, 1200 * attempt));
-    }
-  }
-  throw lastError;
-}
-
-function isTransientImageError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error || "");
-  return /connection error|fetch failed|timeout|timed? out|socket|ECONNRESET|ETIMEDOUT|EAI_AGAIN|gateway|502|503|504/i.test(message);
 }

@@ -703,6 +703,9 @@ describe("Quality enhance mode", () => {
     assert.equal(routeSource.includes('formData.get("sourceUrl")'), true);
     assert.equal(routeSource.includes("readPublicImageUrl(sourceUrl)"), true);
     assert.equal(routeSource.includes("webp"), true);
+    assert.equal(routeSource.includes("runQueuedImageModelRequestWithRetry"), true);
+    assert.equal(routeSource.includes("imageRequestOptions()"), true);
+    assert.equal(routeSource.includes("retryTransientImageRequest"), false);
     assert.equal(routeSource.includes('"center_crop"'), false);
   });
 
