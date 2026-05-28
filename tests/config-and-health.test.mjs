@@ -1687,6 +1687,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("loadingMoreKey"), true);
     assert.equal(workbenchSource.includes("batchImageMutationConcurrency = 3"), true);
     assert.equal(workbenchSource.includes("mapWithConcurrency(candidates, batchImageMutationConcurrency"), true);
+    assert.equal(workbenchSource.includes("metadataPatchConcurrency = 4"), true);
+    assert.equal(workbenchSource.includes("mapWithConcurrency(\n      images.filter((image) => image.fileName),\n      metadataPatchConcurrency"), true);
     assert.equal(workbenchUiSource.includes("确认彻删"), true);
     assert.equal(workbenchUiSource.includes("确认移入回收站"), true);
     assert.equal(workbenchUiSource.includes("\"恢复中\""), true);

@@ -366,6 +366,7 @@ import type { ModelCatalogItem } from "@/lib/openai-defaults";
 
 const projectResourceNormalizeConcurrency = 4;
 const batchImageMutationConcurrency = 3;
+const metadataPatchConcurrency = 4;
 
 export default function WorkbenchClient({
   initialImages = [],
@@ -4485,40 +4486,39 @@ function NodeWorkflowWorkbench({
     }
   }
   async function persistGeneratedMetadata(images: ImageAsset[]) {
-    await Promise.allSettled(
-      images
-        .filter((image) => image.fileName)
-        .map((image) =>
-          fetch("/api/generated-images", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              fileName: image.fileName,
-              metadata: {
-                projectId: image.projectId || projectId,
-                parentImageId: image.parentImageId,
-                rootImageId: image.rootImageId,
-                branchId: image.branchId,
-                branchLabel: image.branchLabel,
-                resultGroupId: image.resultGroupId,
-                sourceTaskId: image.sourceTaskId,
-                sourceRequestId: image.sourceRequestId,
-                sourceNodeId: image.sourceNodeId,
-                sourceNodeName: image.sourceNodeName,
-                sourceNodeKind: image.sourceNodeKind,
-                variant: image.variant,
-                nodeOperation: image.nodeOperation,
-                strategyPackageId: image.strategyPackageId,
-                sourceStrategyTitle: image.sourceStrategyTitle,
-                materialPlanItemId: image.materialPlanItemId,
-                materialType: image.materialType,
-                targetSize: image.targetSize,
-                materialCopy: image.materialCopy,
-                materialScene: image.materialScene,
-              },
-            }),
+    await mapWithConcurrency(
+      images.filter((image) => image.fileName),
+      metadataPatchConcurrency,
+      (image) =>
+        fetch("/api/generated-images", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: image.fileName,
+            metadata: {
+              projectId: image.projectId || projectId,
+              parentImageId: image.parentImageId,
+              rootImageId: image.rootImageId,
+              branchId: image.branchId,
+              branchLabel: image.branchLabel,
+              resultGroupId: image.resultGroupId,
+              sourceTaskId: image.sourceTaskId,
+              sourceRequestId: image.sourceRequestId,
+              sourceNodeId: image.sourceNodeId,
+              sourceNodeName: image.sourceNodeName,
+              sourceNodeKind: image.sourceNodeKind,
+              variant: image.variant,
+              nodeOperation: image.nodeOperation,
+              strategyPackageId: image.strategyPackageId,
+              sourceStrategyTitle: image.sourceStrategyTitle,
+              materialPlanItemId: image.materialPlanItemId,
+              materialType: image.materialType,
+              targetSize: image.targetSize,
+              materialCopy: image.materialCopy,
+              materialScene: image.materialScene,
+            },
           }),
-        ),
+        }).catch(() => null),
     );
   }
 
