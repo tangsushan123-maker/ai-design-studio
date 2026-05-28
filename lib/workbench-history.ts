@@ -1,4 +1,5 @@
 import { imageSizeLabel, qualityBadgeLabel, type DeliveryReviewImage } from "./workbench-delivery.ts";
+import { appendQualitySearchFields, searchFieldsToText } from "./workbench-search.ts";
 
 export type HistorySearchImage = DeliveryReviewImage & {
   aspectRatio?: string;
@@ -34,7 +35,7 @@ export function historyMatchesQuery(image: HistorySearchImage, query: string) {
 }
 
 export function historySearchText(image: HistorySearchImage) {
-  return [
+  const fields: Array<string | null | undefined> = [
     image.fileName,
     image.id,
     image.model,
@@ -55,41 +56,11 @@ export function historySearchText(image: HistorySearchImage) {
     image.projectId,
     imageSizeLabel(image),
     qualityBadgeLabel(image),
-    image.qualityCheck?.label,
-    image.qualityCheck?.deliverabilityLabel,
-    image.qualityCheck?.status,
-    image.qualityCheck?.deliverability,
-    image.qualityCheck?.clarityCheckLabel,
-    image.qualityCheck?.textDetailLabel,
-    image.qualityCheck?.importantContentLabel,
-    ...(image.qualityCheck?.issues || []),
-    ...(image.qualityCheck?.actions || []),
-    ...(image.qualityCheck?.fourKCheckItems || []).flatMap((item) => [item.label, item.detail, item.passed ? "通过" : "复查"]),
-    ...qualitySearchAliases(image),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  ];
+  appendQualitySearchFields(fields, image.qualityCheck, { includeCompositionAliases: true });
+  return searchFieldsToText(fields);
 }
 
 function imageBelongsToProject(image: Pick<HistorySearchImage, "projectId">, projectId: string) {
   return Boolean(projectId && image.projectId === projectId);
-}
-
-function qualitySearchAliases(image: HistorySearchImage) {
-  const status = image.qualityCheck?.status;
-  const deliverability = image.qualityCheck?.deliverability;
-  const failedQuality = Boolean(status && status !== "passed");
-  return [
-    status === "passed" || deliverability === "ready" ? "可交付 合格" : "",
-    deliverability === "needs_review" ? "需复查 建议复查" : "",
-    deliverability === "not_ready" ? "不可交付 未达标" : "",
-    failedQuality ? "质检未过 未通过 质量异常" : "",
-    status === "white_border" ? "白边 有白边" : "",
-    status === "ratio_mismatch" ? "比例异常 比例不对" : "",
-    status === "size_insufficient" ? "尺寸不足 未达尺寸" : "",
-    status === "composition_risk" ? "构图风险 构图贴边 主体贴边 安全边距不足" : "",
-    status === "blurred_padding" ? "模糊补边 补边风险 边缘模糊 拉伸背景" : "",
-    status === "suspected_stretch" ? "疑似拉伸 细节密度低 只是放大" : "",
-  ];
 }

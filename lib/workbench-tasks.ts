@@ -1,20 +1,11 @@
+import { appendQualitySearchFields, searchFieldsToText, type SearchableQualityCheck } from "./workbench-search.ts";
+
 export type TaskSearchImage = {
   fileName?: string;
   id?: string;
   materialType?: string;
   mode?: string;
-  qualityCheck?: {
-    actions?: string[];
-    clarityCheckLabel?: string;
-    deliverability?: string;
-    deliverabilityLabel?: string;
-    fourKCheckItems?: Array<{ detail?: string; label?: string; passed?: boolean }>;
-    importantContentLabel?: string;
-    issues?: string[];
-    label?: string;
-    status?: string;
-    textDetailLabel?: string;
-  };
+  qualityCheck?: SearchableQualityCheck;
   url?: string;
 };
 
@@ -45,7 +36,7 @@ export function taskMatchesSearch(task: TaskSearchRecord, query: string) {
 }
 
 export function taskSearchText(task: TaskSearchRecord) {
-  return [
+  const fields: Array<string | null | undefined> = [
     task.backendRunState,
     task.error,
     task.id,
@@ -60,57 +51,35 @@ export function taskSearchText(task: TaskSearchRecord) {
     task.status,
     task.targetSize,
     task.type,
-    ...taskImageSearchFields(task.result),
-    ...(task.inputs || []).flatMap(taskImageSearchFields),
-    ...(task.outputs || []).flatMap(taskImageSearchFields),
-    ...taskStatusAliases(task),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  ];
+  appendTaskImageSearchFields(fields, task.result);
+  appendTaskImagesSearchFields(fields, task.inputs);
+  appendTaskImagesSearchFields(fields, task.outputs);
+  appendTaskStatusAliases(fields, task);
+  return searchFieldsToText(fields);
 }
 
-function taskImageSearchFields(image?: TaskSearchImage) {
-  if (!image) return [];
-  return [
+function appendTaskImagesSearchFields(fields: Array<string | null | undefined>, images: TaskSearchImage[] | undefined) {
+  if (!images) return;
+  for (const image of images) appendTaskImageSearchFields(fields, image);
+}
+
+function appendTaskImageSearchFields(fields: Array<string | null | undefined>, image?: TaskSearchImage) {
+  if (!image) return;
+  fields.push(
     image.fileName,
     image.id,
     image.materialType,
     image.mode,
     image.url,
-    image.qualityCheck?.label,
-    image.qualityCheck?.deliverabilityLabel,
-    image.qualityCheck?.status,
-    image.qualityCheck?.deliverability,
-    image.qualityCheck?.clarityCheckLabel,
-    image.qualityCheck?.textDetailLabel,
-    image.qualityCheck?.importantContentLabel,
-    ...(image.qualityCheck?.issues || []),
-    ...(image.qualityCheck?.actions || []),
-    ...(image.qualityCheck?.fourKCheckItems || []).flatMap((item) => [item.label, item.detail, item.passed ? "通过" : "复查"]),
-    ...taskImageQualityAliases(image),
-  ];
+  );
+  appendQualitySearchFields(fields, image.qualityCheck);
 }
 
-function taskImageQualityAliases(image: TaskSearchImage) {
-  const status = image.qualityCheck?.status;
-  const deliverability = image.qualityCheck?.deliverability;
-  const failedQuality = Boolean(status && status !== "passed");
-  return [
-    status === "passed" || deliverability === "ready" ? "可交付 合格" : "",
-    deliverability === "needs_review" ? "需复查 建议复查" : "",
-    deliverability === "not_ready" ? "不可交付 未达标" : "",
-    failedQuality ? "质检未过 未通过 质量异常" : "",
-    status === "white_border" ? "白边 有白边" : "",
-    status === "ratio_mismatch" ? "比例异常 比例不对" : "",
-    status === "size_insufficient" ? "尺寸不足 未达尺寸" : "",
-  ];
-}
-
-function taskStatusAliases(task: TaskSearchRecord) {
+function appendTaskStatusAliases(fields: Array<string | null | undefined>, task: TaskSearchRecord) {
   const status = task.status;
   const backend = task.backendRunState;
-  return [
+  fields.push(
     status === "queued" || backend === "waiting" ? "排队 等待 待执行" : "",
     status === "running" || backend === "active" ? "运行中 生成中 模型处理中" : "",
     status === "saving" ? "保存中" : "",
@@ -118,5 +87,5 @@ function taskStatusAliases(task: TaskSearchRecord) {
     status === "failed" || backend === "failed" ? "失败 异常 错误 可重试" : "",
     status === "cancelled" || backend === "cancelled" ? "已停止 已取消 停止" : "",
     task.outputs?.length || task.result?.url ? "有结果 有输出" : "",
-  ];
+  );
 }

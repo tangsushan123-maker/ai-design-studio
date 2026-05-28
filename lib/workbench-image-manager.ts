@@ -1,3 +1,5 @@
+import { appendQualitySearchFields, searchFieldsToText, type SearchableQualityCheck } from "./workbench-search.ts";
+
 export type ImageManagerSearchImage = {
   branchLabel?: string;
   fileName?: string;
@@ -7,18 +9,7 @@ export type ImageManagerSearchImage = {
   mode?: string;
   nodeOperation?: string;
   prompt?: string;
-  qualityCheck?: {
-    actions?: string[];
-    clarityCheckLabel?: string;
-    deliverability?: string;
-    deliverabilityLabel?: string;
-    fourKCheckItems?: Array<{ detail?: string; label?: string; passed?: boolean }>;
-    importantContentLabel?: string;
-    issues?: string[];
-    label?: string;
-    status?: string;
-    textDetailLabel?: string;
-  };
+  qualityCheck?: SearchableQualityCheck;
   source?: string;
   sourceNodeKind?: string;
   sourceNodeName?: string;
@@ -57,7 +48,7 @@ export function imageManagerSearchText(
   labelForOperation: (value?: string) => string = (value) => value || "",
 ) {
   const operation = labelForOperation(image.sourceNodeKind || image.nodeOperation);
-  return [
+  const fields: Array<string | null | undefined> = [
     image.branchLabel,
     image.fileName,
     image.generatedAt,
@@ -74,46 +65,16 @@ export function imageManagerSearchText(
     image.sourceTaskId,
     image.url,
     operation,
-    image.qualityCheck?.label,
-    image.qualityCheck?.deliverabilityLabel,
-    image.qualityCheck?.status,
-    image.qualityCheck?.deliverability,
-    image.qualityCheck?.clarityCheckLabel,
-    image.qualityCheck?.textDetailLabel,
-    image.qualityCheck?.importantContentLabel,
-    ...(image.qualityCheck?.issues || []),
-    ...(image.qualityCheck?.actions || []),
-    ...(image.qualityCheck?.fourKCheckItems || []).flatMap((item) => [item.label, item.detail, item.passed ? "通过" : "复查"]),
-    ...imageManagerQualityAliases(image),
     ...protection.reasons,
     ...protection.usedByNodeNames,
-    ...imageManagerProtectionAliases(protection),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function imageManagerQualityAliases(image: ImageManagerSearchImage) {
-  const status = image.qualityCheck?.status;
-  const deliverability = image.qualityCheck?.deliverability;
-  const failedQuality = Boolean(status && status !== "passed");
-  return [
-    status === "passed" || deliverability === "ready" ? "可交付 合格" : "",
-    deliverability === "needs_review" ? "需复查 建议复查" : "",
-    deliverability === "not_ready" ? "不可交付 未达标" : "",
-    failedQuality ? "质检未过 未通过 质量异常" : "",
-    status === "white_border" ? "白边 有白边" : "",
-    status === "ratio_mismatch" ? "比例异常 比例不对" : "",
-    status === "size_insufficient" ? "尺寸不足 未达尺寸" : "",
-    status === "composition_risk" ? "构图风险 构图贴边 主体贴边 安全边距不足" : "",
-    status === "blurred_padding" ? "模糊补边 补边风险 边缘模糊 拉伸背景" : "",
-    status === "suspected_stretch" ? "疑似拉伸 细节密度低 只是放大" : "",
   ];
+  appendQualitySearchFields(fields, image.qualityCheck, { includeCompositionAliases: true });
+  appendImageManagerProtectionAliases(fields, protection);
+  return searchFieldsToText(fields);
 }
 
-function imageManagerProtectionAliases(protection: ImageManagerSearchProtection) {
-  return [
+function appendImageManagerProtectionAliases(fields: Array<string | null | undefined>, protection: ImageManagerSearchProtection) {
+  fields.push(
     protection.isFavorite ? "收藏 已收藏" : "",
     protection.isTrashed ? "回收站 已删除" : "",
     protection.isProjectAsset ? "项目素材 受保护" : "",
@@ -121,5 +82,5 @@ function imageManagerProtectionAliases(protection: ImageManagerSearchProtection)
     protection.isLayerPack ? "png三层 分层包" : "",
     protection.canDelete && !protection.isTrashed ? "可清理 可删除" : "",
     protection.protected ? "保护 受保护" : "",
-  ];
+  );
 }

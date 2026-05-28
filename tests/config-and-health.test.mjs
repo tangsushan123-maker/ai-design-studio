@@ -348,6 +348,23 @@ describe("Workbench image manager search", () => {
   });
 });
 
+describe("Workbench search utilities", () => {
+  it("shares quality search indexing across history, tasks, and image manager", async () => {
+    const [searchSource, historySource, taskSource, imageManagerSource] = await Promise.all([
+      readFile(new URL("../lib/workbench-search.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/workbench-history.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/workbench-tasks.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/workbench-image-manager.ts", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(searchSource.includes("export function appendQualitySearchFields"), true);
+    assert.equal(historySource.includes("appendQualitySearchFields(fields, image.qualityCheck"), true);
+    assert.equal(taskSource.includes("appendQualitySearchFields(fields, image.qualityCheck"), true);
+    assert.equal(imageManagerSource.includes("appendQualitySearchFields(fields, image.qualityCheck"), true);
+    assert.equal(`${historySource}\n${taskSource}\n${imageManagerSource}`.includes("fourKCheckItems || []).flatMap"), false);
+  });
+});
+
 describe("Workbench image source trace", () => {
   it("builds compact source summaries with request fallback", () => {
     const image = {
