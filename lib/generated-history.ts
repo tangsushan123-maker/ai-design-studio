@@ -14,6 +14,18 @@ const historyMetadataReadConcurrency = 48;
 const historyFileStatConcurrency = 48;
 const historyImageBuildConcurrency = 8;
 
+function requestScopeFromList(requestIds: string[] = []) {
+  const requestIdSet = new Set<string>();
+  const taskIdSet = new Set<string>();
+  for (const item of requestIds) {
+    const requestId = item.trim();
+    if (!requestId) continue;
+    requestIdSet.add(requestId);
+    taskIdSet.add(requestId.replace(/^req_/, "task_"));
+  }
+  return { requestIdSet, taskIdSet };
+}
+
 export type GeneratedHistoryOptions = {
   limit?: number;
   offset?: number;
@@ -40,8 +52,7 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
         return { fileName, fullPath, savedMetadata, sortTime: historyMetadataSortTime(savedMetadata) };
       },
     );
-    const requestIdSet = new Set((options.requestIds || []).map((item) => item.trim()).filter(Boolean));
-    const taskIdSet = new Set([...requestIdSet].map((item) => item.replace(/^req_/, "task_")));
+    const { requestIdSet, taskIdSet } = requestScopeFromList(options.requestIds);
     const scopedEntries = fileEntries.filter((entry) => {
       if (options.ownerUserId) {
         const ownerUserId = stringValue(entry.savedMetadata.ownerUserId);

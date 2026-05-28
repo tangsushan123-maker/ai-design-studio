@@ -1947,6 +1947,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(generatedImagesRouteSource.includes("更新图片 JSON 无法解析"), true);
     assert.equal(generatedImagesRouteSource.includes("删除图片 JSON 无法解析"), true);
     assert.equal(generatedHistorySource.includes("requestIds?: string[]"), true);
+    assert.equal(generatedHistorySource.includes("requestScopeFromList"), true);
+    assert.equal(generatedHistorySource.includes("new Set((options.requestIds || []).map"), false);
+    assert.equal(generatedHistorySource.includes("new Set([...requestIdSet].map"), false);
     assert.equal(generatedHistorySource.includes("sourceRequestId && requestIdSet.has(sourceRequestId)"), true);
     assert.equal(historyPanelSource.includes("historySourceLine"), true);
     assert.equal(historyPanelSource.includes("sourceRequestId?: string"), true);
