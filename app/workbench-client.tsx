@@ -283,6 +283,7 @@ import {
 import { appendDataUrlToForm, appendImageToForm, imageFromSingleResponse, imageSourcePayloadForPngLayerExport, imagesFromResponse } from "@/components/workbench/workbench-image-requests";
 import {
   assetNames,
+  buildProjectLibraryContext,
   buildProjectKnowledgeFromState,
   extractColorValues,
   findBrandAssets,
@@ -299,6 +300,8 @@ import {
   resolveProjectKnowledge,
   resolveProjectProfile,
   splitProfileLines,
+  styleLibraryReferencePreview,
+  styleLibraryRulePreview,
   summarizeBrandAssets,
 } from "@/components/workbench/workbench-brand-context";
 import type {
@@ -7800,55 +7803,6 @@ function mergePendingFacts(current: ProjectFactCandidate[], incoming: ProjectFac
     seen.add(key);
     return true;
   });
-}
-
-function buildProjectLibraryContext(
-  knowledge: ProjectKnowledgeBase,
-  projectLibraries: MaterialLibrarySummary[],
-  publicStyleLibraries: MaterialLibrarySummary[],
-) {
-  const referenceTexts = knowledge.references
-    .filter((item) => item.enabled)
-    .map((item) => {
-      const source = item.kind === "project"
-        ? projectLibraries.find((library) => library.id === item.libraryId)
-        : publicStyleLibraries.find((library) => library.id === item.libraryId);
-      const description = source?.description || source?.tags?.join(" / ") || "";
-      return `${item.libraryName}（${item.kind === "project" ? "项目素材库" : "公共风格库"}，${item.mode === "copy_into_project" ? "已复制到本项目" : "只读引用"}）${description ? `：${description}` : ""}`;
-    });
-  const styleRuleTexts = knowledge.selection.activePublicStyleLibraryIds
-    .map((libraryId) => publicStyleLibraries.find((library) => library.id === libraryId))
-    .filter((library): library is MaterialLibrarySummary => Boolean(library))
-    .map((library) => {
-      const rules = styleLibraryRulePreview(library);
-      const references = styleLibraryReferencePreview(library);
-      return `${library.name}：${rules}${references ? `；参考：${references}` : ""}`;
-    });
-  const localAssetSummary = knowledge.materialLibrary.items.slice(0, 6).map((item) => item.name).join(" / ");
-  return [
-    `项目档案：${knowledge.archive.projectName}${knowledge.archive.organizationName ? `，机构 ${knowledge.archive.organizationName}` : ""}`,
-    localAssetSummary ? `当前项目素材库：${knowledge.materialLibrary.name}，已收录 ${knowledge.materialLibrary.items.length} 项，包括 ${localAssetSummary}` : `当前项目素材库：${knowledge.materialLibrary.name}，暂未上传素材。`,
-    referenceTexts.length ? `已引用素材库：${referenceTexts.join("；")}` : "未引用其他项目素材库或公共风格库，禁止跨项目自动混用。",
-    styleRuleTexts.length ? `公共风格规则：${styleRuleTexts.join("；")}` : "未启用公共风格规则，默认只按项目档案和当前需求生成。",
-    "素材来源规则：用户上传和 AI 生成素材可直接使用；网络参考素材必须标注来源，默认只作参考。",
-  ].join("\n");
-}
-
-function styleLibraryRulePreview(library: MaterialLibrarySummary) {
-  const rules = (library.items || [])
-    .filter((item) => item.type === "style_rule")
-    .slice(0, 3)
-    .map((item) => item.summary || item.name)
-    .filter(Boolean);
-  return rules.join(" / ") || library.description || "未记录规则";
-}
-
-function styleLibraryReferencePreview(library: MaterialLibrarySummary) {
-  return (library.items || [])
-    .filter((item) => item.type === "reference")
-    .slice(0, 2)
-    .map((item) => item.sourceLabel || item.name)
-    .join(" / ");
 }
 
 function stripProjectRuntimeState<T extends ProjectPayload & { setActive?: boolean }>(project: T): T {
