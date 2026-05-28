@@ -1,5 +1,6 @@
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { requireCurrentUser, userDataPath } from "@/lib/auth";
 import { readJsonWithBackup, writeJsonAtomic } from "@/lib/local-json-store";
 import {
   createDefaultPublicStyleLibraries,
@@ -10,7 +11,7 @@ import {
 
 export const runtime = "nodejs";
 
-const projectsPath = path.join(process.cwd(), "projects.local.json");
+const rootProjectsPath = path.join(process.cwd(), "projects.local.json");
 const styleLibrariesPath = path.join(process.cwd(), "style-libraries.local.json");
 
 type StoredProjectForLibraries = {
@@ -27,10 +28,11 @@ type StyleLibraryStore = {
 
 export async function GET(request: Request) {
   try {
+    const user = await requireCurrentUser();
     const url = new URL(request.url);
     const mode = url.searchParams.get("mode");
     const includeItems = mode === "detail";
-    const [projectLibraries, styleLibraries] = await Promise.all([readProjectLibraries(), readStyleLibraries()]);
+    const [projectLibraries, styleLibraries] = await Promise.all([readProjectLibraries(user.id), readStyleLibraries()]);
 
     return NextResponse.json({
       projectLibraries: projectLibraries.map((library) => summarizeLibrary(library, includeItems)),
@@ -82,8 +84,12 @@ async function parseMaterialLibraryPayload(request: Request): Promise<Partial<Ma
   }
 }
 
-async function readProjectLibraries() {
-  const store = await readJsonWithBackup<{ projects?: StoredProjectForLibraries[] }>(projectsPath, {});
+async function readProjectLibraries(userId: string) {
+  const scopedProjectsPath = userDataPath(userId, "projects.local.json");
+  let store = await readJsonWithBackup<{ projects?: StoredProjectForLibraries[] }>(scopedProjectsPath, {});
+  if (!Array.isArray(store.projects) || !store.projects.length) {
+    store = await readJsonWithBackup<{ projects?: StoredProjectForLibraries[] }>(rootProjectsPath, {});
+  }
   if (!Array.isArray(store.projects)) return [];
   return store.projects.flatMap((project) => {
     const fallback = createEmptyMaterialLibrary({

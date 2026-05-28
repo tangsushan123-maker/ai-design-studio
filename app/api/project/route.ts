@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { requireCurrentUser, userDataPath } from "@/lib/auth";
 import { writeJsonAtomic } from "@/lib/local-json-store";
 import {
   createDefaultProjectKnowledge,
@@ -10,10 +11,10 @@ import {
 
 export const runtime = "nodejs";
 
-const projectsPath = path.join(process.cwd(), "projects.local.json");
-const legacyProjectPath = path.join(process.cwd(), "project.local.json");
-const projectsBackupPath = `${projectsPath}.bak`;
-const legacyProjectBackupPath = `${legacyProjectPath}.bak`;
+const rootProjectsPath = path.join(process.cwd(), "projects.local.json");
+const rootLegacyProjectPath = path.join(process.cwd(), "project.local.json");
+const rootProjectsBackupPath = `${rootProjectsPath}.bak`;
+const rootLegacyProjectBackupPath = `${rootLegacyProjectPath}.bak`;
 
 type StoredProject = {
   id: string;
@@ -37,10 +38,11 @@ type ProjectStore = {
 };
 
 export async function GET(request: Request) {
+  const user = await requireCurrentUser();
   const url = new URL(request.url);
   const mode = url.searchParams.get("mode");
   const id = url.searchParams.get("id");
-  const store = await readStore();
+  const store = await readStore(user.id);
 
   if (mode === "list") {
     return NextResponse.json({
@@ -66,6 +68,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const user = await requireCurrentUser();
   let payloadBytes = 0;
   try {
     const raw = await request.text();
@@ -91,7 +94,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const store = await readStore();
+    const store = await readStore(user.id);
     const projectId = input.id || `project_${Date.now()}`;
     const projectName = input.name || "AI 设计项目";
     const project: StoredProject = {
@@ -119,7 +122,7 @@ export async function POST(request: Request) {
       activeProjectId: input.setActive === false ? store.activeProjectId : project.id,
       projects,
     };
-    await writeStore(nextStore);
+    await writeStore(user.id, nextStore);
     return NextResponse.json({ ok: true, project, projects: summarizeProjects(nextStore.projects), activeProjectId: nextStore.activeProjectId });
   } catch (error) {
     if (error instanceof InvalidProjectPayloadError) {
@@ -152,11 +155,12 @@ function parseProjectPayload(raw: string): Partial<StoredProject> & { setActive?
 }
 
 export async function DELETE(request: Request) {
+  const user = await requireCurrentUser();
   try {
     const input = await parseProjectDeletePayload(request);
     if (!input.id) return NextResponse.json({ error: "缺少项目 ID。" }, { status: 400 });
 
-    const store = await readStore();
+    const store = await readStore(user.id);
     const projects = store.projects.filter((project) => project.id !== input.id);
     const nextProjects = projects.length ? projects : [createBlankProject()];
     const nextActiveId = store.activeProjectId === input.id ? nextProjects[0].id : store.activeProjectId;
@@ -164,7 +168,7 @@ export async function DELETE(request: Request) {
       activeProjectId: nextProjects.some((project) => project.id === nextActiveId) ? nextActiveId : nextProjects[0].id,
       projects: nextProjects,
     };
-    await writeStore(nextStore);
+    await writeStore(user.id, nextStore);
     return NextResponse.json({ ok: true, activeProjectId: nextStore.activeProjectId, projects: summarizeProjects(nextStore.projects) });
   } catch (error) {
     if (error instanceof InvalidProjectDeletePayloadError) {
@@ -210,15 +214,29 @@ function createBlankProject(): StoredProject {
   };
 }
 
-async function readStore(): Promise<ProjectStore> {
-  const store = await readProjectStoreFile(projectsPath) || await readProjectStoreFile(projectsBackupPath);
+async function readStore(userId: string): Promise<ProjectStore> {
+  const scopedProjectsPath = userDataPath(userId, "projects.local.json");
+  const scopedLegacyProjectPath = userDataPath(userId, "project.local.json");
+  const store =
+    await readProjectStoreFile(scopedProjectsPath) ||
+    await readProjectStoreFile(`${scopedProjectsPath}.bak`) ||
+    await readProjectStoreFile(rootProjectsPath) ||
+    await readProjectStoreFile(rootProjectsBackupPath);
   if (store) {
-    const legacy = (await readProjectFile(legacyProjectPath)) || (await readProjectFile(legacyProjectBackupPath));
+    const legacy =
+      (await readProjectFile(scopedLegacyProjectPath)) ||
+      (await readProjectFile(`${scopedLegacyProjectPath}.bak`)) ||
+      (await readProjectFile(rootLegacyProjectPath)) ||
+      (await readProjectFile(rootLegacyProjectBackupPath));
     return reconcileStoreWithLegacyProject(store, legacy);
   }
 
   try {
-    const legacy = (await readProjectFile(legacyProjectPath)) || (await readProjectFile(legacyProjectBackupPath));
+    const legacy =
+      (await readProjectFile(scopedLegacyProjectPath)) ||
+      (await readProjectFile(`${scopedLegacyProjectPath}.bak`)) ||
+      (await readProjectFile(rootLegacyProjectPath)) ||
+      (await readProjectFile(rootLegacyProjectBackupPath));
     if (!legacy) throw new Error("No legacy project");
     const project = normalizeStoredProject({ ...createBlankProject(), ...legacy, id: legacy.id || "local-project" });
     return { activeProjectId: project.id, projects: [project] };
@@ -228,14 +246,16 @@ async function readStore(): Promise<ProjectStore> {
   return { activeProjectId: blank.id, projects: [blank] };
 }
 
-async function writeStore(store: ProjectStore) {
+async function writeStore(userId: string, store: ProjectStore) {
+  const scopedProjectsPath = userDataPath(userId, "projects.local.json");
+  const scopedLegacyProjectPath = userDataPath(userId, "project.local.json");
   const stableStore = {
     activeProjectId: store.activeProjectId,
     projects: store.projects.map(stripVolatileProjectState),
   };
-  await writeJsonAtomic(projectsPath, stableStore);
+  await writeJsonAtomic(scopedProjectsPath, stableStore);
   const activeProject = store.projects.find((item) => item.id === store.activeProjectId) || store.projects[0] || createBlankProject();
-  await writeJsonAtomic(legacyProjectPath, stripVolatileProjectState(activeProject));
+  await writeJsonAtomic(scopedLegacyProjectPath, stripVolatileProjectState(activeProject));
 }
 
 function summarizeProjects(projects: StoredProject[]) {

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AuthStatus } from "@/components/auth-status";
 import { ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
 
@@ -23,6 +24,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
+        <AuthStatus />
         <ThemeToggle />
       </body>
     </html>

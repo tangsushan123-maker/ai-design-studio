@@ -64,6 +64,8 @@ vite.config.ts.timestamp-*
 !.env.example
 config.local.json
 config.local.json.bak
+auth-users.local.json
+auth-users.local.json.bak
 workflow-templates.local.json
 project.local.json
 project.local.json.bak
@@ -74,6 +76,7 @@ task-runs.local.json
 task-runs.local.json.bak
 strategies.local.json
 style-libraries.local.json
+data/users/
 
 # Local generated artifacts and backups
 .DS_Store
