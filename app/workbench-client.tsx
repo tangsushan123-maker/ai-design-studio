@@ -248,7 +248,6 @@ import {
   enrichPrompt,
   isConservativeImageToImageNote,
   resolveNoVisibleProjectOutputPolicy,
-  resolveVisibleProjectInfoRequests,
   sanitizeCreativeDirectionPrompt,
   sanitizeLegacyImageToImagePrompt,
   shouldUseProjectPromptContext,
@@ -301,12 +300,10 @@ import {
 } from "@/components/workbench/workbench-project-storage";
 import { projectCapacitySummary } from "@/components/workbench/workbench-project-capacity";
 import {
-  assetNames,
   buildProjectConstraintText,
+  buildProfileProtectionContext,
   buildProjectLibraryContext,
   buildProjectKnowledgeFromState,
-  extractColorValues,
-  findBrandAssets,
   getCurrentProjectBrandAssets,
   imageAssetToProjectAssetRecord,
   mergeProjectAssetRecords,
@@ -345,8 +342,6 @@ import type {
   ProjectProfile,
   ProjectSnapshot,
   ProjectSummary,
-  ProtectedAssetPayload,
-  ProtectedTextPayload,
   ProtectionContextPayload,
   ResolvedTextReference,
   RightPanelTab,
@@ -7973,151 +7968,4 @@ function persistProjectPayloadForLifecycleExit(payloadText: string) {
       keepalive: canUseKeepalive,
     }).catch(() => {});
   } catch {}
-}
-
-function buildProfileProtectionContext(
-  profile: ProjectProfile,
-  options: {
-    projectId: string;
-    operation: string;
-    sourceImages: ImageAsset[];
-    brandAssets?: ImageAsset[];
-    visibleRequestText?: string;
-  },
-): ProtectionContextPayload {
-  const hasSourceImage = options.sourceImages.length > 0;
-  const protectVisibleProfileAssets = hasSourceImage && options.operation !== "text_to_image";
-  const brandAssets = options.brandAssets || [];
-  const usage = normalizeBrandAssetUsage(profile.brandAssetUsage);
-  const visibleRequestText = options.visibleRequestText || "";
-  const visibleRequests = resolveVisibleProjectInfoRequests(visibleRequestText);
-  const hiddenRequests = resolveNoVisibleProjectOutputPolicy(visibleRequestText);
-  const isProjectAwareTextToImage = options.operation === "text_to_image" && shouldUseProjectPromptContext(visibleRequestText);
-  const contactExplicitlyRequested = visibleRequests.phone || visibleRequests.address || usage.useContact;
-  const shouldProtectContact = !hiddenRequests.noText && !hiddenRequests.noContact && contactExplicitlyRequested;
-  const shouldForbidInventedContact = !hiddenRequests.noText && !hiddenRequests.noContact && isProjectAwareTextToImage && !contactExplicitlyRequested;
-  const logoAssets = findBrandAssets(brandAssets, "logo");
-  const ipAssets = findBrandAssets(brandAssets, "ip");
-  const qrAssets = findBrandAssets(brandAssets, "qrcode");
-  const protectedTexts: ProtectedTextPayload[] = [
-    profile.organizationName ? protectedText("organization", profile.organizationName, "other", "normal", "机构名称来自项目记忆，仅作为项目识别和校对资料") : null,
-    shouldProtectContact && profile.phone ? protectedText("phone", profile.phone, "phone", "critical", "用户明确要求电话；项目电话来自品牌资产包，必须准确使用，不得编造") : null,
-    shouldProtectContact && profile.address ? protectedText("address", profile.address, "address", "critical", "用户明确要求地址；项目地址来自品牌资产包，必须准确使用，不得编造") : null,
-    ...(usage.useCopy ? splitProfileLines(profile.commonCopy).map((text, index) => protectedText(`copy_${index + 1}`, text, "title", "normal", "常用文案来自项目资料库")) : []),
-    ...(usage.useForbiddenRules ? splitProfileLines(profile.forbiddenContent).map((text, index) => protectedText(`forbidden_${index + 1}`, text, "other", "critical", "禁改内容来自项目资料库")) : []),
-  ].filter((item): item is ProtectedTextPayload => Boolean(item && item.text.trim()));
-
-  const protectedAssets: ProtectedAssetPayload[] = [
-    (usage.useLogo || (protectVisibleProfileAssets && profile.keepLogo)) && (profile.logoName || logoAssets.length)
-      ? {
-          id: "asset_logo",
-          type: "logo",
-          label: profile.logoName || assetNames(logoAssets) || "Logo/品牌标识",
-          importance: "critical",
-          instruction: "Logo 和品牌标识只能来自当前项目品牌资产，不得由 AI 重新发明；不确定时保持位置和视觉占位，后续可程序化回贴。",
-        }
-      : null,
-    (usage.useQrCode || (protectVisibleProfileAssets && profile.keepQrCode)) && (profile.qrCodeNote || qrAssets.length)
-      ? {
-          id: "asset_qr",
-          type: "qr",
-          label: profile.qrCodeNote || assetNames(qrAssets) || "二维码",
-          importance: "critical",
-          instruction: "二维码不能交给 AI 重绘；必须保持清晰可扫码，后续应使用原始二维码回贴。",
-        }
-      : null,
-    usage.useIpImage && ipAssets.length
-      ? {
-          id: "asset_ip",
-          type: "portrait",
-          label: assetNames(ipAssets) || "IP形象",
-          importance: "high",
-          instruction: "IP/医生形象只能参考当前项目素材库，保持识别度，不要混用其他项目形象。",
-        }
-      : null,
-    protectVisibleProfileAssets && profile.keepFace
-      ? {
-          id: "asset_face",
-          type: "portrait",
-          label: "人脸/专家照片",
-          importance: "critical",
-          instruction: "人脸、医生/专家照片和人物识别度不要改变；需要替换时应由用户明确上传新照片。",
-        }
-      : null,
-    protectVisibleProfileAssets && profile.keepMainSubject
-      ? {
-          id: "asset_subject",
-          type: "product",
-          label: "主体/产品/主视觉",
-          importance: "high",
-          instruction: "主体、产品和主视觉结构保持识别度，不要硬裁切或随意替换。",
-        }
-      : null,
-  ].filter((item): item is ProtectedAssetPayload => Boolean(item));
-
-  const brandColors = [
-    ...(usage.usePrimaryColors ? extractColorValues(profile.primaryColors || profile.brandColors) : []),
-    ...(usage.useSecondaryColors ? [
-      ...extractColorValues(profile.secondaryColors),
-      ...extractColorValues(profile.accentColors),
-      ...extractColorValues(profile.backgroundColors),
-      ...extractColorValues(profile.textColors),
-      ...extractColorValues(profile.colorPalettes),
-    ] : []),
-  ];
-
-  return {
-    protectedTexts,
-    protectedAssets,
-    layers: [
-      { id: "layer_background", type: "background", label: "背景层", locked: false, notes: "AI 可优化背景、光影、材质和氛围。" },
-      ...(protectVisibleProfileAssets && profile.keepText
-        ? [{ id: "layer_text", type: "text" as const, label: "文字层", locked: true, notes: "只保护参考图里已经存在或用户明确要求的文字。" }]
-        : []),
-      ...(protectVisibleProfileAssets && (profile.keepLogo || profile.keepQrCode)
-        ? [{ id: "layer_logo", type: "logo" as const, label: "Logo/二维码层", locked: profile.keepLogo || profile.keepQrCode, notes: "Logo 和二维码必须保持识别准确。" }]
-        : []),
-      ...(protectVisibleProfileAssets && (profile.keepFace || profile.keepMainSubject)
-        ? [{ id: "layer_subject", type: "person" as const, label: "主体/人脸层", locked: true, notes: "参考图里的主体、人脸、产品和主视觉主体需要保持识别度。" }]
-        : []),
-    ],
-    brandProfile: {
-      name: profile.organizationName || profile.logoName || undefined,
-      colors: brandColors,
-      logoPlacement: profile.keepLogo || profile.keepQrCode ? `${profile.keepLogo && profile.logoName ? `Logo：${profile.logoName}` : ""}${profile.keepQrCode && profile.qrCodeNote ? `；二维码：${profile.qrCodeNote}` : ""}` : undefined,
-      visualTone: profile.styleNotes || undefined,
-      rules: [
-        profile.commonSizes ? `常用尺寸：${profile.commonSizes}` : "",
-        usage.useForbiddenRules && profile.forbiddenContent ? `禁改内容：${profile.forbiddenContent}` : "",
-        usage.useCopy && profile.commonCopy ? `常用文案：${profile.commonCopy}` : "",
-        shouldProtectContact && profile.phone ? `项目真实电话：${profile.phone}。用户明确要求电话时必须准确使用。` : "未明确要求电话时不要自行生成电话。",
-        shouldProtectContact && profile.address ? `项目真实地址：${profile.address}。用户明确要求地址时必须准确使用。` : "未明确要求地址时不要自行生成地址。",
-        shouldForbidInventedContact ? "联系方式策略：用户只要求品牌、Logo 或 IP 时，只放对应素材；不要自动添加电话、地址、二维码、预约热线、医院代码、扫码区或联系卡片。" : "",
-        usage.useLogo && (profile.logoName || logoAssets.length) ? `项目 Logo：${profile.logoName || assetNames(logoAssets)}。只使用当前项目品牌资产。` : "未提供或未启用 Logo 时不要自行生成，也不要强行预留占位。",
-        usage.useQrCode && (profile.qrCodeNote || qrAssets.length) ? `项目二维码：${profile.qrCodeNote || assetNames(qrAssets)}。二维码必须来自原始素材，不要重绘。` : "未提供或未启用二维码时不要自行生成，也不要强行预留占位。",
-        usage.useIpImage && ipAssets.length ? `项目 IP形象：${assetNames(ipAssets)}。只参考当前项目素材库。` : "",
-        protectVisibleProfileAssets && profile.keepFace ? "保护人脸：参考图里真实存在的人物五官和照片不要改变。" : "",
-        protectVisibleProfileAssets && profile.keepMainSubject ? "保护主体：参考图里的主视觉、产品和核心构图不要随意替换。" : "",
-        profile.onlyEditMaskedArea ? "局部修改规则：只修改涂抹/蒙版区域，未涂抹区域保持不变。" : "",
-        "项目品牌资产按用户勾选项调用；没有素材时禁止编造机构信息、电话、地址、Logo、二维码。",
-        "不同项目的品牌资产不能混用；这里只能使用当前项目自己的资料和素材。",
-      ].filter(Boolean),
-    },
-    version: {
-      projectId: options.projectId,
-      parentIds: options.sourceImages.map((image) => image.id || image.fileName || image.url).filter(Boolean),
-      sourceUrls: options.sourceImages.map((image) => image.url).filter(Boolean),
-      nodeOperation: options.operation,
-    },
-  };
-}
-
-function protectedText(
-  id: string,
-  text: string,
-  kind: ProtectedTextPayload["kind"],
-  importance: ProtectedTextPayload["importance"],
-  reason: string,
-): ProtectedTextPayload {
-  return { id, text: text.trim(), kind, importance, reason };
 }
