@@ -83,7 +83,7 @@ import {
   uniqueImagesByKey,
 } from "@/components/workbench/workbench-image-collection";
 import { imageRatioStyle, largePreviewFrameStyle, pngLayerDisplayName, pngLayerPreviewImage, zoomedPreviewFrameStyle } from "@/components/workbench/workbench-image-display";
-import { findDataImagePath, imageDeletionProtection, imageForComparison, sanitizeSerializableImageUrl, stripImageFile } from "@/components/workbench/workbench-image-lifecycle";
+import { findDataImagePath, imageDeletionProtection, imageForComparison, stripImageFile } from "@/components/workbench/workbench-image-lifecycle";
 import { compactThumbStyle, imageNodePreviewMetrics, shouldShowCheckerboard } from "@/components/workbench/workbench-image-metrics";
 import {
   arrangeWorkflowNodes,
@@ -250,6 +250,7 @@ import {
   normalizeProjectKind,
   projectAssetUploadLabel,
   projectSnapshotStorageKey,
+  stripProjectRuntimeState,
 } from "@/components/workbench/workbench-project-helpers";
 import {
   enrichPrompt,
@@ -284,7 +285,6 @@ import {
   latestTaskByNodeId,
   recoverTaskCanvasResultFromNodes,
   restoreProjectTasks,
-  sanitizeProjectTasks,
   serverTaskRunOutputs,
   serverTaskRunState,
   strategyMetaFromParams,
@@ -4186,7 +4186,7 @@ function NodeWorkflowWorkbench({
       projectProfile,
       currentKnowledge: projectKnowledge,
     });
-    return {
+    return stripProjectRuntimeState({
       id: projectId,
       name: projectName,
       ownerUserId: projectOwnerUserId || undefined,
@@ -4194,16 +4194,16 @@ function NodeWorkflowWorkbench({
       ownerName: projectOwnerName || undefined,
       projectKind,
       viewport: getViewport(),
-      assets: projectAssets.map(stripImageFile),
+      assets: projectAssets,
       assetText: projectAssetText,
       profile: projectProfile,
       knowledge,
       textProtectionMode,
-      nodes: nodeSnapshot.map(sanitizeNode),
+      nodes: nodeSnapshot,
       edges: edgeSnapshot,
-      runs: sanitizeProjectTasks(taskSnapshot),
+      runs: taskSnapshot,
       updatedAt: new Date().toISOString(),
-    };
+    });
   }
 
   async function refreshProjectList() {
@@ -7622,24 +7622,6 @@ function ImageLightbox({
   );
 }
 
-function sanitizeNode(node: FlowNode): FlowNode {
-  return {
-    ...node,
-    data: {
-      ...node.data,
-      onRun: undefined,
-      onDelete: undefined,
-      onParamChange: undefined,
-      onImageFile: undefined,
-      onPreview: undefined,
-      onMaskEdit: undefined,
-      image: node.data.image ? stripImageFile(node.data.image) : undefined,
-      output: node.data.output ? stripImageFile(node.data.output) : null,
-      outputs: Array.isArray(node.data.outputs) ? node.data.outputs.map(stripImageFile) : [],
-    },
-  };
-}
-
 function restoreNodes(nodes: FlowNode[], runs: TaskRecord[] = []) {
   const latestTaskByNode = latestTaskByNodeId(runs);
   const restored = nodes
@@ -7711,31 +7693,6 @@ function migrateLegacyNodeParams(kind: NodeKind, originalKind: unknown, params: 
     enhancementMode,
     prompt: stringParam(params.prompt) || qualityEnhanceDefaultPrompt(enhancementMode),
     model: stringParam(params.model),
-  };
-}
-
-function stripProjectRuntimeState<T extends ProjectPayload & { setActive?: boolean }>(project: T): T {
-  return {
-    ...project,
-    assets: project.assets?.map(stripImageFile),
-    nodes: project.nodes?.map(sanitizeNode),
-    knowledge: sanitizeKnowledgeImageUrls(project.knowledge),
-    runs: sanitizeProjectTasks(project.runs || []),
-  };
-}
-
-function sanitizeKnowledgeImageUrls(knowledge?: ProjectKnowledgeBase) {
-  if (!knowledge) return knowledge;
-  return {
-    ...knowledge,
-    materialLibrary: {
-      ...knowledge.materialLibrary,
-      items: knowledge.materialLibrary.items.map((item) => ({
-        ...item,
-        url: sanitizeSerializableImageUrl(item.url),
-        sourceUrl: sanitizeSerializableImageUrl(item.sourceUrl),
-      })),
-    },
   };
 }
 
