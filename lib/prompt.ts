@@ -180,6 +180,8 @@ export function buildDesignDirectorBriefRequestPrompt(request: DesignRequest, ra
     "JSON 字段：imageType,useScene,audience,communicationGoal,title,subtitle,sellingPoints,mainVisualConcept,creativeMetaphor,layout,colorSystem,typographyTone,textureSource,whitespaceAndSafety,industryRules,textPolicy,directions,recommendedDirectionId,recommendationReason。",
     "directions 固定 3 个，id 为 A/B/C；每个包含 name,concept,mainVisual,layout,palette,typography,texture,scenario,risk,score。",
     "如果用户只输入模糊短句，例如“帮我生成一张端午节海报”，必须自动补全用途、行业/场景、受众、主标题、副标题、核心卖点、主视觉元素、节日/行业符号、色彩风格、版式结构和推荐画布比例。",
+    "自动补全文案必须像真实海报上会出现的短句：例如端午通用品牌海报可用 title=端午安康，subtitle=粽叶飘香，情暖仲夏，sellingPoints 可含愿你岁岁安康，万事顺遂；不要把“节日氛围、品牌祝福、活动转化、探索感、互动感”这类策划标签当成画面文字。",
+    "如果识别到具体行业，节日文案要按行业改写：例如科技馆/科普活动端午海报可用 title=科技里的端午 或 端午奇妙游，subtitle=传统文化与科学探索的奇妙相遇。",
     "节日海报要像真实商业活动主视觉：主标题可读、元素强相关、配色有节日气质、版式有明确标题区/主体区/信息区，不要只堆素材。",
     wantsProjectContext
       ? "规则：不要把用户所有文字都塞进图里；提炼 1 个主标题、1 个副标题、最多 3 个卖点；电话、地址、二维码、长段文字建议后期真实字体排版。"
@@ -323,14 +325,15 @@ export function normalizeDesignDirectorBrief(value: unknown, fallback: DesignDir
   const recommended = source.recommendedDirectionId === "A" || source.recommendedDirectionId === "B" || source.recommendedDirectionId === "C"
     ? source.recommendedDirectionId
     : directions.reduce((best, item) => (item.score > best.score ? item : best), directions[0]).id;
+  const cleanedCopy = normalizeBriefVisibleCopy(source, fallback);
   return {
     imageType: cleanPromptText(source.imageType) || fallback.imageType,
     useScene: cleanPromptText(source.useScene) || fallback.useScene,
     audience: cleanPromptText(source.audience) || fallback.audience,
     communicationGoal: cleanPromptText(source.communicationGoal) || fallback.communicationGoal,
-    title: cleanPromptText(source.title) || fallback.title,
-    subtitle: cleanPromptText(source.subtitle) || fallback.subtitle,
-    sellingPoints: Array.isArray(source.sellingPoints) ? source.sellingPoints.map(cleanPromptText).filter(Boolean).slice(0, 3) : fallback.sellingPoints,
+    title: cleanedCopy.title,
+    subtitle: cleanedCopy.subtitle,
+    sellingPoints: cleanedCopy.sellingPoints,
     mainVisualConcept: cleanPromptText(source.mainVisualConcept) || fallback.mainVisualConcept,
     creativeMetaphor: cleanPromptText(source.creativeMetaphor) || fallback.creativeMetaphor,
     layout: cleanPromptText(source.layout) || fallback.layout,
@@ -344,6 +347,28 @@ export function normalizeDesignDirectorBrief(value: unknown, fallback: DesignDir
     recommendedDirectionId: recommended,
     recommendationReason: cleanPromptText(source.recommendationReason) || fallback.recommendationReason,
   };
+}
+
+function normalizeBriefVisibleCopy(source: Partial<DesignDirectorBrief>, fallback: DesignDirectorBrief) {
+  const sourceTitle = cleanPromptText(source.title);
+  const sourceSubtitle = cleanPromptText(source.subtitle);
+  const title = isUsablePosterCopy(sourceTitle, "title") ? sourceTitle : fallback.title;
+  const subtitle = isUsablePosterCopy(sourceSubtitle, "subtitle") ? sourceSubtitle : fallback.subtitle;
+  const sourcePoints = Array.isArray(source.sellingPoints) ? source.sellingPoints.map(cleanPromptText).filter(Boolean) : [];
+  const sellingPoints = [...sourcePoints.filter((item) => isUsablePosterCopy(item, "label")), ...fallback.sellingPoints]
+    .filter((item, index, arr) => arr.indexOf(item) === index)
+    .slice(0, 3);
+  return { title, subtitle, sellingPoints: sellingPoints.length ? sellingPoints : fallback.sellingPoints };
+}
+
+function isUsablePosterCopy(value: string, role: "title" | "subtitle" | "label") {
+  if (!value) return false;
+  if (value.length > (role === "title" ? 18 : 28)) return false;
+  if (role === "title" && /海报|广告|宣传图|设计图|图片|生成/.test(value)) return false;
+  if (/^(节日氛围|品牌祝福|活动转化|探索感|互动感|知识传播|主题清晰|视觉完整|信息克制|核心卖点|商业转化|传播记忆点|用户转化)$/.test(value)) return false;
+  if (/^(节日|品牌|活动|商业|视觉|信息|转化|传播|互动|探索|知识)(氛围|祝福|转化|感|传播|标签|卖点|策略)$/.test(value)) return false;
+  if (/^(海报|广告|宣传|生成|设计|图片)$/.test(value)) return false;
+  return true;
 }
 
 export function buildDesignDirectorImagePrompt(
@@ -422,14 +447,19 @@ export function buildDesignDirectorImagePrompt(
 function plannedVisibleCopyLines(brief: DesignDirectorBrief, prompt: string, hasExplicitCopy: boolean) {
   const noVisiblePolicy = resolveNoVisibleOutputPolicy(prompt);
   if (noVisiblePolicy.noText) return ["No visible copy; reserve clean negative space for real-font layout later."];
+  const isFestival = /端午|中秋|春节|新年|节日|龙舟|粽子|月饼|红包/.test(`${prompt}\n${brief.imageType}\n${brief.useScene}`);
+  const [supportingCopy, ...shortLabels] = brief.sellingPoints.slice(0, 3);
   return [
     hasExplicitCopy
       ? "User provided explicit copy: keep the user's title/copy meaning and do not invent real contact information."
       : "No explicit copy was provided: use the following planned short commercial copy instead of simply repeating the raw user prompt.",
     `Headline: ${brief.title}.`,
     brief.subtitle ? `Subheadline: ${brief.subtitle}.` : "",
-    brief.sellingPoints.length ? `Selling points: ${brief.sellingPoints.slice(0, 3).join(" / ")}.` : "",
-    "Use at most one headline, one subheadline, and up to three short selling points. Do not invent phone numbers, addresses, QR codes, prices, dates, hospital/company names, or legal claims.",
+    isFestival && supportingCopy ? `Supporting copy: ${supportingCopy}.` : "",
+    isFestival && shortLabels.length ? `Optional bottom labels: ${shortLabels.join(" / ")}.` : "",
+    !isFestival && brief.sellingPoints.length ? `Selling points: ${brief.sellingPoints.slice(0, 3).join(" / ")}.` : "",
+    "Use real poster copy, not planning labels such as festival mood, brand blessing, activity conversion, exploration, interaction, or knowledge communication.",
+    "Use at most one headline, one subheadline, one supporting copy line, and up to three short labels. Do not invent phone numbers, addresses, QR codes, prices, dates, hospital/company names, or legal claims.",
   ].filter(Boolean);
 }
 
@@ -672,10 +702,27 @@ function inferDirectorSellingPoints(text: string) {
 
 function inferFestivalPoster(text: string) {
   if (/端午|龙舟|粽子|艾草|五彩绳/.test(text)) {
+    const industry = inferDirectorIndustry(text);
+    if (industry === "科普科技") {
+      return {
+        title: "科技里的端午",
+        subtitle: "传统文化与科学探索的奇妙相遇",
+        sellingPoints: ["一起发现端午里的科学奥秘", "民俗实验", "互动探索"],
+        useScene: "科技馆科普活动 / 亲子研学 / 线上海报",
+        audience: "学生、家长和科普活动参与者",
+        communicationGoal: "把端午传统文化转化为可参与、可探索的科普活动，吸引亲子家庭报名或到馆体验",
+        colorSystem: "青绿、米白为主，搭配科技蓝和少量金色；传统纹样与科学光效克制融合",
+        mainVisualConcept: "粽子、龙舟、水纹、艾草与科学装置、星轨、互动实验台结合，表达传统文化里的科学探索",
+        creativeMetaphor: "用龙舟水纹连接科学轨迹，让传统节日变成一场可探索的奇妙旅程",
+        stableLayout: "上方主标题 / 中央粽子龙舟与科学装置主视觉 / 底部活动信息与馆方留白区",
+        creativeLayout: "龙舟水纹形成探索路径，科学光轨环绕粽子主视觉，标题与主体错位但保持安全边距",
+        typographyTone: "现代国风结合科技感标题字，副标题清楚，避免长文和伪中文小字",
+      };
+    }
     return {
-      title: "粽情端午",
-      subtitle: "端午限定活动开启",
-      sellingPoints: ["节日氛围", "品牌祝福", "活动转化"],
+      title: "端午安康",
+      subtitle: "粽叶飘香，情暖仲夏",
+      sellingPoints: ["愿你岁岁安康，万事顺遂", "粽香礼遇", "仲夏好礼"],
       useScene: "节日营销 / 线上传播 / 门店活动预热",
       audience: "品牌用户、门店顾客和线上活动参与者",
       communicationGoal: "用端午节日情绪吸引注意，传达祝福和活动信息，提升传播与到店/转化意愿",

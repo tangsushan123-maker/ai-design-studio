@@ -1170,7 +1170,13 @@ describe("Text-to-image references", () => {
     assert.equal(promptSource.includes("AI 海报策划总监"), true);
     assert.equal(promptSource.includes("必须自动补全用途、行业/场景、受众、主标题、副标题、核心卖点、主视觉元素"), true);
     assert.equal(promptSource.includes("function inferFestivalPoster"), true);
-    assert.equal(promptSource.includes('title: "粽情端午"'), true);
+    assert.equal(promptSource.includes("端午通用品牌海报可用 title=端午安康"), true);
+    assert.equal(promptSource.includes("科技馆/科普活动端午海报可用 title=科技里的端午"), true);
+    assert.equal(promptSource.includes('title: "端午安康"'), true);
+    assert.equal(promptSource.includes('subtitle: "粽叶飘香，情暖仲夏"'), true);
+    assert.equal(promptSource.includes('title: "科技里的端午"'), true);
+    assert.equal(promptSource.includes('subtitle: "传统文化与科学探索的奇妙相遇"'), true);
+    assert.equal(promptSource.includes("Use real poster copy, not planning labels"), true);
     assert.equal(promptSource.includes("粽子、龙舟、水纹、艾草、祥云或竹叶构成主视觉"), true);
     assert.equal(promptSource.includes("青绿、米白为主，少量金色点缀"), true);
     assert.equal(promptSource.includes("上方主标题 / 中央粽子与龙舟主视觉 / 底部活动信息与品牌留白区"), true);
