@@ -1480,6 +1480,8 @@ describe("Text-to-image references", () => {
     assert.equal(workbenchSource.includes("requireExplicitProjectContext"), true);
     assert.equal(workbenchSource.includes("projectContext: shouldUseProjectPromptContext(prompt) ? buildCreativeProjectContext"), true);
     assert.equal(workbenchSource.includes("visibleRequestText?: string"), true);
+    assert.equal(workbenchSource.includes("const profileColors = projectProfileColors(profile)"), true);
+    assert.equal(workbenchSource.includes("projectProfileColors(profile).length ? `品牌色"), false);
     assert.equal(workbenchSource.includes("const contactExplicitlyRequested = visibleRequests.phone || visibleRequests.address || usage.useContact"), true);
     assert.equal(workbenchSource.includes("const shouldProtectContact = !hiddenRequests.noText && !hiddenRequests.noContact && contactExplicitlyRequested"), true);
     assert.equal(workbenchSource.includes("shouldForbidInventedContact"), true);
@@ -1634,6 +1636,9 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("projectResourceNormalizeConcurrency = 4"), true);
     assert.equal(workbenchSource.includes("new Map<string, Promise<ImageAsset | null | undefined>>()"), true);
     assert.equal(workbenchSource.includes("const pending = ensureImageAssetResource(image)"), true);
+    assert.equal(workbenchSource.includes("const commonCopyLines = splitProfileLines(profile.commonCopy)"), true);
+    assert.equal(workbenchSource.includes("brandColors: projectProfileColors(profile).length"), false);
+    assert.equal(workbenchSource.includes("slogans: splitProfileLines(profile.commonCopy).length"), false);
     assert.equal(workbenchSource.includes("mapWithConcurrency(payload.assets || [], projectResourceNormalizeConcurrency"), true);
     assert.equal(workbenchSource.includes("Promise.all((payload.assets || []).map"), false);
     assert.equal(workbenchSource.includes('storageMode: "file"'), true);

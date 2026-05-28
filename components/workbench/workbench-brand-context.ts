@@ -283,9 +283,10 @@ export function buildProjectConstraintText(
   const brandAssetContext = buildBrandAssetContextPack(profile, brandAssets, visibleRequestText || text);
   const projectMemory = sanitizeProjectMemoryForPrompt(text.trim(), visibleRequestText || "");
   const canMentionTextAssets = !hiddenRequests.noText;
+  const profileColors = projectProfileColors(profile);
   const profileNotes = [
     canMentionTextAssets && visibleRequests.organization && profile.organizationName ? `机构名称：${profile.organizationName}` : "",
-    projectProfileColors(profile).length ? `品牌色：${projectProfileColors(profile).join("、")}` : "",
+    profileColors.length ? `品牌色：${profileColors.join("、")}` : "",
     !hiddenRequests.noLogo && visibleRequests.logo && profile.logoName ? `用户要求 Logo：${profile.logoName}` : "",
     !hiddenRequests.noContact && visibleRequests.phone && profile.phone ? `用户要求电话：${profile.phone}` : "",
     !hiddenRequests.noContact && visibleRequests.address && profile.address ? `用户要求地址：${profile.address}` : "",
@@ -548,6 +549,9 @@ function mergeLegacyDataIntoKnowledge(
   },
 ) {
   const profile = normalizeProjectProfile(input.profile);
+  const profileColors = projectProfileColors(profile);
+  const commonCopyLines = splitProfileLines(profile.commonCopy);
+  const forbiddenContentLines = splitProfileLines(profile.forbiddenContent);
   return {
     ...knowledge,
     archive: {
@@ -556,9 +560,9 @@ function mergeLegacyDataIntoKnowledge(
       organizationName: profile.organizationName || knowledge.archive.organizationName,
       address: profile.address || knowledge.archive.address,
       phone: profile.phone || knowledge.archive.phone,
-      brandColors: projectProfileColors(profile).length ? projectProfileColors(profile) : knowledge.archive.brandColors,
-      slogans: splitProfileLines(profile.commonCopy).length ? splitProfileLines(profile.commonCopy) : knowledge.archive.slogans,
-      forbiddenContent: splitProfileLines(profile.forbiddenContent).length ? splitProfileLines(profile.forbiddenContent) : knowledge.archive.forbiddenContent,
+      brandColors: profileColors.length ? profileColors : knowledge.archive.brandColors,
+      slogans: commonCopyLines.length ? commonCopyLines : knowledge.archive.slogans,
+      forbiddenContent: forbiddenContentLines.length ? forbiddenContentLines : knowledge.archive.forbiddenContent,
       notes: input.assetText ?? knowledge.archive.notes,
       updatedAt: new Date().toISOString(),
     },
