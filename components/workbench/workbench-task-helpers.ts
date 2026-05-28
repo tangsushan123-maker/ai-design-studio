@@ -103,6 +103,16 @@ export function restoreProjectTasks(runs: TaskRecord[]) {
   });
 }
 
+export function latestTaskByNodeId(runs: TaskRecord[]) {
+  const taskMap = new Map<string, TaskRecord>();
+  for (const task of runs) {
+    if (!task.nodeId) continue;
+    const current = taskMap.get(task.nodeId);
+    if (!current || (task.startedAt || 0) > (current.startedAt || 0)) taskMap.set(task.nodeId, task);
+  }
+  return taskMap;
+}
+
 export function taskBelongsToProject(task: Pick<TaskRecord, "projectId">, projectId: string) {
   return !task.projectId || task.projectId === projectId;
 }

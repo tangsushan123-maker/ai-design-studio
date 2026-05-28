@@ -275,6 +275,7 @@ import {
   buildTaskRecoveredCompletionPatch,
   hasTaskResultNodesOnCanvasFromNodes,
   imageBelongsToProject,
+  latestTaskByNodeId,
   recoverTaskCanvasResultFromNodes,
   restoreProjectTasks,
   sanitizeProjectTasks,
@@ -7705,16 +7706,6 @@ function migrateLegacyNodeParams(kind: NodeKind, originalKind: unknown, params: 
     prompt: stringParam(params.prompt) || qualityEnhanceDefaultPrompt(enhancementMode),
     model: stringParam(params.model),
   };
-}
-
-function latestTaskByNodeId(runs: TaskRecord[]) {
-  const taskMap = new Map<string, TaskRecord>();
-  for (const task of runs) {
-    if (!task.nodeId) continue;
-    const current = taskMap.get(task.nodeId);
-    if (!current || (task.startedAt || 0) > (current.startedAt || 0)) taskMap.set(task.nodeId, task);
-  }
-  return taskMap;
 }
 
 function normalizeRestoredCanvasPositions(nodes: FlowNode[]) {
