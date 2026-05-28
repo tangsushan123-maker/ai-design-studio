@@ -141,6 +141,7 @@ import {
 } from "@/lib/project-system";
 import { findSizePresetByLabel } from "@/lib/size-presets";
 import { ImageFrame } from "@/components/workbench/image-frame";
+import { LightboxPreviewToolbar } from "@/components/workbench/lightbox-preview-toolbar";
 import { ImageManagerPanel } from "@/components/workbench/image-manager-panel";
 import { NodeResultsPanel } from "@/components/workbench/node-results-panel";
 import { AssetLibraryPanel } from "@/components/workbench/asset-library-panel";
@@ -6691,11 +6692,6 @@ function ImageLightbox({
   const previewFrameStyle = previewZoom
     ? zoomedPreviewFrameStyle(image, previewZoom)
     : largePreviewFrameStyle(image);
-  const previewZoomLabel = previewZoom ? `${Math.round(previewZoom * 100)}%` : "适应";
-
-  function changePreviewZoom(nextZoom: number) {
-    setPreviewZoom(Math.max(0.5, Math.min(3, Number(nextZoom.toFixed(2)))));
-  }
 
   async function runAction(label: string, action: () => void | Promise<void>) {
     if (activeActionLabel) return;
@@ -6742,30 +6738,7 @@ function ImageLightbox({
         </div>
         <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-white/[0.025] lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-h-0 p-2 sm:p-3">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-[16px] border border-white/10 bg-white/[0.04] px-2.5 py-2">
-              <div className="text-[11px] font-semibold text-white/70">查看：{previewZoomLabel}</div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <button className={`apple-button rounded-full px-2.5 py-1 text-[11px] ${previewZoom === 0 ? "border-white/35 bg-white text-black" : "text-white/70"}`} onClick={() => setPreviewZoom(0)} type="button">
-                  适应
-                </button>
-                {[1, 1.5, 2].map((value) => (
-                  <button
-                    className={`apple-button rounded-full px-2.5 py-1 text-[11px] ${previewZoom === value ? "border-white/35 bg-white text-black" : "text-white/70"}`}
-                    key={value}
-                    onClick={() => setPreviewZoom(value)}
-                    type="button"
-                  >
-                    {Math.round(value * 100)}%
-                  </button>
-                ))}
-                <button aria-label="缩小图片" className="apple-button flex size-7 items-center justify-center rounded-full text-white/70" onClick={() => changePreviewZoom((previewZoom || 1) - 0.25)} type="button">
-                  -
-                </button>
-                <button aria-label="放大图片" className="apple-button flex size-7 items-center justify-center rounded-full text-white/70" onClick={() => changePreviewZoom((previewZoom || 1) + 0.25)} type="button">
-                  <Plus className="size-3.5" />
-                </button>
-              </div>
-            </div>
+            <LightboxPreviewToolbar previewZoom={previewZoom} onPreviewZoomChange={setPreviewZoom} />
             <div className={`relative h-[calc(100%-46px)] min-h-[320px] overflow-auto bg-transparent p-2 ${previewZoom ? "flex items-start justify-start" : "flex items-center justify-center"}`}>
               <div className="relative mx-auto overflow-hidden rounded-[18px] border border-white/10 bg-transparent shadow-[0_20px_70px_rgba(0,0,0,0.32)]" style={previewFrameStyle}>
                 {activePngLayer ? (
