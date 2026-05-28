@@ -1505,6 +1505,16 @@ describe("Workbench clipboard utilities", () => {
   });
 });
 
+describe("Workbench image collection helpers", () => {
+  it("shares image key list extraction for result cleanup paths", async () => {
+    const workbenchSource = await readWorkbenchSource();
+
+    assert.equal(workbenchSource.includes("export function imageKeys"), true);
+    assert.equal(workbenchSource.includes("targetImages.map(imageKey).filter(Boolean)"), false);
+    assert.equal(workbenchSource.includes("images.map(imageKey).filter(Boolean)"), false);
+  });
+});
+
 describe("Workflow canvas performance", () => {
   it("degrades node, edge, and portal-heavy UI during canvas interactions", async () => {
     const [workbenchSource, workbenchTypesSource, globalsSource] = await Promise.all([

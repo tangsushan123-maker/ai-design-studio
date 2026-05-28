@@ -67,6 +67,7 @@ import {
   generatedFileNameForImage,
   imageBranchVersions,
   imageKey,
+  imageKeys,
   imageMatchesGeneratedFile,
   isUserFacingResultImage,
   latestImagesForResultGroup,
@@ -1767,13 +1768,13 @@ function NodeWorkflowWorkbench({
   }
 
   function dismissResultImages(images: ImageAsset[]) {
-    const keys = images.map(imageKey).filter(Boolean);
+    const keys = imageKeys(images);
     if (!keys.length) return;
     dismissedImageKeysRef.current = markDismissedImageKeys(projectId, keys);
   }
 
   function undismissResultImages(images: ImageAsset[]) {
-    const keys = images.map(imageKey).filter(Boolean);
+    const keys = imageKeys(images);
     if (!keys.length) return;
     dismissedImageKeysRef.current = unmarkDismissedImageKeys(projectId, keys);
   }
@@ -1783,7 +1784,7 @@ function NodeWorkflowWorkbench({
     const targetNode = nodesRef.current.find((node) => node.id === nodeId);
     const targetImages = targetNode ? taskCandidateImagesFromNode(targetNode) : [];
     dismissResultImages(targetImages);
-    const targetImageKeys = new Set(targetImages.map(imageKey).filter(Boolean));
+    const targetImageKeys = new Set(imageKeys(targetImages));
     const relatedTasks = tasks.filter((task) => {
       if (task.nodeId === nodeId) return true;
       if (task.resultNodeIds?.includes(nodeId)) return true;

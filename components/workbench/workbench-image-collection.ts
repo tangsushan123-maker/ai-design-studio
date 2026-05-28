@@ -66,6 +66,15 @@ export function imageKey(image: Pick<ImageAsset, "fileName" | "id" | "url">) {
   return image.fileName || image.id || image.url;
 }
 
+export function imageKeys(images: Pick<ImageAsset, "fileName" | "id" | "url">[]) {
+  const keys: string[] = [];
+  for (const image of images) {
+    const key = imageKey(image);
+    if (key) keys.push(key);
+  }
+  return keys;
+}
+
 export function imageReferencesMatch(
   a: Pick<ImageAsset, "fileName" | "id" | "url">,
   b: Pick<ImageAsset, "fileName" | "id" | "url">,
