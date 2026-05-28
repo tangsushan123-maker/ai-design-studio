@@ -759,6 +759,8 @@ describe("Bounded local IO", () => {
     assert.equal(brandReferenceRouteSource.includes("async function readBrandReferenceImage"), false);
     assert.equal(adminAccountsSource.includes("accountSummaryReadConcurrency = 8"), true);
     assert.equal(adminAccountsSource.includes("mapWithConcurrency(users, accountSummaryReadConcurrency"), true);
+    assert.equal(adminAccountsSource.includes("const [projectStats, config] = await Promise.all"), true);
+    assert.equal(adminAccountsSource.includes('user.role === "owner" && !scopedKey'), true);
     assert.equal(adminAccountsSource.includes("readJsonWithBackup"), true);
     assert.equal(adminAccountsSource.includes("async function readJsonFile"), false);
     assert.equal(materialLibrariesSource.includes("projectLibraryReadConcurrency = 8"), true);

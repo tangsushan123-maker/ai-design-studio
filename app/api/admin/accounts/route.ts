@@ -96,8 +96,10 @@ async function parseAdminAccountPayload(request: Request) {
 }
 
 async function buildAccountSummary(user: AuthUser, currentUser: AuthUser, revealApiKey: boolean) {
-  const projectStats = await readProjectStats(user.id);
-  const config = await readAccountConfig(user);
+  const [projectStats, config] = await Promise.all([
+    readProjectStats(user.id),
+    readAccountConfig(user),
+  ]);
   return {
     id: user.id,
     email: user.email,
@@ -149,10 +151,10 @@ async function readProjectStats(userId: string) {
 async function readAccountConfig(user: AuthUser) {
   const scopedPath = userDataPath(user.id, "config.local.json");
   const scoped = await readJsonWithBackup<UserConfig>(scopedPath, {});
-  const legacyPath = path.join(process.cwd(), "config.local.json");
-  const legacy = user.role === "owner" ? await readJsonWithBackup<UserConfig>(legacyPath, {}) : {};
-  const config = Object.keys(scoped).length ? scoped : legacy;
   const scopedKey = scoped.openaiApiKey || scoped.apiKey || "";
+  const legacyPath = path.join(process.cwd(), "config.local.json");
+  const legacy = user.role === "owner" && !scopedKey ? await readJsonWithBackup<UserConfig>(legacyPath, {}) : {};
+  const config = Object.keys(scoped).length ? scoped : legacy;
   const legacyKey = legacy.openaiApiKey || legacy.apiKey || "";
   const envKey = user.role === "owner" ? process.env.OPENAI_API_KEY || "" : "";
   const apiKey = scopedKey || legacyKey || envKey;
