@@ -605,13 +605,18 @@ describe("Settings model management", () => {
 
 describe("Image size requests", () => {
   it("requests native gpt-image-2 standard sizes for common ratios", async () => {
-    const imageUtilsSource = await readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8");
+    const [imageUtilsSource, sizePresetsSource] = await Promise.all([
+      readFile(new URL("../lib/image-utils.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/size-presets.ts", import.meta.url), "utf8"),
+    ]);
 
     assert.equal(imageUtilsSource.includes("getOpenAIConstrainedTargetPixels"), true);
     assert.equal(imageUtilsSource.includes("8_294_400"), true);
     assert.equal(imageUtilsSource.includes("floorToMultipleOf16"), true);
     assert.equal(imageUtilsSource.includes("clampRatioForGptImage2"), true);
     assert.equal(imageUtilsSource.includes('return getOpenAIImageSize(ratio);'), true);
+    assert.equal(sizePresetsSource.includes("const presetsByCategory = new Map"), true);
+    assert.equal(sizePresetsSource.includes("sizePresets.filter((preset) => preset.category === category.id)"), false);
   });
 });
 

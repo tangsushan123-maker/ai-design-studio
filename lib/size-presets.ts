@@ -135,10 +135,16 @@ export function findSizePresetByLabel(label: string) {
 }
 
 export function groupSizePresetsByCategory() {
+  const presetsByCategory = new Map<SizePresetCategoryId, SizePreset[]>();
+  sizePresets.forEach((preset) => {
+    const list = presetsByCategory.get(preset.category) || [];
+    list.push(preset);
+    presetsByCategory.set(preset.category, list);
+  });
   return sizePresetCategories
     .map((category) => ({
       ...category,
-      presets: sizePresets.filter((preset) => preset.category === category.id),
+      presets: presetsByCategory.get(category.id) || [],
     }))
     .filter((group) => group.presets.length > 0);
 }
