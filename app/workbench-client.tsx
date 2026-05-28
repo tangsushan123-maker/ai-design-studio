@@ -65,16 +65,16 @@ import {
 import {
   createResultLineage,
   generatedFileNameForImage,
-  imageBranchId,
+  imageBranchVersions,
   imageKey,
   imageMatchesGeneratedFile,
   isUserFacingResultImage,
+  latestImagesForResultGroup,
   loadFavoriteIds,
   mergeImages,
   nodeImageReferences,
   removeImageFromNode,
   saveFavoriteIds,
-  sortImagesByGeneratedAt,
   sortImagesByRecency,
   sortResultImagesForDisplay,
   uniqueImageAssets,
@@ -6632,23 +6632,8 @@ function ImageLightbox({
   const [upscaleSize, setUpscaleSize] = useState(() => qualityEnhanceDefaultTargetForImage(image, imageModel));
   const [upscaleFitMode, setUpscaleFitMode] = useState<HistoryUpscaleOptions["fitMode"]>("standard_enhance");
   const [upscaleFormat, setUpscaleFormat] = useState<"png" | "jpg" | "webp">("png");
-  const branchVersions = useMemo(
-    () => sortImagesByGeneratedAt(historyImages.filter((item) => imageBranchId(item) === imageBranchId(image))),
-    [historyImages, image],
-  );
-  const branchLatestVariants = useMemo(() => {
-    const branchMap = new Map<string, ImageAsset>();
-    historyImages
-      .filter((item) => (item.resultGroupId || item.sourceTaskId) && (item.resultGroupId || item.sourceTaskId) === (image.resultGroupId || image.sourceTaskId))
-      .forEach((item) => {
-        const key = imageBranchId(item);
-        const current = branchMap.get(key);
-        if (!current || new Date(item.generatedAt || 0).getTime() > new Date(current.generatedAt || 0).getTime()) {
-          branchMap.set(key, item);
-        }
-      });
-    return Array.from(branchMap.values()).sort((a, b) => (a.variant || 0) - (b.variant || 0));
-  }, [historyImages, image]);
+  const branchVersions = useMemo(() => imageBranchVersions(historyImages, image), [historyImages, image]);
+  const branchLatestVariants = useMemo(() => latestImagesForResultGroup(historyImages, image), [historyImages, image]);
   const actualSizeLabel = imageSizeLabel(image);
   const expectedSizeLabel = image.expectedOutputSize ? `${image.expectedOutputSize.width} × ${image.expectedOutputSize.height}px` : "";
   const sourceDetailLines = imageSourceDetailLines(image, { formatDuration, formatGeneratedAt, labelForOperation: nodeOperationLabel });

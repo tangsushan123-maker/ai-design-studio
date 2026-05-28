@@ -114,6 +114,26 @@ export function imageBranchId(image: Pick<ImageAsset, "branchId" | "resultGroupI
   return image.branchId || `${image.resultGroupId || image.sourceTaskId || imageKey(image)}_branch_${image.variant || 1}`;
 }
 
+export function imageBranchVersions(historyImages: ImageAsset[], image: ImageAsset) {
+  return sortImagesByGeneratedAt(historyImages.filter((item) => imageBranchId(item) === imageBranchId(image)));
+}
+
+export function latestImagesForResultGroup(historyImages: ImageAsset[], image: ImageAsset) {
+  const resultGroupId = image.resultGroupId || image.sourceTaskId;
+  if (!resultGroupId) return [];
+  const branchMap = new Map<string, ImageAsset>();
+  historyImages
+    .filter((item) => (item.resultGroupId || item.sourceTaskId) === resultGroupId)
+    .forEach((item) => {
+      const key = imageBranchId(item);
+      const current = branchMap.get(key);
+      if (!current || new Date(item.generatedAt || 0).getTime() > new Date(current.generatedAt || 0).getTime()) {
+        branchMap.set(key, item);
+      }
+    });
+  return Array.from(branchMap.values()).sort((a, b) => (a.variant || 0) - (b.variant || 0));
+}
+
 export function imageRootId(image: Pick<ImageAsset, "rootImageId" | "parentImageId" | "id" | "fileName" | "url">) {
   return image.rootImageId || image.parentImageId || imageKey(image);
 }

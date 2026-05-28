@@ -1501,6 +1501,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("image.sourceNodeId === task.nodeId"), true);
     assert.equal(workbenchSource.includes("imageSourceSummary"), true);
     assert.equal(workbenchSource.includes("imageSourceDetailLines"), true);
+    assert.equal(workbenchSource.includes("function imageBranchVersions"), true);
+    assert.equal(workbenchSource.includes("function latestImagesForResultGroup"), true);
+    assert.equal(workbenchSource.includes("imageBranchVersions(historyImages, image)"), true);
+    assert.equal(workbenchSource.includes("latestImagesForResultGroup(historyImages, image)"), true);
     assert.equal(workbenchUiSource.includes("来源节点"), true);
     assert.equal(workbenchUiSource.includes("请求ID"), true);
     assert.equal(workbenchSource.includes("activeActionLabel"), true);
