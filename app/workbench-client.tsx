@@ -75,7 +75,6 @@ import {
   loadFavoriteIds,
   mergeImages,
   nodeImageReferences,
-  removedFeatureTextMarkers,
   removeImageFromNode,
   saveFavoriteIds,
   sortImagesByGeneratedAt,
@@ -281,6 +280,18 @@ import {
   textReferenceNodeItems,
 } from "@/components/workbench/workbench-node-ui";
 import { appendDataUrlToForm, appendImageToForm, imageFromSingleResponse, imageSourcePayloadForPngLayerExport, imagesFromResponse } from "@/components/workbench/workbench-image-requests";
+import {
+  imageBelongsToProject,
+  isImageAssetLike,
+  sanitizeProjectTasks,
+  serverTaskRunOutputs,
+  serverTaskRunState,
+  taskBelongsToProject,
+  taskCandidateImagesFromNode,
+  taskHasResultImages,
+  taskNeedsServerSync,
+  taskResultImageMatches,
+} from "@/components/workbench/workbench-task-helpers";
 import {
   assetNames,
   buildProjectLibraryContext,
@@ -8047,89 +8058,6 @@ function writeProjectTaskCache(projectId: string, tasks: TaskRecord[]) {
   } catch (error) {
     return localStorageErrorMessage(error, value.length);
   }
-}
-
-function sanitizeProjectTasks(runs: TaskRecord[]) {
-  return runs
-    .filter((task) => !isRemovedFeatureTask(task))
-    .map((task) => ({
-      ...task,
-      inputs: task.inputs?.map(stripImageFile),
-      outputs: task.outputs?.map(stripImageFile),
-      result: task.result ? stripImageFile(task.result) : undefined,
-    }));
-}
-
-function isRemovedFeatureTask(task: Pick<TaskRecord, "type" | "nodeName">) {
-  const text = `${task.type || ""} ${task.nodeName || ""}`;
-  return removedFeatureTextMarkers().some((marker) => text.includes(marker));
-}
-
-function taskHasResultImages(task: Pick<TaskRecord, "outputs" | "result">) {
-  return Boolean(task.outputs?.length || task.result?.url);
-}
-
-function taskNeedsServerSync(task: TaskRecord) {
-  if (!task.requestId || isDeferredQueuedTask(task)) return false;
-  if (task.status === "queued" || task.status === "running" || task.status === "saving") return true;
-  if (task.status === "completed" && !taskHasResultImages(task)) return true;
-  if (task.status === "failed" && !taskHasResultImages(task)) return true;
-  return false;
-}
-
-function taskBelongsToProject(task: Pick<TaskRecord, "projectId">, projectId: string) {
-  return !task.projectId || task.projectId === projectId;
-}
-
-function imageBelongsToProject(image: Pick<ImageAsset, "projectId">, projectId: string) {
-  return Boolean(projectId && image.projectId === projectId);
-}
-
-function serverTaskRunState(run: ServerTaskRunRecord): NonNullable<TaskRecord["backendRunState"]> {
-  if (run.state === "finished") return "finished";
-  if (run.state === "failed") return "failed";
-  if (run.state === "cancelled") return "cancelled";
-  if (run.state === "waiting") return "waiting";
-  return "active";
-}
-
-function serverTaskRunOutputs(run: ServerTaskRunRecord): ImageAsset[] {
-  return (run.outputs || [])
-    .filter(isImageAssetLike)
-    .map((image, index) => ({
-      ...image,
-      id: image.id || image.fileName || `server_result_${run.requestId}_${index + 1}`,
-      source: "generated" as const,
-      projectId: image.projectId || run.projectId,
-      sourceTaskId: image.sourceTaskId || run.requestId.replace(/^req_/, "task_"),
-      sourceRequestId: image.sourceRequestId || run.requestId,
-      sourceNodeId: image.sourceNodeId || run.nodeId,
-      sourceNodeName: image.sourceNodeName || run.nodeName,
-      sourceNodeKind: image.sourceNodeKind || run.nodeKind,
-      generatedAt: image.generatedAt || run.endedAt || run.updatedAt || new Date().toISOString(),
-    }));
-}
-
-function taskCandidateImagesFromNode(node: FlowNode) {
-  return [
-    node.data.output,
-    ...(Array.isArray(node.data.outputs) ? node.data.outputs : []),
-  ].filter(isImageAssetLike);
-}
-
-function isImageAssetLike(value: unknown): value is ImageAsset {
-  return Boolean(value && typeof value === "object" && typeof (value as ImageAsset).url === "string" && (value as ImageAsset).url);
-}
-
-function taskResultImageMatches(image: ImageAsset, task: TaskResultMatchContext) {
-  const imageTaskIds = [image.sourceTaskId, image.resultGroupId].filter(Boolean);
-  if (task.id && imageTaskIds.includes(task.id)) return true;
-  if (task.requestId && image.sourceRequestId === task.requestId) return true;
-  if (task.nodeId && image.sourceNodeId === task.nodeId) return true;
-  if (task.id && typeof image.branchId === "string" && image.branchId.startsWith(`${task.id}_branch_`)) return true;
-  const key = imageKey(image);
-  if (task.result && imageKey(task.result) === key) return true;
-  return Boolean(task.outputs?.some((item) => imageKey(item) === key));
 }
 
 function restoreProjectTasks(runs: TaskRecord[]) {
