@@ -526,7 +526,7 @@ describe("API error hygiene", () => {
 
 describe("Settings model management", () => {
   it("guards model row actions with busy and delete confirmation states", async () => {
-    const [settingsSource, settingsModelGroupSource, settingsUtilsSource, settingsRouteSource, modelsManageSource, modelsRefreshSource, modelsTestSource, providersDetectSource] = await Promise.all([
+    const [settingsSource, settingsModelGroupSource, settingsUtilsSource, settingsRouteSource, modelsManageSource, modelsRefreshSource, modelsTestSource, providersDetectSource, providerDetectorSource] = await Promise.all([
       readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/settings/settings-model-group.tsx", import.meta.url), "utf8"),
       readFile(new URL("../components/settings/settings-page-utils.ts", import.meta.url), "utf8"),
@@ -535,6 +535,7 @@ describe("Settings model management", () => {
       readFile(new URL("../app/api/models/refresh/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/models/test/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/providers/detect/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/provider-detector.ts", import.meta.url), "utf8"),
     ]);
     const settingsUiSource = `${settingsSource}\n${settingsModelGroupSource}`;
 
@@ -576,6 +577,12 @@ describe("Settings model management", () => {
     assert.equal(settingsRouteSource.includes("Array.isArray(body.modelsCache) ? body.modelsCache : currentLocal.modelsCache"), true);
     assert.equal(settingsSource.includes("modelsCache: overrides?.modelsCache ?? modelsCache"), true);
     assert.equal(settingsSource.includes("supportsImageGeneration"), true);
+    assert.equal(providersDetectSource.includes("const result = await detectProvider({"), true);
+    assert.equal(providersDetectSource.includes("save: Boolean(body.save)"), true);
+    assert.equal(providersDetectSource.includes("groupModels"), false);
+    assert.equal(providerDetectorSource.includes("function groupModels"), true);
+    assert.equal(providerDetectorSource.includes("models.forEach((model) => {"), true);
+    assert.equal(providerDetectorSource.includes('models.filter((model) => model.capabilities.includes("text"))'), false);
     assert.equal(modelsManageSource.includes("modelManageErrorMessage"), true);
     assert.equal(modelsManageSource.includes("parseModelManagePayload"), true);
     assert.equal(modelsManageSource.includes("InvalidModelManagePayloadError"), true);

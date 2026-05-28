@@ -527,13 +527,19 @@ function pickModel(models: ModelCatalogItem[], capability: ModelCapability, pref
 }
 
 function groupModels(models: ModelCatalogItem[]): Record<ModelCapability, ModelCatalogItem[]> {
-  return {
-    text: models.filter((model) => model.capabilities.includes("text")),
-    image: models.filter((model) => model.capabilities.includes("image")),
-    video: models.filter((model) => model.capabilities.includes("video")),
-    embedding: models.filter((model) => model.capabilities.includes("embedding")),
-    unknown: models.filter((model) => model.capabilities.includes("unknown")),
+  const groups: Record<ModelCapability, ModelCatalogItem[]> = {
+    text: [],
+    image: [],
+    video: [],
+    embedding: [],
+    unknown: [],
   };
+  models.forEach((model) => {
+    model.capabilities.forEach((capability) => {
+      groups[capability]?.push(model);
+    });
+  });
+  return groups;
 }
 
 function manualModelItems(manual: DetectorInput["manual"]): ModelCatalogItem[] {
