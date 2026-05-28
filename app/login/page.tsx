@@ -12,7 +12,6 @@ type AuthState = {
 export default function LoginPage() {
   const [authState, setAuthState] = useState<AuthState | null>(null);
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -54,7 +53,7 @@ export default function LoginPage() {
       const response = await fetch(mode === "register" ? "/api/auth/register" : "/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "操作失败。");
@@ -82,20 +81,8 @@ export default function LoginPage() {
         </div>
 
         <form className="login-form" onSubmit={submit}>
-          {mode === "register" ? (
-            <label>
-              <span>名称</span>
-              <input
-                autoComplete="name"
-                disabled={busy}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="例如：张强"
-                value={name}
-              />
-            </label>
-          ) : null}
           <label>
-            <span>邮箱</span>
+            <span>账号</span>
             <input
               autoComplete="email"
               disabled={busy}
