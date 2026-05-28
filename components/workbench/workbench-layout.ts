@@ -118,12 +118,9 @@ export function filterEdgesForNodes(edges: FlowEdge[], nodes: FlowNode[]) {
 
 export function normalizeRestoredCanvasPositions(nodes: FlowNode[]) {
   if (!nodes.length) return nodes;
-  const positions = nodes.map((node) => node.position).filter((position) => Number.isFinite(position?.x) && Number.isFinite(position?.y));
-  if (!positions.length) return nodes;
-  const minX = Math.min(...positions.map((position) => position.x));
-  const minY = Math.min(...positions.map((position) => position.y));
-  const maxX = Math.max(...positions.map((position) => position.x));
-  const maxY = Math.max(...positions.map((position) => position.y));
+  const bounds = restoredCanvasBounds(nodes);
+  if (!bounds) return nodes;
+  const { minX, minY, maxX, maxY } = bounds;
   const needsNormalize = Math.max(Math.abs(minX), Math.abs(minY), Math.abs(maxX), Math.abs(maxY)) > 6000;
   if (!needsNormalize) return nodes;
   const offsetX = minX - 120;
@@ -140,6 +137,24 @@ export function normalizeRestoredCanvasPositions(nodes: FlowNode[]) {
       },
     };
   });
+}
+
+function restoredCanvasBounds(nodes: FlowNode[]) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let hasPosition = false;
+  for (const node of nodes) {
+    const position = node.position;
+    if (!Number.isFinite(position?.x) || !Number.isFinite(position?.y)) continue;
+    hasPosition = true;
+    minX = Math.min(minX, position.x);
+    minY = Math.min(minY, position.y);
+    maxX = Math.max(maxX, position.x);
+    maxY = Math.max(maxY, position.y);
+  }
+  return hasPosition ? { minX, minY, maxX, maxY } : null;
 }
 
 export function estimateWorkflowNodeHeight(node: FlowNode) {

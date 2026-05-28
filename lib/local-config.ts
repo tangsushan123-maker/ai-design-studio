@@ -420,9 +420,12 @@ function isModelCatalogItem(item: unknown): item is ModelCatalogItem {
 }
 
 function normalizeModelCache(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter(isModelCatalogItem).map(normalizeModelCatalogItem)
-    : [];
+  if (!Array.isArray(value)) return [];
+  const items: ModelCatalogItem[] = [];
+  for (const item of value) {
+    if (isModelCatalogItem(item)) items.push(normalizeModelCatalogItem(item));
+  }
+  return items;
 }
 
 function normalizeModelCatalogItem(item: ModelCatalogItem): ModelCatalogItem {

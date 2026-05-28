@@ -267,11 +267,7 @@ export function normalizeMaterialLibraryRecord(value: unknown, fallback: Materia
     ownerProjectId: typeof source.ownerProjectId === "string" ? source.ownerProjectId : fallback.ownerProjectId,
     description: typeof source.description === "string" ? source.description : fallback.description,
     tags: normalizeStringArray(source.tags),
-    items: Array.isArray(source.items)
-      ? source.items
-        .map((item) => normalizeProjectAssetRecord(item, typeof source.id === "string" ? source.id : fallback.id))
-        .filter((item): item is ProjectAssetRecord => Boolean(item))
-      : fallback.items,
+    items: normalizeProjectAssetRecords(source.items, typeof source.id === "string" ? source.id : fallback.id, fallback.items),
     createdAt: typeof source.createdAt === "string" ? source.createdAt : fallback.createdAt,
     updatedAt: typeof source.updatedAt === "string" ? source.updatedAt : fallback.updatedAt,
   };
@@ -284,9 +280,39 @@ export function normalizeProjectKnowledge(value: unknown, input: { projectId: st
   return {
     archive: normalizeProjectArchiveRecord(source.archive, input.projectName),
     materialLibrary: normalizeMaterialLibraryRecord(source.materialLibrary, fallback.materialLibrary),
-    references: Array.isArray(source.references) ? source.references.map(normalizeMaterialLibraryReference).filter((item): item is MaterialLibraryReference => Boolean(item)) : [],
+    references: normalizeMaterialLibraryReferences(source.references),
     selection: normalizeProjectLibrarySelection(source.selection, fallback.selection),
   };
+}
+
+function normalizeProjectAssetRecords(value: unknown, libraryId: string, fallback: ProjectAssetRecord[]) {
+  if (!Array.isArray(value)) return fallback;
+  const items: ProjectAssetRecord[] = [];
+  for (const item of value) {
+    const normalized = normalizeProjectAssetRecord(item, libraryId);
+    if (normalized) items.push(normalized);
+  }
+  return items;
+}
+
+function normalizeMaterialLibraryReferences(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const references: MaterialLibraryReference[] = [];
+  for (const item of value) {
+    const normalized = normalizeMaterialLibraryReference(item);
+    if (normalized) references.push(normalized);
+  }
+  return references;
+}
+
+function normalizeProjectFactCandidates(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const candidates: ProjectFactCandidate[] = [];
+  for (const item of value) {
+    const normalized = normalizeProjectFactCandidate(item);
+    if (normalized) candidates.push(normalized);
+  }
+  return candidates;
 }
 
 type PublicStyleLibraryProfile = {
@@ -478,7 +504,7 @@ function normalizeProjectArchiveRecord(value: unknown, projectName: string): Pro
     forbiddenContent: normalizeStringArray(source.forbiddenContent),
     historyDesignIds: normalizeStringArray(source.historyDesignIds),
     historyGenerationIds: normalizeStringArray(source.historyGenerationIds),
-    pendingFacts: Array.isArray(source.pendingFacts) ? source.pendingFacts.map(normalizeProjectFactCandidate).filter((item): item is ProjectFactCandidate => Boolean(item)) : [],
+    pendingFacts: normalizeProjectFactCandidates(source.pendingFacts),
     notes: typeof source.notes === "string" ? source.notes : "",
     updatedAt: typeof source.updatedAt === "string" ? source.updatedAt : fallback.updatedAt,
   };

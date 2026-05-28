@@ -79,17 +79,18 @@ function normalizeImageTaskResponse(data: Record<string, unknown>): NormalizedIm
     data.output,
   ];
   const seen = new Set<string>();
-  const images = candidates
-    .flatMap((value) => Array.isArray(value) ? value : value ? [value] : [])
-    .filter(isImageAssetLike)
-    .map((image) => image as GeneratedImage)
-    .filter((image) => {
+  const images: GeneratedImage[] = [];
+  for (const candidate of candidates) {
+    const items = Array.isArray(candidate) ? candidate : candidate ? [candidate] : [];
+    for (const item of items) {
+      if (!isImageAssetLike(item)) continue;
+      const image = item as GeneratedImage;
       const key = image.id || image.fileName || image.savedPath || image.url || image.originalUrl;
-      if (!key) return true;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      images.push(image);
+    }
+  }
   return {
     error: typeof data.error === "string" ? data.error : undefined,
     errorReason: typeof data.errorReason === "string" ? data.errorReason : undefined,

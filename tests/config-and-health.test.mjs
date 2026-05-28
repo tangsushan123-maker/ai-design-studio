@@ -770,6 +770,7 @@ describe("Local JSON storage", () => {
     assert.equal(configSource.includes("function normalizeModelCache"), true);
     assert.equal(configSource.includes("modelsCache: normalizeModelCache(parsed.modelsCache)"), true);
     assert.equal(configSource.includes("const normalizedModelCache = input.modelsCache === undefined ? null : normalizeModelCache(input.modelsCache)"), true);
+    assert.equal(configSource.includes("value.filter(isModelCatalogItem).map(normalizeModelCatalogItem)"), false);
     assert.equal(configSource.includes("input.modelsCache.filter(isModelCatalogItem).length"), false);
   });
 });
@@ -1588,10 +1589,11 @@ describe("Workbench image collection helpers", () => {
 
 describe("Workflow canvas performance", () => {
   it("degrades node, edge, and portal-heavy UI during canvas interactions", async () => {
-    const [workbenchSource, workbenchTypesSource, globalsSource] = await Promise.all([
+    const [workbenchSource, workbenchTypesSource, globalsSource, layoutSource] = await Promise.all([
       readWorkbenchSource(),
       readFile(new URL("../components/workbench/workbench-types.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/workbench-layout.ts", import.meta.url), "utf8"),
     ]);
     const workbenchContractSource = `${workbenchSource}\n${workbenchTypesSource}`;
 
@@ -1646,6 +1648,8 @@ describe("Workflow canvas performance", () => {
     assert.equal(globalsSource.includes("backdrop-filter: none"), true);
     assert.equal(globalsSource.includes(".workflow-edge-compact"), true);
     assert.equal(globalsSource.includes(".react-flow__edge-text"), true);
+    assert.equal(layoutSource.includes("function restoredCanvasBounds"), true);
+    assert.equal(layoutSource.includes("nodes.map((node) => node.position).filter"), false);
   });
 });
 
@@ -2239,17 +2243,22 @@ describe("Account navigation", () => {
 
 describe("Collection normalization performance", () => {
   it("keeps hot array cleanup paths single-pass", async () => {
-    const [projectSystemSource, promptSource, assetLibrarySource, referenceRemakeSource, maskEditSource] = await Promise.all([
+    const [projectSystemSource, promptSource, assetLibrarySource, referenceRemakeSource, maskEditSource, imageRequestSource] = await Promise.all([
       readFile(new URL("../lib/project-system.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/prompt.ts", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/asset-library-panel.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/api/reference-remake/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/mask-edit-image/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/workbench-image-requests.ts", import.meta.url), "utf8"),
     ]);
 
     assert.equal(projectSystemSource.includes("value.filter((item): item is string"), false);
+    assert.equal(projectSystemSource.includes("source.references.map(normalizeMaterialLibraryReference).filter"), false);
+    assert.equal(projectSystemSource.includes("source.pendingFacts.map(normalizeProjectFactCandidate).filter"), false);
+    assert.equal(projectSystemSource.includes("normalizeProjectAssetRecords"), true);
     assert.equal(promptSource.includes("source.sellingPoints.map(cleanPromptText).filter(Boolean)"), false);
     assert.equal(assetLibrarySource.includes("Array.from(new Set((matches || []).map"), false);
+    assert.equal(imageRequestSource.includes(".flatMap((value) => Array.isArray(value) ? value : value ? [value] : [])"), false);
     assert.equal(referenceRemakeSource.includes("data.image_layers.map(stringValue).filter(Boolean)"), false);
     assert.equal(referenceRemakeSource.includes("data.risks.map(stringValue).filter(Boolean)"), false);
     assert.equal(maskEditSource.includes(".filter((item) => item.text).slice(0, 8)"), false);
