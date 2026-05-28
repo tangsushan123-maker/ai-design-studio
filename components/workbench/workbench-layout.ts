@@ -111,6 +111,11 @@ export function arrangeWorkflowNodes(nodes: FlowNode[], edges: FlowEdge[]) {
   }));
 }
 
+export function filterEdgesForNodes(edges: FlowEdge[], nodes: FlowNode[]) {
+  const ids = new Set(nodes.map((node) => node.id));
+  return edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target));
+}
+
 export function estimateWorkflowNodeHeight(node: FlowNode) {
   if (node.data.kind === "image_input") {
     const image = (node.data.image || node.data.output || null) as ImageAsset | null;

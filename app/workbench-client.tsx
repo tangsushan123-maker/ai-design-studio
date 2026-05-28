@@ -85,7 +85,7 @@ import {
 import { imageRatioStyle, largePreviewFrameStyle, pngLayerDisplayName, pngLayerPreviewImage, zoomedPreviewFrameStyle } from "@/components/workbench/workbench-image-display";
 import { findDataImagePath, imageDeletionProtection, imageForComparison, sanitizeSerializableImageUrl, stripImageFile } from "@/components/workbench/workbench-image-lifecycle";
 import { compactThumbStyle, imageNodePreviewMetrics, shouldShowCheckerboard } from "@/components/workbench/workbench-image-metrics";
-import { arrangeWorkflowNodes, estimateWorkflowNodeHeight, nodeAutoSpacingX } from "@/components/workbench/workbench-layout";
+import { arrangeWorkflowNodes, estimateWorkflowNodeHeight, filterEdgesForNodes, nodeAutoSpacingX } from "@/components/workbench/workbench-layout";
 import {
   designComparisonModeLabel,
   designComparisonModeParam,
@@ -7705,11 +7705,6 @@ function migrateLegacyNodeParams(kind: NodeKind, originalKind: unknown, params: 
     prompt: stringParam(params.prompt) || qualityEnhanceDefaultPrompt(enhancementMode),
     model: stringParam(params.model),
   };
-}
-
-function filterEdgesForNodes(edges: FlowEdge[], nodes: FlowNode[]) {
-  const ids = new Set(nodes.map((node) => node.id));
-  return edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target));
 }
 
 function latestTaskByNodeId(runs: TaskRecord[]) {
