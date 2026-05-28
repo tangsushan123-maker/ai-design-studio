@@ -823,11 +823,21 @@ function normalizeReferenceRemakeAnalysis(value: unknown, fallback: ReferenceRem
     background_style: stringValue(data.background_style) || fallback.background_style,
     layout: normalizeStringRecord(data.layout) || fallback.layout,
     text_layers: textLayers,
-    image_layers: Array.isArray(data.image_layers) ? data.image_layers.map(stringValue).filter(Boolean) : fallback.image_layers,
+    image_layers: stringArray(data.image_layers, fallback.image_layers),
     canvas: typeof data.canvas === "object" && data.canvas ? data.canvas as ReferenceRemakeAnalysis["canvas"] : fallback.canvas,
     design_bbox: normalizeBbox(data.design_bbox),
-    risks: Array.isArray(data.risks) ? data.risks.map(stringValue).filter(Boolean) : [],
+    risks: stringArray(data.risks, []),
   };
+}
+
+function stringArray(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) return fallback;
+  const items: string[] = [];
+  for (const item of value) {
+    const text = stringValue(item);
+    if (text) items.push(text);
+  }
+  return items.length ? items : fallback;
 }
 
 function normalizeTextLayer(value: unknown): ReferenceTextLayer | null {

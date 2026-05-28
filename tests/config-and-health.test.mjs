@@ -2198,6 +2198,26 @@ describe("Account navigation", () => {
   });
 });
 
+describe("Collection normalization performance", () => {
+  it("keeps hot array cleanup paths single-pass", async () => {
+    const [projectSystemSource, promptSource, assetLibrarySource, referenceRemakeSource, maskEditSource] = await Promise.all([
+      readFile(new URL("../lib/project-system.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/prompt.ts", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/asset-library-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/reference-remake/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/mask-edit-image/route.ts", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(projectSystemSource.includes("value.filter((item): item is string"), false);
+    assert.equal(promptSource.includes("source.sellingPoints.map(cleanPromptText).filter(Boolean)"), false);
+    assert.equal(assetLibrarySource.includes("Array.from(new Set((matches || []).map"), false);
+    assert.equal(referenceRemakeSource.includes("data.image_layers.map(stringValue).filter(Boolean)"), false);
+    assert.equal(referenceRemakeSource.includes("data.risks.map(stringValue).filter(Boolean)"), false);
+    assert.equal(maskEditSource.includes(".filter((item) => item.text).slice(0, 8)"), false);
+    assert.equal(maskEditSource.includes(".filter((item) => item.label).slice(0, 8)"), false);
+  });
+});
+
 describe("Design optimization", () => {
   it("adds a standalone design optimization node and modular industry-aware API route", async () => {
     const [routeSource, workbenchSource] = await Promise.all([

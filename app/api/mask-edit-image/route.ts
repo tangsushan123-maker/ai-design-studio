@@ -1401,8 +1401,8 @@ function maskPositionLabel(centerX: number, centerY: number) {
 }
 
 function buildMaskEditProtectionPrompt(context: ProtectionContext, taskMode: MaskTaskMode) {
-  const protectedTexts = (context.protectedTexts || []).filter((item) => item.text).slice(0, 8);
-  const protectedAssets = (context.protectedAssets || []).filter((item) => item.label).slice(0, 8);
+  const protectedTexts = limitedProtectionItems(context.protectedTexts, (item) => Boolean(item.text), 8);
+  const protectedAssets = limitedProtectionItems(context.protectedAssets, (item) => Boolean(item.label), 8);
   const brand = context.brandProfile;
   const maskOverride = taskMode === "cleanup" || taskMode === "text_remove" || taskMode === "text_replace" || taskMode === "text_repair";
   const lines = [
@@ -1424,6 +1424,16 @@ function buildMaskEditProtectionPrompt(context: ProtectionContext, taskMode: Mas
     brand?.colors?.length ? `Keep the surrounding brand color direction outside the mask: ${brand.colors.join(", ")}.` : "",
   ];
   return lines.filter(Boolean).join("\n");
+}
+
+function limitedProtectionItems<T>(items: T[] | undefined, predicate: (item: T) => boolean, limit: number) {
+  const selected: T[] = [];
+  for (const item of items || []) {
+    if (!predicate(item)) continue;
+    selected.push(item);
+    if (selected.length >= limit) break;
+  }
+  return selected;
 }
 
 function maskTaskInstruction(mode: MaskTaskMode, userPrompt: string) {

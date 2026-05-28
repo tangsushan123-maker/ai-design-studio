@@ -219,7 +219,11 @@ export function createDefaultProjectKnowledge(input: { projectId: string; projec
 
 export function normalizeStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  const items: string[] = [];
+  for (const item of value) {
+    if (typeof item === "string" && item.trim().length > 0) items.push(item);
+  }
+  return items;
 }
 
 export function normalizeProjectAssetRecord(value: unknown, libraryId: string): ProjectAssetRecord | null {

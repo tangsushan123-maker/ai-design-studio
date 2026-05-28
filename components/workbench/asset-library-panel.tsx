@@ -947,22 +947,29 @@ function categoryLabel(value: UploadCategoryKey) {
 }
 
 function profileBrandColorValues(profile: ProjectProfile) {
-  return Array.from(
-    new Set([
-      ...extractColorValues(profile.primaryColors),
-      ...extractColorValues(profile.secondaryColors),
-      ...extractColorValues(profile.accentColors),
-      ...extractColorValues(profile.backgroundColors),
-      ...extractColorValues(profile.textColors),
-      ...extractColorValues(profile.brandColors),
-      ...extractColorValues(profile.colorPalettes),
-    ]),
-  );
+  const colors = new Set<string>();
+  for (const value of [
+    profile.primaryColors,
+    profile.secondaryColors,
+    profile.accentColors,
+    profile.backgroundColors,
+    profile.textColors,
+    profile.brandColors,
+    profile.colorPalettes,
+  ]) {
+    for (const color of extractColorValues(value)) colors.add(color);
+  }
+  return Array.from(colors);
 }
 
 function extractColorValues(value: string) {
   const matches = value.match(/#[0-9a-f]{3}(?:[0-9a-f]{3})?\b|rgba?\(\s*(?:\d{1,3}\s*,\s*){2}\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)/gi);
-  return Array.from(new Set((matches || []).map((item) => item.trim())));
+  const colors = new Set<string>();
+  for (const item of matches || []) {
+    const color = item.trim();
+    if (color) colors.add(color);
+  }
+  return Array.from(colors);
 }
 
 function simplifyLibraryName(value: string) {

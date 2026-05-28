@@ -360,11 +360,18 @@ function normalizeBriefVisibleCopy(source: Partial<DesignDirectorBrief>, fallbac
   const allowPromotionCopy = fallback.sellingPoints.some((item) => /礼遇|好礼|优惠|福利|促销|领取|报名|套餐|买赠/.test(item));
   const title = isUsablePosterCopy(sourceTitle, "title", allowPromotionCopy) ? sourceTitle : fallback.title;
   const subtitle = isUsablePosterCopy(sourceSubtitle, "subtitle", allowPromotionCopy) ? sourceSubtitle : fallback.subtitle;
-  const sourcePoints = Array.isArray(source.sellingPoints) ? source.sellingPoints.map(cleanPromptText).filter(Boolean) : [];
-  const sellingPoints = Array.from(new Set([
-    ...sourcePoints.filter((item) => isUsablePosterCopy(item, "label", allowPromotionCopy)),
-    ...fallback.sellingPoints,
-  ])).slice(0, 3);
+  const sellingPointSet = new Set<string>();
+  if (Array.isArray(source.sellingPoints)) {
+    for (const point of source.sellingPoints) {
+      const text = cleanPromptText(point);
+      if (text && isUsablePosterCopy(text, "label", allowPromotionCopy)) sellingPointSet.add(text);
+    }
+  }
+  for (const point of fallback.sellingPoints) {
+    sellingPointSet.add(point);
+    if (sellingPointSet.size >= 3) break;
+  }
+  const sellingPoints = Array.from(sellingPointSet).slice(0, 3);
   return { title, subtitle, sellingPoints: sellingPoints.length ? sellingPoints : fallback.sellingPoints };
 }
 
