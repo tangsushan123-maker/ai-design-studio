@@ -138,9 +138,15 @@ export async function POST(request: Request) {
         );
       }
     };
+    let targetCanvasFilePromise: Promise<Awaited<ReturnType<typeof toFile>>> | null = null;
+    const getTargetCanvasFile = () => {
+      targetCanvasFilePromise ||= createTextToImageTargetCanvas(outputSize).then((canvas) =>
+        toFile(canvas, `target-canvas-${outputSize.width}x${outputSize.height}.png`, { type: "image/png" }),
+      );
+      return targetCanvasFilePromise;
+    };
     const createTargetCanvasRequest = async (requestPrompt: string, requestCount = 1) => {
-      const canvas = await createTextToImageTargetCanvas(outputSize);
-      const canvasFile = await toFile(canvas, `target-canvas-${outputSize.width}x${outputSize.height}.png`, { type: "image/png" });
+      const canvasFile = await getTargetCanvasFile();
       const promptForCanvas = referenceFiles.length
         ? buildTextReferenceSummaryGenerationPrompt(requestPrompt, body.referenceImages || [], await getReferenceFallbackSummary(), outputRatioLabel, outputSize, strongReferenceMode)
         : requestPrompt;

@@ -4,20 +4,35 @@ import Link from "next/link";
 import { Repeat2, UserCog, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+type AccountMenuUser = { email?: string; name?: string; role?: "owner" | "user" };
+
+let cachedUser: AccountMenuUser | null = null;
+let userLoaded = false;
+let userRequest: Promise<AccountMenuUser | null> | null = null;
+
+async function loadCurrentUser() {
+  if (userLoaded) return cachedUser;
+  userRequest ??= fetch("/api/auth/me")
+    .then((response) => response.json())
+    .then((data) => data.user || null)
+    .catch(() => null)
+    .finally(() => {
+      userRequest = null;
+    });
+  cachedUser = await userRequest;
+  userLoaded = true;
+  return cachedUser;
+}
+
 export function AccountSwitcher({ expanded = false }: { expanded?: boolean; compact?: boolean }) {
   const [open, setOpen] = useState(false);
-  const [user, setUser] = useState<{ email?: string; name?: string; role?: "owner" | "user" } | null>(null);
+  const [user, setUser] = useState<AccountMenuUser | null>(cachedUser);
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/auth/me")
-      .then((response) => response.json())
-      .then((data) => {
-        if (alive) setUser(data.user || null);
-      })
-      .catch(() => {
-        if (alive) setUser(null);
-      });
+    void loadCurrentUser().then((nextUser) => {
+      if (alive) setUser(nextUser);
+    });
     return () => {
       alive = false;
     };
