@@ -363,6 +363,17 @@ function missingBrandAssetWarning(profile: ProjectProfile, brandAssets: ImageAss
     : "";
 }
 
+function sourceImageVersionRefs(sourceImages: ImageAsset[]) {
+  const parentIds: string[] = [];
+  const sourceUrls: string[] = [];
+  for (const image of sourceImages) {
+    const parentId = image.id || image.fileName || image.url;
+    if (parentId) parentIds.push(parentId);
+    if (image.url) sourceUrls.push(image.url);
+  }
+  return { parentIds, sourceUrls };
+}
+
 export function buildProfileProtectionContext(
   profile: ProjectProfile,
   options: {
@@ -387,6 +398,7 @@ export function buildProfileProtectionContext(
   const logoAssets = findBrandAssets(brandAssets, "logo");
   const ipAssets = findBrandAssets(brandAssets, "ip");
   const qrAssets = findBrandAssets(brandAssets, "qrcode");
+  const sourceRefs = sourceImageVersionRefs(options.sourceImages);
   const protectedTexts: ProtectedTextPayload[] = [
     profile.organizationName ? protectedText("organization", profile.organizationName, "other", "normal", "机构名称来自项目记忆，仅作为项目识别和校对资料") : null,
     shouldProtectContact && profile.phone ? protectedText("phone", profile.phone, "phone", "critical", "用户明确要求电话；项目电话来自品牌资产包，必须准确使用，不得编造") : null,
@@ -493,8 +505,8 @@ export function buildProfileProtectionContext(
     },
     version: {
       projectId: options.projectId,
-      parentIds: options.sourceImages.map((image) => image.id || image.fileName || image.url).filter(Boolean),
-      sourceUrls: options.sourceImages.map((image) => image.url).filter(Boolean),
+      parentIds: sourceRefs.parentIds,
+      sourceUrls: sourceRefs.sourceUrls,
       nodeOperation: options.operation,
     },
   };

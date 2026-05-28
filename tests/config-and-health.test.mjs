@@ -1482,6 +1482,9 @@ describe("Text-to-image references", () => {
     assert.equal(workbenchSource.includes("visibleRequestText?: string"), true);
     assert.equal(workbenchSource.includes("const profileColors = projectProfileColors(profile)"), true);
     assert.equal(workbenchSource.includes("projectProfileColors(profile).length ? `品牌色"), false);
+    assert.equal(workbenchSource.includes("function sourceImageVersionRefs"), true);
+    assert.equal(workbenchSource.includes("options.sourceImages.map((image) => image.id"), false);
+    assert.equal(workbenchSource.includes("options.sourceImages.map((image) => image.url"), false);
     assert.equal(workbenchSource.includes("const contactExplicitlyRequested = visibleRequests.phone || visibleRequests.address || usage.useContact"), true);
     assert.equal(workbenchSource.includes("const shouldProtectContact = !hiddenRequests.noText && !hiddenRequests.noContact && contactExplicitlyRequested"), true);
     assert.equal(workbenchSource.includes("shouldForbidInventedContact"), true);
