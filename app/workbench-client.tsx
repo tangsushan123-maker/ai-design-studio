@@ -98,8 +98,6 @@ import {
   emptyProjectProfile,
   favoriteStorageKey,
   flowAriaLabelConfig,
-  heavyImageTaskStuckMs,
-  imageTaskStuckMs,
   imageTaskTimeoutMs,
   inputHandlesByKind,
   legacyTextReferenceHandles,
@@ -145,6 +143,7 @@ import {
   variantNumberFromLabel,
 } from "@/components/workbench/workbench-labels";
 import { DetailLine, EmptyPanel, MiniInput, StatusDot, SummaryLine, ToolbarButton } from "@/components/workbench/workbench-small-ui";
+import { isActiveNodeStatus, isDeferredQueuedTask, isFinishedNodeStatus, isQualityGateBlocked, isTaskActivelyRunning, isTaskPossiblyStuck } from "@/components/workbench/workbench-task-state";
 import {
   adaptiveRatioOptions,
   customSize,
@@ -8030,14 +8029,6 @@ function latestTaskByNodeId(runs: TaskRecord[]) {
   return taskMap;
 }
 
-function isActiveNodeStatus(status?: NodeStatus) {
-  return status === "queued" || status === "running" || status === "saving";
-}
-
-function isFinishedNodeStatus(status?: NodeStatus) {
-  return status === "completed" || status === "failed" || status === "cancelled";
-}
-
 function normalizeRestoredCanvasPositions(nodes: FlowNode[]) {
   if (!nodes.length) return nodes;
   const positions = nodes.map((node) => node.position).filter((position) => Number.isFinite(position?.x) && Number.isFinite(position?.y));
@@ -9577,33 +9568,6 @@ function loadFavoriteIds() {
 function saveFavoriteIds(ids: Set<string>) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(favoriteStorageKey, JSON.stringify(Array.from(ids)));
-}
-
-function isDeferredQueuedTask(task: TaskRecord) {
-  return Boolean(task.deferred && task.status === "queued");
-}
-
-function isTaskActivelyRunning(task: TaskRecord) {
-  if (isDeferredQueuedTask(task)) return false;
-  return task.status === "queued" || task.status === "running" || task.status === "saving";
-}
-
-function isTaskPossiblyStuck(task: TaskRecord) {
-  if (isDeferredQueuedTask(task)) return false;
-  if (task.endedAt) return false;
-  if (task.status !== "queued" && task.status !== "running" && task.status !== "saving") return false;
-  return Date.now() - task.startedAt > taskStuckThresholdMs(task);
-}
-
-function taskStuckThresholdMs(task: Pick<TaskRecord, "nodeName" | "type">) {
-  const label = `${task.nodeName || ""} ${task.type || ""}`;
-  if (/画质增强|高清|4K|局部 AI 修改|局部修改|PNG 分层|PNG分层|参考图重制|设计优化/.test(label)) return heavyImageTaskStuckMs;
-  return imageTaskStuckMs;
-}
-
-function isQualityGateBlocked(image?: ImageAsset) {
-  const status = image?.qualityCheck?.status;
-  return status === "size_insufficient" || status === "ratio_mismatch" || status === "white_border" || status === "blurred_padding" || status === "failed" || status === "empty";
 }
 
 function isComposerDrivenNode(kind: NodeKind) {
