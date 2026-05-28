@@ -1221,10 +1221,12 @@ describe("Text-to-image references", () => {
 
 describe("Workflow canvas performance", () => {
   it("degrades node, edge, and portal-heavy UI during canvas interactions", async () => {
-    const [workbenchSource, globalsSource] = await Promise.all([
+    const [workbenchSource, workbenchTypesSource, globalsSource] = await Promise.all([
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/workbench-types.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     ]);
+    const workbenchContractSource = `${workbenchSource}\n${workbenchTypesSource}`;
 
     assert.equal(workbenchSource.includes("isCanvasPanning"), true);
     assert.equal(workbenchSource.includes("isCanvasZooming"), true);
@@ -1238,7 +1240,7 @@ describe("Workflow canvas performance", () => {
     assert.equal(workbenchSource.includes("if (input.isLowZoom) return input.selected ? \"compact\" : \"mini\""), true);
     assert.equal(workbenchSource.includes("if (input.isLargeWorkflow && !input.selected) return \"compact\""), true);
     assert.equal(workbenchSource.includes("input.isPerformanceMode && !input.selected"), false);
-    assert.equal(workbenchSource.includes('type NodeRenderLevel = "full" | "compact" | "mini"'), true);
+    assert.equal(workbenchContractSource.includes('type NodeRenderLevel = "full" | "compact" | "mini"'), true);
     assert.equal(workbenchSource.includes('type: isPerformanceMode ? "straight" : edge.type'), true);
     assert.equal(workbenchSource.includes("workflow-edge-compact"), true);
     assert.equal(workbenchSource.includes("nodeMenuOpen && !isPerformanceMode"), true);
@@ -1282,8 +1284,9 @@ describe("Workflow canvas performance", () => {
 
 describe("Project stability and task tracing", () => {
   it("keeps local snapshots and explicit task run traces", async () => {
-    const [workbenchSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, projectCreationSource, assetLibraryPanelSource, imageUtilsSource, imageQualitySource, imageResourceRouteSource, projectRouteSource, editRouteSource, redrawRouteSource, imageSourceSource, materialLibrariesRouteSource] = await Promise.all([
+    const [workbenchSource, workbenchTypesSource, taskCenterSource, ledgerSource, routeSource, generateRouteSource, generatedImagesRouteSource, generatedHistorySource, historyPanelSource, imageManagerPanelSource, projectLibraryPanelSource, projectHomeSource, projectCreationSource, assetLibraryPanelSource, imageUtilsSource, imageQualitySource, imageResourceRouteSource, projectRouteSource, editRouteSource, redrawRouteSource, imageSourceSource, materialLibrariesRouteSource] = await Promise.all([
       readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/workbench-types.ts", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/task-center.tsx", import.meta.url), "utf8"),
       readFile(new URL("../lib/task-run-ledger.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/task-runs/route.ts", import.meta.url), "utf8"),
@@ -1305,9 +1308,10 @@ describe("Project stability and task tracing", () => {
       readFile(new URL("../lib/workbench-image-source.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/material-libraries/route.ts", import.meta.url), "utf8"),
     ]);
+    const workbenchContractSource = `${workbenchSource}\n${workbenchTypesSource}`;
     const workbenchUiSource = `${workbenchSource}\n${imageManagerPanelSource}\n${projectLibraryPanelSource}\n${projectHomeSource}\n${projectCreationSource}\n${assetLibraryPanelSource}\n${imageSourceSource}`;
 
-    assert.equal(workbenchSource.includes("type ProjectSnapshot"), true);
+    assert.equal(workbenchContractSource.includes("type ProjectSnapshot"), true);
     assert.equal(workbenchSource.includes("const projectSnapshotLimit = 5"), true);
     assert.equal(workbenchSource.includes("const projectSnapshotIntervalMs = 30 * 1000"), true);
     assert.equal(workbenchSource.includes("const projectCapacityNodeWarning = 80"), true);
@@ -1325,8 +1329,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("图片管理批量清理"), true);
     assert.equal(workbenchSource.includes("saveProjectSnapshot(\"auto\")"), true);
     assert.equal(workbenchSource.includes("flushProjectPayloadForPageLifecycle(\"leave\")"), true);
-    assert.equal(workbenchSource.includes("type ProjectLocalCachePointer"), true);
-    assert.equal(workbenchSource.includes("type ProjectTaskCachePointer"), true);
+    assert.equal(workbenchContractSource.includes("type ProjectLocalCachePointer"), true);
+    assert.equal(workbenchContractSource.includes("type ProjectTaskCachePointer"), true);
     assert.equal(workbenchSource.includes("readLegacyProjectLocalCache"), true);
     assert.equal(workbenchSource.includes("writeProjectLocalCachePointer"), true);
     assert.equal(workbenchSource.includes("isProjectLocalCachePointer"), true);
@@ -1490,7 +1494,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("服务端确认完成，结果已恢复到画布"), true);
     assert.equal(workbenchSource.includes("appendTaskTrace(formData"), true);
     assert.equal(workbenchSource.includes("taskTracePayload(taskId"), true);
-    assert.equal(workbenchSource.includes('type RightPanelTab = "params" | "tasks" | "library" | "images"'), true);
+    assert.equal(workbenchContractSource.includes('type RightPanelTab = "params" | "tasks" | "library" | "images"'), true);
     assert.equal(workbenchUiSource.includes("图片管理"), true);
     assert.equal(workbenchUiSource.includes("ImageManagerPanel"), true);
     assert.equal(workbenchUiSource.includes("imageDeletionProtection"), true);

@@ -16,8 +16,6 @@ import {
   useNodesState,
   useReactFlow,
   type Connection,
-  type Edge,
-  type Node,
   type NodeProps,
   type NodeTypes,
   type OnConnect,
@@ -68,7 +66,7 @@ import {
   type ProjectAssetRecord,
   type ProjectKnowledgeBase,
 } from "@/lib/project-system";
-import { findSizePresetByLabel, sizePresets, type ResizeFitMode } from "@/lib/size-presets";
+import { findSizePresetByLabel, sizePresets } from "@/lib/size-presets";
 import { ImageFrame } from "@/components/workbench/image-frame";
 import { ImageManagerPanel, type ImageDeletionProtection } from "@/components/workbench/image-manager-panel";
 import { NodeResultsPanel } from "@/components/workbench/node-results-panel";
@@ -84,10 +82,6 @@ import {
   maskEditRegionTypeParam,
   maskEditTaskModeParam,
   maskQuickActions,
-  type MaskEditEdgeBlend,
-  type MaskEditProtectionStrength,
-  type MaskEditRegionType,
-  type MaskEditTaskMode,
 } from "@/components/workbench/mask-editing";
 import { clearMaskEditorDraft, MaskEditorModal } from "@/components/workbench/mask-editor-modal";
 import { ProjectLibraryPanel } from "@/components/workbench/project-library-panel";
@@ -120,524 +114,48 @@ import {
   resolveRequestedAspectRatio,
   stringParam,
 } from "@/components/workbench/workbench-utils";
+import type {
+  BrandAssetSummary,
+  BrandAssetUsage,
+  DesignComparisonMode,
+  DesignOptimizationStrength,
+  FlowEdge,
+  FlowNode,
+  GeneratedImage,
+  HistoryMaskEditOptions,
+  HistoryOperationOptions,
+  HistoryResizeOptions,
+  HistoryUpscaleOptions,
+  ImageAsset,
+  MaterialLibrarySummary,
+  MenuState,
+  NodeKind,
+  NodeRenderLevel,
+  NodeStatus,
+  ProjectAssetUploadKind,
+  ProjectKind,
+  ProjectLocalCachePointer,
+  ProjectPayload,
+  ProjectProfile,
+  ProjectSnapshot,
+  ProjectSummary,
+  ProjectTaskCachePointer,
+  ProtectedAssetPayload,
+  ProtectedTextPayload,
+  ProtectionContextPayload,
+  QualityEnhanceMode,
+  ReferenceRemakeMode,
+  ResolvedTextReference,
+  RightPanelTab,
+  ServerTaskRunRecord,
+  TaskRecord,
+  TaskResultMatchContext,
+  TextReferenceConfig,
+  WorkbenchModelInfo,
+  WorkflowNodeData,
+} from "@/components/workbench/workbench-types";
 import type { ModelCatalogItem } from "@/lib/openai-defaults";
 
-type ImageSourceKind = "upload" | "paste" | "asset" | "history" | "generated";
-
-type GeneratedImage = {
-  id: string;
-  url: string;
-  originalUrl?: string;
-  thumbnailUrl?: string;
-  previewUrl?: string;
-  resourceFileName?: string;
-  originalFileName?: string;
-  prompt: string;
-  variant: number;
-  ratio?: {
-    width: number;
-    height: number;
-  };
-  mode?: string;
-  model?: string;
-  aspectRatio?: string;
-  quality?: QualityValue;
-  generatedAt?: string;
-  outputSize?: {
-    width: number;
-    height: number;
-  };
-  fileName?: string;
-  savedPath?: string;
-  durationMs?: number;
-  fileSizeBytes?: number;
-  sourceCompareUrl?: string;
-  trashed?: boolean;
-  deletedAt?: string;
-  alphaCheck?: {
-    hasAlphaChannel?: boolean;
-    hasTransparentPixels?: boolean;
-    transparentPixelRatio?: number;
-    partialAlphaPixelRatio?: number;
-    hasOpaqueWhiteBackground?: boolean;
-    hasOpaqueBlackBackground?: boolean;
-    hasCheckerboardBackground?: boolean;
-    canDownload?: boolean;
-    message?: string;
-  };
-  expectedOutputSize?: {
-    width: number;
-    height: number;
-  };
-  qualityCheck?: {
-    status?: "passed" | "pending" | "size_insufficient" | "ratio_mismatch" | "suspected_stretch" | "white_border" | "composition_risk" | "blurred_padding" | "failed" | "empty";
-    label?: string;
-    issues?: string[];
-    actions?: string[];
-    width?: number;
-    height?: number;
-    targetWidth?: number;
-    targetHeight?: number;
-    format?: string;
-    fileSizeBytes?: number;
-    is4kTarget?: boolean;
-    importantContentRisk?: boolean;
-    importantContentLabel?: string;
-    compositionRisk?: boolean;
-    compositionRiskLabel?: string;
-    edgeContentRatio?: number;
-    edgeHotSide?: string;
-    safeMarginPercent?: number;
-    protectedTextCount?: number;
-    protectedAssetCount?: number;
-    detailScore?: number;
-    clarityScoreBefore?: number;
-    clarityScoreAfter?: number;
-    clarityGain?: number;
-    clarityImproved?: boolean;
-    clarityCheckLabel?: string;
-    deliverability?: "ready" | "needs_review" | "not_ready";
-    deliverabilityLabel?: string;
-    textDetailRisk?: boolean;
-    textDetailLabel?: string;
-    fourKCheckItems?: Array<{
-      label: string;
-      passed: boolean;
-      detail?: string;
-    }>;
-  };
-  qualityEnhance?: {
-    mode?: string;
-    target?: string;
-    workflow?: string;
-    postProcess?: string;
-    superResolution?: string;
-    aiRatioFallbackUsed?: boolean;
-    textDetailRecovery?: {
-      applied?: boolean;
-      coverage?: number;
-      alphaScale?: number;
-      maskGrowRadius?: number;
-      strategy?: string;
-      message?: string;
-    };
-  };
-  pngLayerExport?: PngLayerExportResult;
-  referenceRemake?: {
-    mode?: ReferenceRemakeMode;
-    analysis?: unknown;
-    textLayers?: unknown[];
-    workflow?: string;
-  };
-  designOptimization?: {
-    strength?: DesignOptimizationStrength;
-    comparisonMode?: DesignComparisonMode;
-    analysis?: unknown;
-    promptModules?: unknown;
-  };
-  projectId?: string;
-  parentImageId?: string;
-  rootImageId?: string;
-  branchId?: string;
-  branchLabel?: string;
-  resultGroupId?: string;
-  nextImageIds?: string[];
-  sourceTaskId?: string;
-  sourceRequestId?: string;
-  sourceNodeId?: string;
-  sourceNodeName?: string;
-  sourceNodeKind?: string;
-  strategyPackageId?: string;
-  sourceStrategyTitle?: string;
-  materialPlanItemId?: string;
-  materialType?: string;
-  targetSize?: string;
-  materialCopy?: string;
-  materialScene?: string;
-  sourceLabel?: string;
-  tags?: string[];
-  colorTags?: string[];
-  nodeOperation?: string;
-  maskProtectionCheck?: {
-    status?: string;
-    label?: string;
-    message?: string;
-    maskComponentCount?: number;
-    unchangedComponentCount?: number;
-    issues?: string[];
-    suggestions?: string[];
-  };
-  protectionContext?: ProtectionContextPayload;
-  version?: VersionPayload;
-  favorite?: boolean;
-};
-
-type ProtectedTextPayload = {
-  id: string;
-  text: string;
-  kind: "hospital" | "phone" | "address" | "doctor" | "price" | "title" | "logo" | "qr" | "medical" | "other";
-  importance: "critical" | "high" | "normal";
-  reason?: string;
-};
-
-type ProtectedAssetPayload = {
-  id: string;
-  type: "logo" | "qr" | "portrait" | "product" | "seal" | "other";
-  label: string;
-  importance: "critical" | "high" | "normal";
-  instruction: string;
-};
-
-type VersionPayload = {
-  projectId?: string;
-  parentIds?: string[];
-  taskId?: string;
-  nodeOperation?: string;
-  sourceUrls?: string[];
-};
-
-type ProtectionContextPayload = {
-  protectedTexts?: ProtectedTextPayload[];
-  protectedAssets?: ProtectedAssetPayload[];
-  layers?: Array<{ id: string; type: "background" | "person" | "text" | "logo" | "decoration" | "effect" | "unknown"; label: string; locked?: boolean; notes?: string }>;
-  brandProfile?: {
-    name?: string;
-    colors?: string[];
-    fontStyle?: string;
-    logoPlacement?: string;
-    visualTone?: string;
-    rules?: string[];
-  };
-  version?: VersionPayload;
-};
-
-type HistoryResizeOptions = {
-  targetRatio: AspectRatioValue;
-  targetSize: string;
-  fitMode: ResizeFitMode;
-  quality: QualityValue;
-  prompt?: string;
-};
-
-type HistoryUpscaleOptions = {
-  targetSize: string;
-  fitMode: ResizeFitMode | "keep_ratio" | "ai_redraw" | "faithful_enhance" | "texture_redraw" | "standard_enhance" | "plus_enhance" | "creative_redraw";
-  quality: QualityValue;
-  format?: "png" | "jpg" | "webp";
-  prompt?: string;
-};
-
-type QualityEnhanceMode = "standard" | "plus" | "creative";
-type ReferenceRemakeMode = "fast" | "precise";
-type DesignOptimizationStrength = "conservative" | "professional" | "bold";
-type DesignComparisonMode = "auto" | "side_by_side" | "stacked" | "final_only";
-
-type HistoryMaskEditOptions = {
-  prompt: string;
-  quality: QualityValue;
-  taskMode?: MaskEditTaskMode;
-  regionType?: MaskEditRegionType;
-  protectionStrength?: MaskEditProtectionStrength;
-  edgeBlend?: MaskEditEdgeBlend;
-};
-
-type HistoryOperationOptions = {
-  targetRatio?: AspectRatioValue;
-  targetSize?: string;
-  fitMode?: HistoryResizeOptions["fitMode"] | HistoryUpscaleOptions["fitMode"];
-  quality?: QualityValue;
-  format?: "png" | "jpg" | "webp";
-  prompt?: string;
-};
-
-type ImageAsset = GeneratedImage & {
-  file?: File;
-  width?: number;
-  height?: number;
-  source?: ImageSourceKind;
-  compareBefore?: ImageComparisonAsset;
-  nodeOperation?: string;
-  strategyPackageId?: string;
-  sourceStrategyTitle?: string;
-  materialPlanItemId?: string;
-  materialType?: string;
-  targetSize?: string;
-  materialCopy?: string;
-  materialScene?: string;
-};
-
-type TextReferenceConfig = {
-  handle: string;
-  role: TextReferenceRole;
-  weight: TextReferenceWeight;
-};
-
-type ResolvedTextReference = {
-  handle: string;
-  image: ImageAsset;
-  manifest: TextReferenceImage;
-};
-
-type ProjectAssetUploadKind = "logo" | "qrcode" | "ip" | "background";
-
-type NodeKind =
-  | "image_input"
-  | "text_to_image"
-  | "image_to_image"
-  | "fuse_images"
-  | "outpaint"
-  | "resize"
-  | "replace_product"
-  | "mask_edit"
-  | "hd_redraw"
-  | "upscale_4k"
-  | "reference_remake"
-  | "design_optimize"
-  | "png_layers"
-  | "output";
-
-type NodeStatus = "idle" | "queued" | "running" | "saving" | "completed" | "failed" | "cancelled";
-type NodeRenderLevel = "full" | "compact" | "mini";
-
-type WorkflowNodeData = {
-  [key: string]: unknown;
-  title: string;
-  subtitle?: string;
-  kind: NodeKind;
-  params: Record<string, unknown>;
-  image?: ImageAsset;
-  output?: ImageAsset | null;
-  outputs?: ImageAsset[];
-  status?: NodeStatus;
-  error?: string;
-  resultCount?: number;
-  onRun?: (nodeId: string) => void;
-  onDelete?: (nodeId: string) => void;
-  onParamChange?: (nodeId: string, key: string, value: unknown) => void;
-  onImageFile?: (nodeId: string, file: File) => void;
-  onPreview?: (image: ImageAsset) => void;
-  onMaskEdit?: (nodeId: string) => void;
-  isPerformanceMode?: boolean;
-  isLowZoom?: boolean;
-  nodeRenderLevel?: NodeRenderLevel;
-};
-
-type FlowNode = Node<WorkflowNodeData, NodeKind>;
-type FlowEdge = Edge;
-
-type TaskRecord = {
-  id: string;
-  requestId?: string;
-  projectId?: string;
-  projectName?: string;
-  nodeId: string;
-  nodeName: string;
-  type: string;
-  model: string;
-  status: NodeStatus;
-  startedAt: number;
-  endedAt?: number;
-  stage?: "queued" | "preparing" | "generating" | "saving" | "quality" | "completed" | "failed" | "cancelled";
-  requestStartedAt?: number;
-  saveStartedAt?: number;
-  modelDurationMs?: number;
-  saveDurationMs?: number;
-  error?: string;
-  result?: ImageAsset;
-  inputs?: ImageAsset[];
-  outputs?: ImageAsset[];
-  resultCount?: number;
-  resultNodeIds?: string[];
-  resultOnCanvas?: boolean;
-  progress?: number;
-  progressLabel?: string;
-  cancelled?: boolean;
-  backendRunState?: "waiting" | "active" | "finished" | "failed" | "cancelled";
-  lastHeartbeatAt?: number;
-  deferred?: boolean;
-  strategyPackageId?: string;
-  sourceStrategyTitle?: string;
-  materialPlanItemId?: string;
-  materialType?: string;
-  targetSize?: string;
-  materialCopy?: string;
-  materialScene?: string;
-  prompt?: string;
-};
-
-type TaskResultMatchContext = Pick<TaskRecord, "id"> & Partial<Pick<TaskRecord, "requestId" | "nodeId" | "outputs" | "result" | "resultNodeIds">>;
-
-type ServerTaskRunRecord = {
-  requestId: string;
-  projectId?: string;
-  projectName?: string;
-  nodeId?: string;
-  nodeName?: string;
-  nodeKind?: string;
-  state: "waiting" | "active" | "finished" | "failed" | "cancelled";
-  status: "queued" | "running" | "completed" | "failed" | "cancelled";
-  message?: string;
-  error?: string;
-  updatedAt?: string;
-  endedAt?: string;
-  durationMs?: number;
-  outputCount?: number;
-  outputs?: ImageAsset[];
-};
-
-type ProjectSummary = {
-  id: string;
-  name: string;
-  ownerUserId?: string;
-  ownerEmail?: string;
-  ownerName?: string;
-  projectKind?: ProjectKind;
-  updatedAt?: string;
-  nodeCount?: number;
-  runCount?: number;
-  assetCount?: number;
-  coverUrl?: string;
-  organizationName?: string;
-  libraryName?: string;
-  referenceCount?: number;
-};
-
-type ProjectProfile = {
-  brandColors: string;
-  primaryColors: string;
-  secondaryColors: string;
-  accentColors: string;
-  backgroundColors: string;
-  textColors: string;
-  colorPalettes: string;
-  logoName: string;
-  organizationName: string;
-  phone: string;
-  address: string;
-  qrCodeNote: string;
-  commonCopy: string;
-  forbiddenContent: string;
-  commonSizes: string;
-  styleNotes: string;
-  keepText: boolean;
-  keepLogo: boolean;
-  keepQrCode: boolean;
-  keepFace: boolean;
-  keepMainSubject: boolean;
-  onlyEditMaskedArea: boolean;
-  brandAssetUsage: BrandAssetUsage;
-};
-
-type BrandAssetUsage = {
-  usePrimaryColors: boolean;
-  useSecondaryColors: boolean;
-  useLogo: boolean;
-  useIpImage: boolean;
-  useContact: boolean;
-  useQrCode: boolean;
-  useCopy: boolean;
-  useForbiddenRules: boolean;
-};
-
-type BrandAssetSummary = {
-  activeCount: number;
-  totalCount: number;
-  colorCount: number;
-  logoCount: number;
-  ipCount: number;
-  qrCount: number;
-  hasContact: boolean;
-  copyCount: number;
-  ruleCount: number;
-  missing: string[];
-};
-
-type MenuState =
-  | {
-      kind: "add";
-      x: number;
-      y: number;
-      position: XYPosition;
-    }
-  | {
-      kind: "quick";
-      x: number;
-      y: number;
-      nodeId: string;
-    }
-  | null;
-
-type RightPanelTab = "params" | "tasks" | "library" | "images";
-
-type MaterialLibrarySummary = {
-  id: string;
-  name: string;
-  kind: "project" | "public_style";
-  ownerProjectId?: string;
-  description: string;
-  tags: string[];
-  itemCount: number;
-  styleRuleCount?: number;
-  referenceCount?: number;
-  updatedAt?: string;
-  items?: ProjectAssetRecord[];
-};
-
-type ProjectPayload = {
-  id: string;
-  name: string;
-  ownerUserId?: string;
-  ownerEmail?: string;
-  ownerName?: string;
-  projectKind?: ProjectKind;
-  updatedAt?: string;
-  viewport?: { x: number; y: number; zoom: number };
-  nodes?: FlowNode[];
-  edges?: FlowEdge[];
-  runs?: TaskRecord[];
-  assets?: ImageAsset[];
-  assetText?: string;
-  textProtectionMode?: boolean;
-  profile?: ProjectProfile;
-  knowledge?: ProjectKnowledgeBase;
-};
-
-type ProjectSnapshot = {
-  id: string;
-  projectId: string;
-  projectName: string;
-  createdAt: string;
-  reason: "auto" | "leave" | "manual";
-  nodeCount: number;
-  taskCount: number;
-  jsonBytes?: number;
-  storageMode?: "file";
-  payload?: ProjectPayload;
-};
-
-type ProjectLocalCachePointer = {
-  version: 2;
-  storageMode: "file";
-  activeProjectId: string;
-  activeProjectName: string;
-  updatedAt: string;
-  jsonBytes: number;
-  nodeCount: number;
-  taskCount: number;
-  imageCount: number;
-  message: string;
-};
-
-type ProjectTaskCachePointer = {
-  version: 2;
-  storageMode: "file";
-  projectId: string;
-  updatedAt: string;
-  taskCount: number;
-  message: string;
-};
-
-type ProjectKind = "scratch" | "formal" | "temporary";
 
 const projectStorageKey = "ai-design-node-project-v1";
 const favoriteStorageKey = "ai-design-favorite-images-v1";
@@ -899,15 +417,6 @@ const inputHandlesByKind: Record<NodeKind, Array<{ id: string; label: string }>>
   output: [{ id: "image", label: "图片" }],
 };
 
-type WorkbenchModelInfo = {
-  imageModel: string;
-  analysisModel: string;
-  textModel?: string;
-  videoModel?: string;
-  modelsCache?: ModelCatalogItem[];
-  providerLabel?: string;
-  hasKey: boolean;
-};
 
 export default function WorkbenchClient({
   initialImages = [],
