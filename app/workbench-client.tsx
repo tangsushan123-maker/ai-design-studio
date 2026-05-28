@@ -1632,7 +1632,7 @@ function NodeWorkflowWorkbench({
     const textRatio = composerRatio === "auto" ? resolveAdaptiveRatioFromPrompt(`${brief.title}\n${brief.promptContext}`) : composerRatio;
     const created = brief.directions.slice(0, 2).map((direction, index) => {
       const node = addNode("text_to_image", { x: start.x + index * 360 - 180, y: start.y + index * 36 }, undefined, index === 0, {
-        prompt: creativeDirectionPrompt(brief, direction),
+        prompt: creativeDirectionPrompt(direction),
         model: effectiveImageModel,
         aspectRatio: textRatio,
         quality: composerQuality,
@@ -1659,7 +1659,7 @@ function NodeWorkflowWorkbench({
     }
   }
 
-  function creativeDirectionPrompt(brief: CreativeBrief, direction: CreativeDirection) {
+  function creativeDirectionPrompt(direction: CreativeDirection) {
     const visualPolicy = resolveNoVisibleProjectOutputPolicy(direction.prompt);
     const sanitizedDirectionPrompt = sanitizeCreativeDirectionPrompt(direction.prompt, visualPolicy);
     return [
