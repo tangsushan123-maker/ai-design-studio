@@ -643,16 +643,25 @@ function parseTextOverrideLayers(value: string): ReferenceTextLayer[] {
   const trimmed = value.trim();
   if (!trimmed) return [];
   const parsed = parseJsonObject(trimmed);
-  if (Array.isArray(parsed)) return parsed.map(normalizeTextLayer).filter((item): item is ReferenceTextLayer => Boolean(item));
-  const lines = trimmed
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, index) => {
-      const [name, ...rest] = line.split(/[：:]/);
-      return normalizeTextLayer({ name: name || `文字${index + 1}`, content: rest.join(":") || line });
-    });
-  return lines.filter((item): item is ReferenceTextLayer => Boolean(item));
+  if (Array.isArray(parsed)) return normalizeTextLayerList(parsed);
+  const layers: ReferenceTextLayer[] = [];
+  for (const rawLine of trimmed.split(/\n+/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const [name, ...rest] = line.split(/[：:]/);
+    const layer = normalizeTextLayer({ name: name || `文字${layers.length + 1}`, content: rest.join(":") || line });
+    if (layer) layers.push(layer);
+  }
+  return layers;
+}
+
+function normalizeTextLayerList(value: unknown[]) {
+  const layers: ReferenceTextLayer[] = [];
+  for (const item of value) {
+    const layer = normalizeTextLayer(item);
+    if (layer) layers.push(layer);
+  }
+  return layers;
 }
 
 function chooseReferenceDesignBbox(analysis: ReferenceRemakeAnalysis, detected?: NormalizedBbox) {
@@ -812,7 +821,7 @@ function normalizeReferenceRemakeAnalysis(value: unknown, fallback: ReferenceRem
   if (!value || typeof value !== "object") return fallback;
   const data = value as Record<string, unknown>;
   const textLayers = Array.isArray(data.text_layers)
-    ? data.text_layers.map(normalizeTextLayer).filter((item): item is ReferenceTextLayer => Boolean(item))
+    ? normalizeTextLayerList(data.text_layers)
     : fallback.text_layers;
   return {
     design_type: stringValue(data.design_type) || fallback.design_type,

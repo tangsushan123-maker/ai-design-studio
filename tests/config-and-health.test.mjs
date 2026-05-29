@@ -2178,6 +2178,7 @@ describe("Reference remake", () => {
     assert.equal(routeSource.includes("ratioFromBbox(analysis.design_bbox)"), true);
     assert.equal(routeSource.includes("detectColorfulDesignBbox"), true);
     assert.equal(routeSource.includes("chooseReferenceDesignBbox"), true);
+    assert.equal(routeSource.includes("function normalizeTextLayerList"), true);
     assert.equal(routeSource.includes("normalizeFlatAssetOutput"), true);
     assert.equal(routeSource.includes("Flat sign/label asset policy"), true);
     assert.equal(routeSource.includes("Flat artwork asset policy"), true);
@@ -2289,6 +2290,7 @@ describe("Collection normalization performance", () => {
     assert.equal(imageRequestSource.includes(".flatMap((value) => Array.isArray(value) ? value : value ? [value] : [])"), false);
     assert.equal(referenceRemakeSource.includes("data.image_layers.map(stringValue).filter(Boolean)"), false);
     assert.equal(referenceRemakeSource.includes("data.risks.map(stringValue).filter(Boolean)"), false);
+    assert.equal(referenceRemakeSource.includes("data.text_layers.map(normalizeTextLayer).filter"), false);
     assert.equal(maskEditSource.includes(".filter((item) => item.text).slice(0, 8)"), false);
     assert.equal(maskEditSource.includes(".filter((item) => item.label).slice(0, 8)"), false);
   });
