@@ -6,6 +6,8 @@ import { quickActions } from "@/components/workbench/workbench-config";
 import { nodeCatalog } from "@/components/workbench/workbench-node-catalog";
 import type { NodeKind } from "@/components/workbench/workbench-types";
 
+const visibleNodeCatalog = nodeCatalog.filter((item) => !item.hiddenFromAddMenu);
+
 export function NodeMenu({
   onClose,
   onSelect,
@@ -50,7 +52,7 @@ export function NodeMenu({
         </button>
       </div>
       <div className="max-h-[560px] overflow-auto">
-        {nodeCatalog.filter((item) => !item.hiddenFromAddMenu).map((item) => (
+        {visibleNodeCatalog.map((item) => (
           <button
             className="apple-menu-item flex w-full items-center gap-3 px-2.5 py-2.5 text-left disabled:opacity-45"
             disabled={Boolean(activeSelection)}

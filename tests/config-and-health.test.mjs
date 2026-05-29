@@ -958,7 +958,7 @@ describe("Quality enhance mode", () => {
     assert.equal(workbenchSource.includes("plus_enhance"), true);
     assert.equal(workbenchSource.includes("creative_redraw"), true);
     assert.equal(workbenchSource.includes("hiddenFromAddMenu: true"), true);
-    assert.equal(workbenchSource.includes("nodeCatalog.filter((item) => !item.hiddenFromAddMenu)"), true);
+    assert.equal(workbenchSource.includes("const visibleNodeCatalog = nodeCatalog.filter((item) => !item.hiddenFromAddMenu)"), true);
     assert.equal(workbenchSource.includes("resolveUpscaleTargetFromParams"), true);
     assert.equal(workbenchSource.includes('fetch("/api/upscale-image"'), false);
     assert.equal(workbenchSource.includes('fetch("/api/redraw-upscale-image"'), true);
@@ -2276,6 +2276,8 @@ describe("Collection normalization performance", () => {
     assert.equal(assetLibrarySource.includes("Array.from(new Set((matches || []).map"), false);
     assert.equal(brandContextSource.includes("function secondaryProfileColors"), true);
     assert.equal(brandContextSource.includes("const secondaryColors = Array.from(new Set(["), false);
+    assert.equal(brandContextSource.includes("function materialLibraryMap"), true);
+    assert.equal(brandContextSource.includes(".find((library) => library.id === item.libraryId)"), false);
     assert.equal(modelCatalogSource.includes("existingModelFor(modelId, config.modelsCache)"), true);
     assert.equal(modelCatalogSource.match(/existingModelFor\(modelId, config\.modelsCache\)/g)?.length, 1);
     assert.equal(modelCatalogSource.includes("Array.from(new Set([...previous.capabilities"), false);

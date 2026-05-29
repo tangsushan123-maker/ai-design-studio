@@ -272,17 +272,19 @@ export function buildProjectLibraryContext(
   projectLibraries: MaterialLibrarySummary[],
   publicStyleLibraries: MaterialLibrarySummary[],
 ) {
+  const projectLibraryById = materialLibraryMap(projectLibraries);
+  const publicStyleLibraryById = materialLibraryMap(publicStyleLibraries);
   const referenceTexts = knowledge.references
     .filter((item) => item.enabled)
     .map((item) => {
       const source = item.kind === "project"
-        ? projectLibraries.find((library) => library.id === item.libraryId)
-        : publicStyleLibraries.find((library) => library.id === item.libraryId);
+        ? projectLibraryById.get(item.libraryId)
+        : publicStyleLibraryById.get(item.libraryId);
       const description = source?.description || source?.tags?.join(" / ") || "";
       return `${item.libraryName}（${item.kind === "project" ? "项目素材库" : "公共风格库"}，${item.mode === "copy_into_project" ? "已复制到本项目" : "只读引用"}）${description ? `：${description}` : ""}`;
     });
   const styleRuleTexts = knowledge.selection.activePublicStyleLibraryIds
-    .map((libraryId) => publicStyleLibraries.find((library) => library.id === libraryId))
+    .map((libraryId) => publicStyleLibraryById.get(libraryId))
     .filter((library): library is MaterialLibrarySummary => Boolean(library))
     .map((library) => {
       const rules = styleLibraryRulePreview(library);
@@ -297,6 +299,12 @@ export function buildProjectLibraryContext(
     styleRuleTexts.length ? `公共风格规则：${styleRuleTexts.join("；")}` : "未启用公共风格规则，默认只按项目档案和当前需求生成。",
     "素材来源规则：用户上传和 AI 生成素材可直接使用；网络参考素材必须标注来源，默认只作参考。",
   ].join("\n");
+}
+
+function materialLibraryMap(libraries: MaterialLibrarySummary[]) {
+  const byId = new Map<string, MaterialLibrarySummary>();
+  for (const library of libraries) byId.set(library.id, library);
+  return byId;
 }
 
 export function buildProjectConstraintText(
