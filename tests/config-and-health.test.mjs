@@ -1431,6 +1431,8 @@ describe("Text-to-image references", () => {
     assert.equal(designPlanSource.includes("出图规则：本系统不再后期盖字"), true);
     assert.equal(designPlanSource.includes("imagePrompt 只允许使用你分析后的设计方案和 copywriting"), true);
     assert.equal(designPlanSource.includes("sanitizePosterCopy"), true);
+    assert.equal(designPlanSource.includes("function collectPosterCopyParts"), true);
+    assert.equal(designPlanSource.includes(".flatMap(splitPosterCopy)"), false);
     assert.equal(designPlanSource.includes("for (const match of text.matchAll"), true);
     assert.equal(designPlanSource.includes(".map((match) => match[1]).filter(Boolean)"), false);
     assert.equal(designPlanSource.includes("value.map(clean).filter(Boolean)"), false);
@@ -2252,7 +2254,7 @@ describe("Account navigation", () => {
 
 describe("Collection normalization performance", () => {
   it("keeps hot array cleanup paths single-pass", async () => {
-    const [projectSystemSource, promptSource, assetLibrarySource, referenceRemakeSource, maskEditSource, imageRequestSource, brandContextSource, modelCatalogSource, providerDetectorSource, imageQualitySource] = await Promise.all([
+    const [projectSystemSource, promptSource, assetLibrarySource, referenceRemakeSource, maskEditSource, imageRequestSource, brandContextSource, modelCatalogSource, providerDetectorSource, imageQualitySource, creativeBriefSource] = await Promise.all([
       readFile(new URL("../lib/project-system.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/prompt.ts", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/asset-library-panel.tsx", import.meta.url), "utf8"),
@@ -2263,6 +2265,7 @@ describe("Collection normalization performance", () => {
       readFile(new URL("../lib/model-catalog.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/provider-detector.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/image-quality.ts", import.meta.url), "utf8"),
+      readFile(new URL("../lib/creative-brief.ts", import.meta.url), "utf8"),
     ]);
 
     assert.equal(projectSystemSource.includes("value.filter((item): item is string"), false);
@@ -2279,6 +2282,8 @@ describe("Collection normalization performance", () => {
     assert.equal(providerDetectorSource.includes("Array.from(new Set([...a, ...b])).filter"), false);
     assert.equal(imageQualitySource.includes("function uniqueActions"), true);
     assert.equal(imageQualitySource.includes("Array.from(new Set(actions))"), false);
+    assert.equal(creativeBriefSource.includes("function collectMissingMaterials"), true);
+    assert.equal(creativeBriefSource.includes("Array.from(new Set(missing))"), false);
     assert.equal(imageRequestSource.includes(".flatMap((value) => Array.isArray(value) ? value : value ? [value] : [])"), false);
     assert.equal(referenceRemakeSource.includes("data.image_layers.map(stringValue).filter(Boolean)"), false);
     assert.equal(referenceRemakeSource.includes("data.risks.map(stringValue).filter(Boolean)"), false);

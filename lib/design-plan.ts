@@ -397,18 +397,26 @@ function inferCopyFromPrompt(text: string) {
   const mainTitle = sanitizePosterCopy(labeled.mainTitle || "", "", "title");
   const subtitle = sanitizePosterCopy(labeled.subtitle || "", "", "subtitle");
   const thirdText = sanitizePosterCopy(labeled.thirdText || "", "", "body");
-  const parts = body
-    .flatMap(splitPosterCopy)
-    .map((item) => sanitizePosterCopy(item, "", "body"))
-    .filter(Boolean)
-    .filter((item) => !sameCopy(item, mainTitle) && !sameCopy(item, subtitle) && !sameCopy(item, thirdText))
-    .slice(0, 8);
+  const parts = collectPosterCopyParts(body, [mainTitle, subtitle, thirdText], 8);
   return {
     mainTitle: mainTitle || sanitizePosterCopy(parts[0], "", "title"),
     subtitle: subtitle || sanitizePosterCopy(parts[1], "", "subtitle"),
     thirdText: thirdText || sanitizePosterCopy(parts[2], "", "body"),
     bodyText: parts.slice(mainTitle ? 0 : 3),
   };
+}
+
+function collectPosterCopyParts(body: string[], excluded: string[], limit: number) {
+  const parts: string[] = [];
+  for (const item of body) {
+    for (const part of splitPosterCopy(item)) {
+      const text = sanitizePosterCopy(part, "", "body");
+      if (!text || excluded.some((value) => sameCopy(text, value))) continue;
+      parts.push(text);
+      if (parts.length >= limit) return parts;
+    }
+  }
+  return parts;
 }
 
 function extractLabeledCopy(text: string, labels: string[]) {

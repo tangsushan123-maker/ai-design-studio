@@ -405,15 +405,26 @@ function buildIdeaCompletionText(idea: CreativeIdeaCompletion) {
 
 function resolveMissingMaterials(input: CreativeBriefInput) {
   const profile = input.projectContext?.profile || {};
-  const missing = [
+  const missing = collectMissingMaterials([
     !cleanText(profile.logoName) ? "Logo" : "",
     !cleanText(profile.phone) ? "电话" : "",
     !cleanText(profile.address) ? "地址" : "",
     !cleanText(profile.brandColors) ? "品牌色" : "",
     !(input.projectContext?.assetCount || 0) ? "真实图片/历史海报" : "",
-  ].filter(Boolean);
+  ]);
   if (input.mode === "project_library") return missing.filter((item) => item !== "真实图片/历史海报");
-  return Array.from(new Set(missing));
+  return missing;
+}
+
+function collectMissingMaterials(values: string[]) {
+  const missing: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    missing.push(value);
+  }
+  return missing;
 }
 
 function summarizeProjectContext(context?: CreativeProjectContext) {
