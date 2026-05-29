@@ -217,6 +217,7 @@ import {
   adaptiveRatioOptions,
   customSize,
   dataUrlToFile,
+  firstSupportedImageFile,
   getImageFileFromClipboard,
   hasClipboardImageCandidate,
   hasClipboardImageFile,
@@ -368,6 +369,7 @@ import type { ModelCatalogItem } from "@/lib/openai-defaults";
 const projectResourceNormalizeConcurrency = 4;
 const batchImageMutationConcurrency = 3;
 const metadataPatchConcurrency = 4;
+const workbenchHomeOpenStorageKey = "ai-design-workbench-home-open-v1";
 
 function projectUserFacingImages(images: ImageAsset[], projectId: string) {
   const visible: ImageAsset[] = [];
@@ -425,6 +427,18 @@ function taskRequestIds(tasks: TaskRecord[]) {
     if (task.requestId) requestIds.push(task.requestId);
   }
   return requestIds;
+}
+
+function readInitialHomeOpen() {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(workbenchHomeOpenStorageKey) !== "canvas";
+}
+
+function rememberWorkbenchHomeState(open: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(workbenchHomeOpenStorageKey, open ? "home" : "canvas");
+  } catch {}
 }
 
 function taskCandidateImagesFromNodes(nodes: FlowNode[]) {
@@ -553,7 +567,7 @@ function NodeWorkflowWorkbench({
   const [projectSaveState, setProjectSaveState] = useState<"saved" | "saving" | "error">("saved");
   const [saveFeedback, setSaveFeedback] = useState<{ tone: "loading" | "success" | "error"; message: string } | null>(null);
   const [projectMemorySearchState, setProjectMemorySearchState] = useState<"idle" | "loading" | "done" | "error">("idle");
-  const [homeOpen, setHomeOpen] = useState(true);
+  const [homeOpen, setHomeOpen] = useState(readInitialHomeOpen);
   const [homeProjectPickerOpen, setHomeProjectPickerOpen] = useState(false);
   const [homeBusy, setHomeBusy] = useState(false);
   const [projectListLoading, setProjectListLoading] = useState(false);
@@ -1784,9 +1798,9 @@ function NodeWorkflowWorkbench({
   }
 
   async function uploadProjectAssets(files: FileList, assetKind: ProjectAssetUploadKind) {
-    const incoming = Array.from(files || []);
     const assets: ImageAsset[] = [];
-    for (const file of incoming) {
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
       const asset = await createProjectImageAsset(file, "asset", assetKind);
       if (asset) assets.push(asset);
     }
@@ -3947,7 +3961,7 @@ function NodeWorkflowWorkbench({
       return;
     }
 
-    const imageFile = Array.from(event.dataTransfer.files || []).find(isSupportedImageFile);
+    const imageFile = firstSupportedImageFile(event.dataTransfer.files);
     if (imageFile) {
       await createImageNodeFromFile(imageFile, position, "upload");
       return;
@@ -4429,6 +4443,7 @@ function NodeWorkflowWorkbench({
   }
 
   async function deleteProject(id: string, ownerUserId?: string) {
+    const deletingActiveProject = id === projectId && (!ownerUserId || !projectOwnerUserId || ownerUserId === projectOwnerUserId);
     const response = await fetch("/api/project", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -4441,8 +4456,21 @@ function NodeWorkflowWorkbench({
       throw new Error(message);
     }
     const data = (await response.json().catch(() => ({}))) as { activeProjectId?: string; projects?: ProjectSummary[] };
-    setProjectList(data.projects || []);
-    if (id === projectId && data.activeProjectId) await loadProject(data.activeProjectId);
+    const nextProjects = data.projects || [];
+    setProjectList(nextProjects);
+    if (deletingActiveProject) {
+      const replacement = nextProjects.find((project) => (
+        project.id === data.activeProjectId &&
+        (!ownerUserId || !project.ownerUserId || project.ownerUserId === ownerUserId)
+      )) || nextProjects.find((project) => project.id !== id || project.ownerUserId !== ownerUserId);
+      if (replacement) {
+        await loadProject(replacement.id, replacement.ownerUserId);
+      } else {
+        setHomeOpen(true);
+        rememberWorkbenchHomeState(true);
+      }
+    }
+    void refreshProjectList();
     setStatus("项目已删除。");
   }
 
@@ -4719,6 +4747,7 @@ function NodeWorkflowWorkbench({
     setHomeBusy(true);
     setHomeProjectPickerOpen(false);
     setHomeOpen(false);
+    rememberWorkbenchHomeState(false);
     try {
       await createNewProject();
     } finally {
@@ -4734,6 +4763,7 @@ function NodeWorkflowWorkbench({
       if (opened) {
         setHomeProjectPickerOpen(false);
         setHomeOpen(false);
+        rememberWorkbenchHomeState(false);
       }
     } catch {
       setStatus("打开项目失败。");
@@ -5757,7 +5787,7 @@ function ChatComposer({
   }, [focusTick]);
 
   function handleFiles(files: FileList | File[]) {
-    const file = Array.from(files).find(isSupportedImageFile);
+    const file = firstSupportedImageFile(files);
     if (file) onImageFile(file);
     setUploadMenuOpen(false);
   }

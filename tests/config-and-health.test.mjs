@@ -1577,10 +1577,16 @@ describe("Design production protection", () => {
 
 describe("Workbench clipboard utilities", () => {
   it("shares supported image type checks instead of rebuilding them per call", async () => {
-    const utilsSource = await readFile(new URL("../components/workbench/workbench-utils.ts", import.meta.url), "utf8");
+    const [utilsSource, workbenchSource] = await Promise.all([
+      readFile(new URL("../components/workbench/workbench-utils.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+    ]);
 
     assert.equal(utilsSource.includes("const supportedImageTypes = new Set"), true);
     assert.equal(utilsSource.includes("const supportedTypes = new Set"), false);
+    assert.equal(utilsSource.includes("function firstSupportedImageFile"), true);
+    assert.equal(workbenchSource.includes("Array.from(event.dataTransfer.files || []).find(isSupportedImageFile)"), false);
+    assert.equal(workbenchSource.includes("Array.from(files).find(isSupportedImageFile)"), false);
   });
 });
 
@@ -2010,6 +2016,10 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("onRefreshProjects"), true);
     assert.equal(workbenchSource.includes("项目列表刷新失败。"), true);
     assert.equal(workbenchSource.includes("ProjectHomeScreen"), true);
+    assert.equal(workbenchSource.includes("readInitialHomeOpen"), true);
+    assert.equal(workbenchSource.includes("rememberWorkbenchHomeState(false)"), true);
+    assert.equal(workbenchSource.includes("const deletingActiveProject = id === projectId"), true);
+    assert.equal(workbenchSource.includes("await loadProject(replacement.id, replacement.ownerUserId)"), true);
     assert.equal(projectHomeSource.includes("export function ProjectHomeScreen"), true);
     assert.equal(projectHomeSource.includes("ProjectHomeItem"), true);
     assert.equal(projectHomeSource.includes("正在刷新项目列表"), true);
@@ -2232,12 +2242,13 @@ describe("Workbench compact typography", () => {
 
 describe("Account navigation", () => {
   it("keeps account actions separate from API settings", async () => {
-    const [accountSwitcherSource, accountsPageSource, settingsPageSource, globalsSource, authSource] = await Promise.all([
+    const [accountSwitcherSource, accountsPageSource, settingsPageSource, globalsSource, authSource, adminAccountsSource] = await Promise.all([
       readFile(new URL("../components/account-switcher.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/accounts/page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/settings/page.tsx", import.meta.url), "utf8"),
       readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
       readFile(new URL("../lib/auth.ts", import.meta.url), "utf8"),
+      readFile(new URL("../components/admin-accounts-manager.tsx", import.meta.url), "utf8"),
     ]);
 
     assert.equal(accountSwitcherSource.includes("子账号管理"), true);
@@ -2248,6 +2259,10 @@ describe("Account navigation", () => {
     assert.equal(accountsPageSource.includes("<AdminAccountsManager />"), true);
     assert.equal(settingsPageSource.includes("AdminAccountsManager"), false);
     assert.equal(globalsSource.includes("account-menu__identity"), false);
+    assert.equal(globalsSource.includes("width: min(380px, calc(100vw - 144px))"), true);
+    assert.equal(globalsSource.includes("backdrop-filter: blur(34px) saturate(185%)"), true);
+    assert.equal(adminAccountsSource.includes("break-all"), true);
+    assert.equal(adminAccountsSource.includes("min-w-0 break-all"), true);
     assert.equal(authSource.includes("let ownerCount = 0"), true);
     assert.equal(authSource.includes('store.users.filter((user) => user.role === "owner").length'), false);
   });

@@ -277,45 +277,47 @@ export function AdminAccountsManager() {
             {accounts.map((account) => (
               <article className="rounded-[16px] border border-white/10 bg-black/10 p-3" key={account.id}>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-white/86">{account.name || account.email}</span>
+                      <span className="max-w-full break-words text-sm font-semibold leading-5 text-white/86">{account.name || account.email}</span>
                       <span className={account.role === "owner" ? "apple-pill-accent px-2 py-0.5 text-[11px]" : "apple-pill px-2 py-0.5 text-[11px]"}>
                         {account.role === "owner" ? "管理员" : "普通账号"}
                       </span>
                       {account.isCurrent ? <span className="apple-pill px-2 py-0.5 text-[11px]">当前</span> : null}
                       {account.activeRecently ? <span className="apple-status-success rounded-full border px-2 py-0.5 text-[11px]">24h 内登录</span> : null}
                     </div>
-                    <div className="apple-caption mt-1 truncate">{account.email}</div>
+                    <div className="apple-caption mt-1 break-all">{account.email}</div>
                     <div className="mt-2 grid gap-2 text-xs text-white/56 sm:grid-cols-2 xl:grid-cols-4">
                       <span>项目 {account.projects.count}</span>
                       <span>节点 {account.projects.nodeCount}</span>
                       <span>素材 {account.projects.assetCount}</span>
                       <span>出图 {account.projects.outputCount}</span>
                     </div>
-                    <div className="mt-2 grid gap-2 text-xs text-white/46 sm:grid-cols-2">
+                    <div className="mt-2 grid gap-2 text-xs leading-5 text-white/46 sm:grid-cols-2">
                       <span>登录：{account.lastLoginAt ? new Date(account.lastLoginAt).toLocaleString("zh-CN") : "未记录"} · {account.loginCount || 0} 次</span>
                       <span>项目更新：{account.projects.latestUpdatedAt ? new Date(account.projects.latestUpdatedAt).toLocaleString("zh-CN") : "无"}</span>
                     </div>
-                    <div className="mt-2 rounded-[12px] border border-white/10 bg-white/[0.035] px-3 py-2 text-xs leading-5 text-white/56">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Shield className="size-3.5 text-white/42" />
-                        <span>Key：{account.api.apiKey || account.api.maskedApiKey || (account.api.hasKey ? "已配置" : "未配置")}</span>
-                        <span>来源：{apiKeySourceLabel(account.api.keySource)}</span>
+                    <div className="mt-2 min-w-0 rounded-[12px] border border-white/10 bg-white/[0.035] px-3 py-2 text-xs leading-5 text-white/56">
+                      <div className="grid min-w-0 gap-1">
+                        <div className="flex min-w-0 items-start gap-2">
+                          <Shield className="mt-0.5 size-3.5 shrink-0 text-white/42" />
+                          <span className="min-w-0 break-all">Key：{account.api.apiKey || account.api.maskedApiKey || (account.api.hasKey ? "已配置" : "未配置")}</span>
+                        </div>
+                        <div className="break-words pl-5">来源：{apiKeySourceLabel(account.api.keySource)}</div>
                       </div>
-                      <div className="mt-1 truncate">模型：{account.api.textModel || "文本未选"} / {account.api.imageModel || "图片未选"}</div>
-                      <div className="truncate">接口：{account.api.providerName || "未配置"} {account.api.apiBaseUrl ? `· ${account.api.apiBaseUrl}` : ""}</div>
+                      <div className="mt-1 break-words">模型：{account.api.textModel || "文本未选"} / {account.api.imageModel || "图片未选"}</div>
+                      <div className="break-all">接口：{account.api.providerName || "未配置"} {account.api.apiBaseUrl ? `· ${account.api.apiBaseUrl}` : ""}</div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-wrap gap-2 lg:justify-end">
-                    <button className="apple-button px-3 py-1.5 text-xs text-white/70" disabled={busy} onClick={() => editAccount(account)} type="button">编辑</button>
-                    <button className="apple-button px-3 py-1.5 text-xs text-white/70 disabled:opacity-45" disabled={busy || !account.api.hasKey || !account.api.canReveal} onClick={() => reloadAccounts({ revealUserId: account.api.apiKey ? undefined : account.id })} type="button">
+                  <div className="flex shrink-0 flex-wrap gap-2 lg:max-w-[420px] lg:justify-end">
+                    <button className="apple-button h-9 min-w-[76px] px-3 text-xs text-white/70" disabled={busy} onClick={() => editAccount(account)} type="button">编辑</button>
+                    <button className="apple-button h-9 min-w-[88px] px-3 text-xs text-white/70 disabled:opacity-45" disabled={busy || !account.api.hasKey || !account.api.canReveal} onClick={() => reloadAccounts({ revealUserId: account.api.apiKey ? undefined : account.id })} type="button">
                       {account.api.apiKey ? "隐藏" : "显示 Key"}
                     </button>
-                    <button className="apple-button-danger px-3 py-1.5 text-xs disabled:opacity-45" disabled={busy || !account.api.hasKey} onClick={() => clearAccountApiKey(account)} type="button">
+                    <button className="apple-button-danger h-9 min-w-[92px] px-3 text-xs disabled:opacity-45" disabled={busy || !account.api.hasKey} onClick={() => clearAccountApiKey(account)} type="button">
                       {activeAction === `clear:${account.id}` ? "清理中" : "清理 Key"}
                     </button>
-                    <button className="apple-button-danger px-3 py-1.5 text-xs disabled:opacity-45" disabled={busy || account.isCurrent} onClick={() => deleteAccount(account)} type="button">
+                    <button className="apple-button-danger h-9 min-w-[96px] px-3 text-xs disabled:opacity-45" disabled={busy || account.isCurrent} onClick={() => deleteAccount(account)} type="button">
                       {activeAction === `delete:${account.id}` ? "删除中" : confirmDeleteAccountId === account.id ? "确认删除" : "删除账号"}
                     </button>
                   </div>

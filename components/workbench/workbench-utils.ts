@@ -103,6 +103,14 @@ export function isSupportedImageFile(file: File) {
   return supportedImageTypes.has(file.type);
 }
 
+export function firstSupportedImageFile(files: FileList | File[]) {
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    if (file && isSupportedImageFile(file)) return file;
+  }
+  return null;
+}
+
 export function hasClipboardImageFile(clipboardData: DataTransfer | null) {
   if (!clipboardData) return false;
   const items = Array.from(clipboardData.items || []);
