@@ -80,6 +80,8 @@ type TaskRunStore = {
 
 const taskRunStorePath = path.join(process.cwd(), "task-runs.local.json");
 const taskRunLimit = 300;
+const staleActiveTaskMs = 12 * 60 * 1000;
+const heavyStaleActiveTaskMs = 30 * 60 * 1000;
 let taskRunStoreQueue: Promise<unknown> = Promise.resolve();
 
 function requestIdSetFromList(requestIds: string[] = []) {
@@ -253,6 +255,7 @@ export function taskRunResponseMeta(
 }
 
 export async function listTaskRuns(requestIds?: string[], options: { projectId?: string } = {}) {
+  await expireStaleActiveTaskRuns();
   const store = await readTaskRunStore();
   const idSet = requestIdSetFromList(requestIds);
   return store.runs.filter((run) => {
@@ -260,6 +263,41 @@ export async function listTaskRuns(requestIds?: string[], options: { projectId?:
     if (options.projectId && run.projectId !== options.projectId) return false;
     return true;
   });
+}
+
+async function expireStaleActiveTaskRuns() {
+  return mutateTaskRunStore((store) => {
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    let changed = false;
+    const runs = store.runs.map((run) => {
+      if (run.state !== "active" || run.status !== "running") return run;
+      const referenceTime = Date.parse(run.updatedAt || run.startedAt);
+      if (!Number.isFinite(referenceTime)) return run;
+      const timeoutMs = isHeavyTaskRun(run) ? heavyStaleActiveTaskMs : staleActiveTaskMs;
+      if (nowMs - referenceTime < timeoutMs) return run;
+      changed = true;
+      const startedAt = run.startedAt || now;
+      return {
+        ...run,
+        state: "failed" as const,
+        status: "failed" as const,
+        updatedAt: now,
+        endedAt: now,
+        durationMs: Math.max(0, nowMs - Date.parse(startedAt)),
+        error: `任务超过 ${Math.round(timeoutMs / 60000)} 分钟没有后台更新，可能已被开发服务器重启、网络中断或图片模型卡住。`,
+        message: "任务已自动标记为超时中断，可重新运行。",
+      };
+    });
+    return {
+      store: changed ? { runs } : store,
+      record: syntheticMutationRecord("stale_task_cleanup", changed ? "已自动标记超时任务。" : "没有超时任务。"),
+    };
+  }).catch(() => null);
+}
+
+function isHeavyTaskRun(run: TaskRunRecord) {
+  return /hd_redraw|upscale|reference_remake|design_optimize|png_layers/i.test(`${run.operation} ${run.nodeKind || ""}`);
 }
 
 export async function removeTaskRuns(requestIds: string[], options: { projectId?: string } = {}) {
@@ -334,7 +372,9 @@ function mutateTaskRunStore(mutator: (store: TaskRunStore) => { store: TaskRunSt
   const next = taskRunStoreQueue.then(async () => {
     const current = await readTaskRunStore();
     const result = await mutator(current);
-    await writeTaskRunStore(result.store);
+    if (result.store !== current) {
+      await writeTaskRunStore(result.store);
+    }
     return result.record;
   });
   taskRunStoreQueue = next.catch(() => undefined);

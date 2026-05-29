@@ -41,7 +41,7 @@ export function composerHelperTextForNode(node: FlowNode) {
       ? `已连接 ${textReferenceCount} 张图片参考，可在右侧设为使用人物/产品/Logo。`
       : "可直接写“加入人物/医生/模特/IP”，或上传人物图后在右侧选使用人物。";
   }
-  if (node.data.kind === "image_to_image") return "默认生成 2 个创意改版方案，核心识别保留，版式明显不同。";
+  if (node.data.kind === "image_to_image") return "默认快速生成 1 个创意改版方案；需要多方案可写“两张/多方案”。";
   if (node.data.kind === "fuse_images") return "图1主体放入图2场景，生成自然版和广告版。";
   if (node.data.kind === "resize") return "尺寸在右侧，底部写保留重点。";
   if (node.data.kind === "outpaint") return "说明补哪里、补什么。";
@@ -88,7 +88,7 @@ export function composerSubmitStatus(node: FlowNode, prompt: string) {
 
 export function nodeCreationHint(type: NodeKind, fromImage: boolean) {
   if (type === "text_to_image") return fromImage ? "已创建文生图节点，并连接当前图片作为参考。" : "已创建文生图节点。直接在底部输入需求即可生成。";
-  if (type === "image_to_image") return fromImage ? "已创建图生图创意改版节点。默认生成 2 个方案。" : "已创建图生图创意改版节点。先连接图片，再写改版方向。";
+  if (type === "image_to_image") return fromImage ? "已创建图生图创意改版节点。默认快速出 1 个方案，需要多方案可在要求里说明。" : "已创建图生图创意改版节点。先连接图片，再写改版方向。";
   if (type === "fuse_images") return fromImage ? "已创建 AI 合成节点。当前图片是图1主体，再连接图2场景。" : "已创建 AI 合成节点。请连接图1主体和图2场景。";
   if (type === "resize") return fromImage ? "已创建改比例节点。先在右侧选目标比例、尺寸和清晰度，再运行。" : "已创建改比例节点。请先连接图片，再选择目标比例、尺寸和清晰度。";
   if (type === "outpaint") return fromImage ? "已创建扩图补画节点。下面可补充扩图想法，右侧可改方向和比例。" : "已创建扩图补画节点。请先连接图片，再决定扩到什么比例。";

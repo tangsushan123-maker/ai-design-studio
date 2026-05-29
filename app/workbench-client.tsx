@@ -1236,6 +1236,12 @@ function NodeWorkflowWorkbench({
           setImageManagerImages((current) => mergeImages(historyOutputs, current));
         }
       }
+      for (const task of syncTasks) {
+        if (!task.requestId || hasTaskResultNodesOnCanvas(task)) continue;
+        const run = runByRequestId.get(task.requestId);
+        if (!run || (run.state !== "failed" && run.state !== "cancelled")) continue;
+        markNodeFailed(task.nodeId, run.error || run.message || "服务端任务失败。");
+      }
       if (!runs.length && !recoveredResults.size) return;
       setTasks((current) => {
         const next: TaskRecord[] = current.map((task): TaskRecord => {

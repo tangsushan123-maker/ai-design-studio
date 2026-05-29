@@ -127,7 +127,7 @@ export async function POST(request: Request) {
 
     const targetCount = modeLabel.includes("AI改尺寸") || modeLabel.includes("4K")
       ? 1
-      : isCreativeImageToImage || wantsMultipleImageOutputs(promptText)
+      : wantsMultipleImageOutputs(promptText)
         ? 2
         : 1;
     const promptVariants = Array.from({ length: targetCount }, (_, index) =>

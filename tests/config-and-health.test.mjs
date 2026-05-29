@@ -1313,7 +1313,7 @@ describe("Image-to-image creative redesign", () => {
     assert.equal(workbenchSource.includes("prompt: IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST"), true);
     assert.equal(workbenchSource.includes("buildCreativeImageToImageConstraintText"), true);
     assert.equal(workbenchSource.includes("参考原图做创意改版。"), true);
-    assert.equal(workbenchSource.includes("默认生成 2 个创意改版方案，核心识别保留，版式明显不同。"), true);
+    assert.equal(workbenchSource.includes("默认快速生成 1 个创意改版方案；需要多方案可写“两张/多方案”。"), true);
     assert.equal(workbenchSource.includes("compactThumbStyle(singleOutput, 72, 64)"), true);
     assert.equal(workbenchSource.includes('showCheckerboard={shouldShowCheckerboard'), true);
     assert.equal(workbenchSource.includes('style={{ height: "100%", width: "100%" }} variant="thumbnail"'), true);
@@ -1448,10 +1448,10 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("shouldRetryTextToImageQuality"), true);
     assert.equal(routeSource.includes("textToImageRiskValue"), true);
     assert.equal(routeSource.includes("textToImageGenerationProfile"), true);
-    assert.equal(routeSource.includes('label: "参考精修", targetCount: 2, maxRetries: 0'), true);
-    assert.equal(routeSource.includes('label: "快速预览", targetCount: 2, maxRetries: 1'), true);
-    assert.equal(routeSource.includes('label: "标准出图", targetCount: 2, maxRetries: 1'), true);
-    assert.equal(routeSource.includes('label: "正式高清", targetCount: 2, maxRetries: 2'), true);
+    assert.equal(routeSource.includes("const targetCount = wantsMultipleDesignOutputs(body.prompt) ? 2 : 1"), true);
+    assert.equal(routeSource.includes('modelCallPolicy: targetCount > 1 ? "dual_variants_fast_reference" : "single_fast_reference"'), true);
+    assert.equal(routeSource.includes('modelCallPolicy: targetCount > 1 ? "fast_dual_variants" : "fast_single_variant"'), true);
+    assert.equal(routeSource.includes("function wantsMultipleDesignOutputs"), true);
     assert.equal(routeSource.includes("max_output_tokens: 2200"), true);
     assert.equal(routeSource.includes("timeout: 15_000"), true);
     assert.equal(routeSource.includes("modelCallPolicy"), true);

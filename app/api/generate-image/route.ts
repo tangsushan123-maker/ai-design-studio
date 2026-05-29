@@ -539,16 +539,21 @@ function buildPromptsFromDesignPlan(plan: DesignPlan, body: DesignRequest, targe
 }
 
 function textToImageGenerationProfile(body: DesignRequest, hasReferenceFiles = false) {
+  const targetCount = wantsMultipleDesignOutputs(body.prompt) ? 2 : 1;
   if (hasReferenceFiles) {
-    return { label: "参考精修", targetCount: 2, maxRetries: 0, briefMode: "ai_cached", modelCallPolicy: "dual_variants_fast_reference" };
+    return { label: "参考精修", targetCount, maxRetries: 0, briefMode: "ai_cached", modelCallPolicy: targetCount > 1 ? "dual_variants_fast_reference" : "single_fast_reference" };
   }
   if (body.quality === "4k") {
-    return { label: "正式高清", targetCount: 2, maxRetries: 2, briefMode: "ai_cached", modelCallPolicy: "dual_variants_quality_retry" };
+    return { label: "正式高清", targetCount, maxRetries: 1, briefMode: "ai_cached", modelCallPolicy: targetCount > 1 ? "dual_variants_quality_retry" : "single_quality_retry" };
   }
   if (body.quality === "2k") {
-    return { label: "标准出图", targetCount: 2, maxRetries: 1, briefMode: "ai_cached", modelCallPolicy: "dual_variants_retry_if_needed" };
+    return { label: "标准出图", targetCount, maxRetries: 1, briefMode: "ai_cached", modelCallPolicy: targetCount > 1 ? "dual_variants_retry_if_needed" : "single_retry_if_needed" };
   }
-  return { label: "快速预览", targetCount: 2, maxRetries: 1, briefMode: "rules_cached", modelCallPolicy: "fast_dual_variants" };
+  return { label: "快速预览", targetCount, maxRetries: 0, briefMode: "rules_cached", modelCallPolicy: targetCount > 1 ? "fast_dual_variants" : "fast_single_variant" };
+}
+
+function wantsMultipleDesignOutputs(text: string) {
+  return /(?:两张|2张|两个|2个|三张|3张|多方案|多版|多个方向|三种方向|方案一|方案二|A\/B|AB|variants?)/i.test(text);
 }
 
 function supportsImageRequestBatchCount(model: string, hasReferenceFiles = false) {
