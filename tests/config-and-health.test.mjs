@@ -2268,8 +2268,10 @@ describe("Account navigation", () => {
     assert.equal(accountsPageSource.includes("<AdminAccountsManager />"), true);
     assert.equal(settingsPageSource.includes("AdminAccountsManager"), false);
     assert.equal(globalsSource.includes("account-menu__identity"), false);
-    assert.equal(globalsSource.includes("width: min(380px, calc(100vw - 144px))"), true);
-    assert.equal(globalsSource.includes("backdrop-filter: blur(34px) saturate(185%)"), true);
+    assert.equal(accountSwitcherSource.includes('open ? "account-switcher--open" : ""'), true);
+    assert.equal(globalsSource.includes("width: min(420px, calc(100vw - 142px))"), true);
+    assert.equal(globalsSource.includes("backdrop-filter: blur(40px) saturate(190%)"), true);
+    assert.equal(globalsSource.includes(".account-switcher--open"), true);
     assert.equal(adminAccountsSource.includes("break-all"), true);
     assert.equal(adminAccountsSource.includes("min-w-0 break-all"), true);
     assert.equal(authSource.includes("let ownerCount = 0"), true);

@@ -71,6 +71,7 @@ export function AccountSwitcher({ compact = false, expanded = false }: AccountSw
     "account-switcher",
     compact ? "account-switcher--compact" : "",
     expanded ? "account-switcher--expanded" : "",
+    open ? "account-switcher--open" : "",
   ].filter(Boolean).join(" ");
   const panelClassName = `account-menu__panel ${expanded ? "account-menu__panel--expanded" : ""}`;
 
