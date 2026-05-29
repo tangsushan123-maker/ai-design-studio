@@ -258,11 +258,10 @@ async function readStore(userId: string, options: { includeRootMigration?: boole
 
   if (scopedStore) {
     const scoped = reconcileStoreWithLegacyProject(scopedStore, scopedLegacy);
-    const migrated = mergeLegacyRootStore(scoped, rootStore, rootLegacy);
-    if (migrated.projects.length !== scoped.projects.length || migrated.activeProjectId !== scoped.activeProjectId) {
-      await writeStore(userId, migrated);
+    if (scoped.projects.length !== scopedStore.projects.length || scoped.activeProjectId !== scopedStore.activeProjectId) {
+      await writeStore(userId, scoped);
     }
-    return migrated;
+    return scoped;
   }
 
   if (rootStore) {
@@ -381,39 +380,6 @@ async function fileExists(filePath: string) {
   } catch {
     return false;
   }
-}
-
-function mergeLegacyRootStore(scoped: ProjectStore, rootStore: ProjectStore | null, rootLegacy: StoredProject | null): ProjectStore {
-  const rootProjects = rootStore?.projects || [];
-  const rootActiveProjectId = rootStore?.activeProjectId || rootLegacy?.id || "";
-  const legacyProject = rootLegacy ? [normalizeStoredProject({ ...createBlankProject(), ...rootLegacy, id: rootLegacy.id || "local-project" })] : [];
-  const incoming = [...rootProjects, ...legacyProject].map(normalizeStoredProject);
-  if (!incoming.length) return scoped;
-
-  const byId = new Map(scoped.projects.map((project) => [project.id, normalizeStoredProject(project)]));
-  let changed = false;
-  for (const project of incoming) {
-    const current = byId.get(project.id);
-    if (!current) {
-      byId.set(project.id, project);
-      changed = true;
-      continue;
-    }
-    const merged = mergeMostCompleteProjectState(current, project);
-    if (merged !== current) {
-      byId.set(project.id, merged);
-      changed = true;
-    }
-  }
-  if (!changed) return scoped;
-
-  const projects = [...byId.values()].sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
-  const activeProjectId = projects.some((project) => project.id === scoped.activeProjectId)
-    ? scoped.activeProjectId
-    : projects.some((project) => project.id === rootActiveProjectId)
-      ? rootActiveProjectId
-      : projects[0].id;
-  return { activeProjectId, projects };
 }
 
 async function writeStore(userId: string, store: ProjectStore) {

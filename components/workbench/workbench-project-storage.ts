@@ -290,6 +290,18 @@ export function writeProjectLocalCache(key: string, value: string) {
   return writeProjectLocalCachePointer(value);
 }
 
+export function clearDeletedProjectBrowserCache(projectId: string) {
+  try {
+    window.localStorage.removeItem(projectTaskStorageKey(projectId));
+    window.localStorage.removeItem(dismissedTaskStorageKey(projectId));
+    window.localStorage.removeItem(dismissedImageStorageKey(projectId));
+    window.localStorage.removeItem(projectSnapshotStorageKey(projectId));
+    const raw = window.localStorage.getItem(projectStorageKey);
+    const parsed = raw ? JSON.parse(raw) as Partial<ProjectLocalCachePointer> : null;
+    if (parsed?.activeProjectId === projectId) window.localStorage.removeItem(projectStorageKey);
+  } catch {}
+}
+
 function writeProjectLocalCachePointer(payloadText: string) {
   let pointer: ProjectLocalCachePointer;
   try {

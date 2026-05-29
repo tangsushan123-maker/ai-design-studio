@@ -292,6 +292,7 @@ import {
   taskNeedsServerSync,
 } from "@/components/workbench/workbench-task-helpers";
 import {
+  clearDeletedProjectBrowserCache,
   filterDismissedRestoredNodes,
   getStoredProject,
   imageSourceDismissedForProject,
@@ -4477,6 +4478,7 @@ function NodeWorkflowWorkbench({
     }
     const data = (await response.json().catch(() => ({}))) as { activeProjectId?: string; projects?: ProjectSummary[] };
     const nextProjects = data.projects || [];
+    clearDeletedProjectBrowserCache(id);
     setProjectList(nextProjects);
     if (deletingActiveProject) {
       const replacement = nextProjects.find((project) => (

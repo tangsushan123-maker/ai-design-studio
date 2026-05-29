@@ -1720,6 +1720,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(projectRouteSource.includes("parseProjectDeletePayload"), true);
     assert.equal(projectRouteSource.includes("InvalidProjectDeletePayloadError"), true);
     assert.equal(projectRouteSource.includes("项目删除 JSON 无法解析"), true);
+    assert.equal(projectRouteSource.includes("return scoped;"), true);
+    assert.equal(projectRouteSource.includes("mergeLegacyRootStore(scoped, rootStore, rootLegacy)"), false);
     assert.equal(projectRouteSource.includes("{ status: 400 }"), true);
     assert.equal(workbenchSource.includes("图片管理批量清理"), true);
     assert.equal(workbenchSource.includes("saveProjectSnapshot(\"auto\")"), true);
@@ -2024,6 +2026,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("rememberWorkbenchHomeState(false)"), true);
     assert.equal(workbenchSource.includes("const deletingActiveProject = id === projectId"), true);
     assert.equal(workbenchSource.includes("await loadProject(replacement.id, replacement.ownerUserId)"), true);
+    assert.equal(workbenchSource.includes("clearDeletedProjectBrowserCache(id)"), true);
     assert.equal(workbenchSource.includes("function withConfiguredImageModel"), true);
     assert.equal(workbenchSource.includes("modelOptions={imageModelOptions}"), true);
     assert.equal(projectHomeSource.includes("export function ProjectHomeScreen"), true);
