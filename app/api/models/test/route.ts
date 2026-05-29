@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { requireCurrentUser } from "@/lib/auth";
+import { runWithConfigUser } from "@/lib/local-config";
 import { testConfiguredModel, type ModelTestKind } from "@/lib/model-catalog";
 
 export const runtime = "nodejs";
@@ -7,14 +9,17 @@ const allowedKinds = new Set<ModelTestKind>(["text", "image", "video"]);
 
 export async function POST(request: Request) {
   try {
-    const body = await parseModelTestPayload(request);
-    const kind = body.kind as ModelTestKind;
-    if (!allowedKinds.has(kind)) {
-      return NextResponse.json({ ok: false, message: "未知模型测试类型。" }, { status: 400 });
-    }
+    const user = await requireCurrentUser();
+    return await runWithConfigUser(user, async () => {
+      const body = await parseModelTestPayload(request);
+      const kind = body.kind as ModelTestKind;
+      if (!allowedKinds.has(kind)) {
+        return NextResponse.json({ ok: false, message: "未知模型测试类型。" }, { status: 400 });
+      }
 
-    const result = await testConfiguredModel(kind, body.model || "");
-    return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+      const result = await testConfiguredModel(kind, body.model || "");
+      return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+    });
   } catch (error) {
     if (error instanceof InvalidModelTestPayloadError) {
       return NextResponse.json({ ok: false, message: error.message }, { status: 400 });

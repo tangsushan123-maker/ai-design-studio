@@ -14,7 +14,7 @@ export function imageModelReadiness(modelInfo: WorkbenchModelInfo, passedImageMo
       toneClass: "text-[#ffb4a8]",
     };
   }
-  if (!passedImageModels.length || !effectiveImageModel) {
+  if (!effectiveImageModel) {
     return {
       label: "Key 已配置 · 图片模型未验证",
       helper: "到 API 设置页测试图片模型，通过后即可生成。",
@@ -22,6 +22,13 @@ export function imageModelReadiness(modelInfo: WorkbenchModelInfo, passedImageMo
     };
   }
   const active = passedImageModels.find((item) => item.id === effectiveImageModel);
+  if (!active) {
+    return {
+      label: "图片模型已配置",
+      helper: "可直接生成；建议到设置页测试一次，系统会记录模型状态。",
+      toneClass: "text-[#adf8e5]",
+    };
+  }
   return {
     label: active?.label ? `图片模型可用 · ${active.label}` : "图片模型可用",
     helper: "图片生成、改图和增强可直接运行。",

@@ -609,11 +609,15 @@ describe("Settings model management", () => {
     assert.equal(modelsManageSource.includes('modelManageErrorMessage("模型删除失败", error)'), true);
     assert.equal(modelsRefreshSource.includes("modelRouteErrorMessage"), true);
     assert.equal(modelsRefreshSource.includes('modelRouteErrorMessage("刷新模型列表失败", error)'), true);
+    assert.equal(modelsRefreshSource.includes("requireCurrentUser"), true);
+    assert.equal(modelsRefreshSource.includes("runWithConfigUser(user"), true);
     assert.equal(modelsTestSource.includes("modelTestRouteErrorMessage"), true);
     assert.equal(modelsTestSource.includes("parseModelTestPayload"), true);
     assert.equal(modelsTestSource.includes("InvalidModelTestPayloadError"), true);
     assert.equal(modelsTestSource.includes("模型测试 JSON 无法解析"), true);
     assert.equal(modelsTestSource.includes('modelTestRouteErrorMessage("模型测试失败", error)'), true);
+    assert.equal(modelsTestSource.includes("requireCurrentUser"), true);
+    assert.equal(modelsTestSource.includes("runWithConfigUser(user"), true);
     assert.equal(providersDetectSource.includes("parseProviderDetectPayload"), true);
     assert.equal(providersDetectSource.includes("InvalidProviderDetectPayloadError"), true);
     assert.equal(providersDetectSource.includes("自动检测 JSON 无法解析"), true);
@@ -2020,6 +2024,8 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("rememberWorkbenchHomeState(false)"), true);
     assert.equal(workbenchSource.includes("const deletingActiveProject = id === projectId"), true);
     assert.equal(workbenchSource.includes("await loadProject(replacement.id, replacement.ownerUserId)"), true);
+    assert.equal(workbenchSource.includes("function withConfiguredImageModel"), true);
+    assert.equal(workbenchSource.includes("modelOptions={imageModelOptions}"), true);
     assert.equal(projectHomeSource.includes("export function ProjectHomeScreen"), true);
     assert.equal(projectHomeSource.includes("ProjectHomeItem"), true);
     assert.equal(projectHomeSource.includes("正在刷新项目列表"), true);

@@ -429,6 +429,21 @@ function taskRequestIds(tasks: TaskRecord[]) {
   return requestIds;
 }
 
+function withConfiguredImageModel(passedModels: ModelCatalogItem[], modelInfo: WorkbenchModelInfo) {
+  const configuredId = modelInfo.imageModel?.trim();
+  if (!modelInfo.hasKey || !configuredId || passedModels.some((item) => item.id === configuredId)) return passedModels;
+  const configured = modelInfo.modelsCache?.find((item) => item.id === configuredId && item.capabilities.includes("image"));
+  return [
+    ...passedModels,
+    configured || {
+      id: configuredId,
+      label: configuredId,
+      capabilities: ["image"],
+      testStatus: "untested",
+    },
+  ];
+}
+
 function readInitialHomeOpen() {
   if (typeof window === "undefined") return true;
   return window.localStorage.getItem(workbenchHomeOpenStorageKey) !== "canvas";
@@ -633,6 +648,10 @@ function NodeWorkflowWorkbench({
     () => (modelInfo.modelsCache || []).filter((item) => item.capabilities.includes("image") && item.testStatus === "passed"),
     [modelInfo.modelsCache],
   );
+  const imageModelOptions = useMemo(
+    () => withConfiguredImageModel(passedImageModelOptions, modelInfo),
+    [modelInfo, passedImageModelOptions],
+  );
   const autoImageModel = useMemo(
     () => preferredAutoImageModelId(passedImageModelOptions, modelInfo.imageModel),
     [modelInfo.imageModel, passedImageModelOptions],
@@ -641,6 +660,7 @@ function NodeWorkflowWorkbench({
   const effectiveImageModel = selectedComposerImageModel
     || autoImageModel
     || passedImageModelOptions.find((item) => item.id === modelInfo.imageModel)?.id
+    || (modelInfo.hasKey ? modelInfo.imageModel : "")
     || "";
   const imageModelStatus = useMemo(
     () => imageModelReadiness(modelInfo, passedImageModelOptions, effectiveImageModel),
@@ -5156,7 +5176,7 @@ function NodeWorkflowWorkbench({
           focusTick={composerFocusTick}
           hasKey={modelInfo.hasKey}
           model={composerModel}
-          modelOptions={passedImageModelOptions}
+          modelOptions={imageModelOptions}
           prompt={composerPrompt}
           quality={composerDisplayQuality}
           ratio={composerDisplayRatio}
