@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     const direction = String(formData.get("direction") ?? "四周");
     const isOutpaint = modeLabel.includes("扩图");
     const isLegacyQualityExport = /^4K\s*\u5bfc\u51fa$/.test(modeLabel);
-    const isAiResize = modeLabel.includes("AI改尺寸") || isLegacyQualityExport;
+    const isAiResize = modeLabel.includes("AI改尺寸") || modeLabel.includes("AI改版适配") || isLegacyQualityExport;
     const exactSize = String(formData.get("exactSize") ?? "") === "true";
     const requestedFitMode = String(formData.get("fitMode") ?? "smart_relayout");
     const fitMode = requestedFitMode === "crop" || requestedFitMode === "pad" ? "smart_relayout" : requestedFitMode;
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
     const userPrompt = sanitizedPromptText || (isCreativeImageToImage
       ? IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST
     : isSmartResize
-        ? "用户没有额外要求，请根据输入图片自行分析，并按目标比例/尺寸原生重新构图和重绘画面。"
+        ? "用户没有额外要求，请根据输入图片自行分析，并按目标尺寸原生重新设计版式和画面。"
         : "用户没有额外要求，请根据输入图片自行分析并优化。");
 
     const prompt = buildImageEditPrompt({
@@ -177,7 +177,7 @@ export async function POST(request: Request) {
         prompt,
         variant: 1,
         ratio,
-        mode: fitMode === "crop" ? "居中裁切改尺寸" : "留白填充改尺寸",
+        mode: fitMode === "crop" ? "居中裁切适配" : "留白填充适配",
         model: imageModel,
         aspectRatio: outputRatioLabel,
         quality,
@@ -200,7 +200,7 @@ export async function POST(request: Request) {
         fitMode,
       };
       await saveImageMetadata(saved.fileName, image);
-      await recordTaskRunFinished(taskTrace, { outputs: [image], model: imageModel, message: "改尺寸完成，服务端已保存结果。" });
+      await recordTaskRunFinished(taskTrace, { outputs: [image], model: imageModel, message: "AI改版适配完成，服务端已保存结果。" });
       return NextResponse.json({ ...taskRunResponseMeta(taskTrace, startedAt, [image]), images: [image], prompt: responsePrompt, model: imageModel, imageModel });
     }
 
@@ -250,7 +250,7 @@ export async function POST(request: Request) {
             ? buildSmartResizeGenerateFallbackPrompt(requestPrompt, summary, outputRatioLabel, outputSize)
             : buildCreativeImageEditFallbackPrompt(requestPrompt, summary, outputRatioLabel, outputSize);
           return runQueuedImageModelRequestWithRetry(
-            { label: `${isSmartResize ? "改比例" : "图生图"}/摘要降级/${imageModel}` },
+            { label: `${isSmartResize ? "AI改版适配" : "图生图"}/摘要降级/${imageModel}` },
             () => openai.images.generate({
               model: imageModel,
               prompt: fallbackPrompt,
@@ -634,10 +634,10 @@ function buildCreativeImageEditFallbackPrompt(prompt: string, sourceSummary: str
 function buildSmartResizeGenerateFallbackPrompt(prompt: string, sourceSummary: string, ratioText: string, target: PixelSize) {
   const core = compactRetryPrompt(prompt);
   return [
-    "Generate a native smart relayout for a new canvas based on the source image analysis.",
+    "Generate a native AI layout adaptation for a new canvas based on the source image analysis.",
     `Core request:\n${core}`,
     `Target canvas: ${ratioText}, ${target.width}x${target.height}. Redesign and redraw natively for this new size; do not keep old coordinates.`,
-    "This must remain the same poster campaign, same medical/endoscopy topic if present, same source IP/character/product, same brand color family, and same headline meaning.",
+    "This is AI layout adaptation, not mechanical resizing. It must remain the same poster campaign, same medical/endoscopy topic if present, same source IP/character/product, same brand color family, and same headline meaning.",
     "The source image is the only factual reference. Preserve the exact industry, subject/person/product/IP identity, headline meaning, brand color direction, and main visual idea.",
     "Only re-layout existing title, subject, selling points, and user-requested logo/QR/info area using the new canvas reading order and safe margins.",
     `Source analysis:\n${sourceSummary}`,
@@ -660,7 +660,7 @@ function buildResizeCompositionRetryPrompt(prompt: string, attempt: number, rati
     : "横版：上下 18% 只放背景；标题顶部、主体底部和用户明确要求的页脚/二维码进中心安全区。";
   const modeFix = fitMode === "smart_outpaint"
     ? "扩图补画重试：保留原版式和原视觉重心，只向四周或指定方向补全背景、空间和光影，不要重排文字。 Outpaint retry: keep original layout and visual center; extend background, space, and lighting only."
-    : "智能改版重试：按目标画布原生重新构图和重绘，不照搬原图坐标；标题、主体、卖点和用户明确要求的 Logo 必须服从新尺寸阅读顺序。 Smart relayout retry: redraw natively for the target canvas; do not copy old coordinates.";
+    : "智能重排重试：按目标画布原生重新构图和重绘，不照搬原图坐标；标题、主体、卖点和用户明确要求的 Logo 必须服从新尺寸阅读顺序。 Smart relayout retry: redraw natively for the target canvas; do not copy old coordinates.";
   return [
     "Regenerate the resize result after composition QA failed.",
     `Core request:\n${core}`,
@@ -687,7 +687,7 @@ function buildNativeEditRatioRetryPrompt(prompt: string, attempt: number, ratioT
 
 function buildMissingEditVariantRetryPrompt(prompt: string, attempt: number, targetCount: number, ratioText: string, target: PixelSize, task: "image_to_image" | "resize" | "outpaint") {
   const core = compactRetryPrompt(prompt);
-  const taskText = task === "resize" ? "改比例" : task === "outpaint" ? "扩图补画" : "图生图";
+  const taskText = task === "resize" ? "AI改版适配" : task === "outpaint" ? "扩图补画" : "图生图";
   return [
     `Generate one additional usable ${taskText} candidate.`,
     `Core request:\n${core}`,
@@ -708,7 +708,7 @@ function buildEditVariantPrompt(prompt: string, task: "image_to_image" | "resize
     index <= 0
       ? "方案A：偏清晰直接、好理解、适合投放。"
       : "方案B：偏高级、有创意、有品牌感；不要只是和方案A换颜色。",
-    task === "resize" ? "这是 AI 改比例任务：必须按目标画布原生重新构图和重绘，不要把原图拉伸、压扁、裁切、补黑边白边，也不要把旧图缩小贴在中间；字体、Logo、二维码、人物/IP、产品都要保持自然比例。" : "",
+    task === "resize" ? "这是 AI 改版适配任务：必须按目标画布原生重新构图和重绘，不要把原图拉伸、压扁、裁切、补黑边白边，也不要把旧图缩小贴在中间；字体、Logo、二维码、人物/IP、产品都要保持自然比例。" : "",
     task === "outpaint" ? "这是扩图任务，请按用户要求扩展画面。" : "",
   ].join("\n");
 }
@@ -787,7 +787,7 @@ function tightenImageToImageCompositionRisk<T extends {
   ].filter((item) => item.risky);
   if (!edgeRisks.length || qualityCheck.compositionRisk) return qualityCheck;
   const worst = edgeRisks.sort((a, b) => b.ratio - a.ratio)[0];
-  const taskName = context.operation === "resize" ? "改比例" : "图生图";
+  const taskName = context.operation === "resize" ? "AI改版适配" : "图生图";
   const issue = `${taskName}${worst.name}高对比内容偏多，疑似标题、主体、IP/产品边缘或底部信息贴边/被裁切。`;
   return {
     ...qualityCheck,

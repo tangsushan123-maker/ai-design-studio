@@ -49,7 +49,7 @@ export function taskActionLabel(kind: NodeKind) {
     image_to_image: "改版",
     fuse_images: "合成",
     outpaint: "扩图",
-    resize: "改尺寸",
+    resize: "改版适配",
     replace_product: "替换",
     mask_edit: "局部修改",
     hd_redraw: "画质增强",
@@ -113,7 +113,7 @@ export function chineseNumber(value: number) {
 
 export function taskFailureHint(message: string) {
   if (isInvalidMaskFailure(message)) return "涂抹无效：请重新打开局部 AI 修改并重新涂抹";
-  if (/非 .*原生比例|目标画布原生比例|比例图片|阻止裁切/.test(message)) return "比例保护：模型没按目标比例返回，已避免裁切；建议重试或改用 AI 改尺寸";
+  if (/非 .*原生比例|目标画布原生比例|比例图片|阻止裁切/.test(message)) return "比例保护：模型没按目标比例返回，已避免裁切；建议重试或改用 AI 改版适配";
   if (/timeout|超时|504|gateway/i.test(message)) return "超时：可继续重试或切换更快图片模型";
   if (/401|403|key|密钥|余额|quota|balance/i.test(message)) return "接口不可用：检查 Key、余额或模型权限";
   if (/model|模型/i.test(message)) return "模型不可用：切换模型或重新检测中转站";
@@ -187,7 +187,7 @@ export function nodeOperationLabel(value?: string) {
     image_to_image: "图生图节点",
     fuse_images: "AI合成节点",
     outpaint: "AI扩图节点",
-    resize: "AI改尺寸节点",
+    resize: "AI改版适配节点",
     hd_redraw: "画质增强节点",
     upscale_4k: "画质增强节点",
     reference_remake: "参考图重制节点",

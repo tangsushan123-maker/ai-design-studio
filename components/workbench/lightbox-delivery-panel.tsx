@@ -19,7 +19,7 @@ type LightboxDeliveryPanelProps = {
 const EDIT_TOOLS: Array<[LightboxEditTool, string]> = [
   ["optimize", "二次优化"],
   ["mask", "局部修改"],
-  ["resize", "改尺寸"],
+  ["resize", "AI改版适配"],
   ["upscale", "画质增强"],
 ];
 
@@ -90,7 +90,7 @@ export function LightboxDeliveryPanel({
 
       <section className="apple-surface-section p-3">
         <div className="apple-section-title">编辑当前方案</div>
-        <div className="apple-caption mt-1">按交付问题选择增强、局部改、改尺寸或二次优化。</div>
+        <div className="apple-caption mt-1">按交付问题选择增强、局部改、AI改版适配或二次优化。</div>
         <div className="mt-3 grid grid-cols-2 gap-2">
           {EDIT_TOOLS.map(([value, label]) => (
             <button

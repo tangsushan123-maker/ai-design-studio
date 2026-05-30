@@ -56,7 +56,7 @@ export const emptyProjectCreationDraft: ProjectCreationDraft = {
 
 export const quickActions: Array<{ label: string; type: NodeKind; handle: string }> = [
   { label: "扩图补画", type: "outpaint", handle: "image" },
-  { label: "改比例", type: "resize", handle: "image" },
+  { label: "AI改版适配", type: "resize", handle: "image" },
   { label: "图生图", type: "image_to_image", handle: "image" },
   { label: "局部 AI 修改", type: "mask_edit", handle: "image" },
   { label: "画质增强", type: "hd_redraw", handle: "image" },

@@ -65,8 +65,8 @@ export function buildResizePrompt(params: Record<string, unknown>, ratio: Aspect
   const fitMode = stringParam(params.fitMode) || "smart_relayout";
   const userPrompt = stringParam(params.prompt);
   return [
-    userPrompt || "用户没有额外要求，请根据输入图片自行分析，并按目标比例/尺寸原生重新构图和重绘画面。",
-    `任务：AI 改比例，不是拉伸变形、不是裁切、不是简单缩放。目标：${preset}，${targetSize}。`,
+    userPrompt || "用户没有额外要求，请根据输入图片自行分析，并按目标尺寸原生重新设计版式和画面。",
+    `任务：AI 改版适配，不是拉伸变形、不是裁切、不是简单缩放。目标：${preset}，${targetSize}。`,
     `处理方式：${fitMode}；必须让标题、主体、卖点、背景和留白重新适配目标画布。`,
     "字体、Logo、二维码、人物/IP、产品保持自然比例；可以重排和重画，但不能横向拉宽或纵向压扁。",
   ]

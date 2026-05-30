@@ -1327,15 +1327,15 @@ describe("Image-to-image creative redesign", () => {
     assert.equal(routeSource.includes("shouldUseAiOutpaint ||\n      isSmartResize"), false);
     assert.equal(routeSource.includes("buildSmartResizeGenerateFallbackPrompt"), true);
     assert.equal(routeSource.includes("改比例/原生重绘"), false);
-    assert.equal(routeSource.includes("This must remain the same poster campaign"), true);
+    assert.equal(routeSource.includes("This is AI layout adaptation"), true);
     assert.equal(promptSource.includes("必须保持同一张设计活动"), true);
     assert.equal(routeSource.includes("runQueuedImageModelRequestWithRetry"), true);
     assert.equal(routeSource.includes("native_smart_relayout"), true);
     assert.equal(routeSource.includes("target_canvas_relayout"), false);
     assert.equal(routeSource.includes("shouldUseAiOutpaint ||"), true);
     assert.equal(routeSource.includes("sanitizeSmartResizePrompt"), true);
-    assert.equal(routeSource.includes("用户没有额外要求，请根据输入图片自行分析，并按目标比例/尺寸原生重新构图和重绘画面。"), true);
-    assert.equal(routeSource.includes("智能改版重试：按目标画布原生重新构图和重绘"), true);
+    assert.equal(routeSource.includes("用户没有额外要求，请根据输入图片自行分析，并按目标尺寸原生重新设计版式和画面。"), true);
+    assert.equal(routeSource.includes("智能重排重试：按目标画布原生重新构图和重绘"), true);
     assert.equal(routeSource.includes("扩图补画重试：保留原版式和原视觉重心"), true);
     assert.equal(routeSource.includes("buildImageToImageCompositionRetryPrompt"), true);
     assert.equal(routeSource.includes("complete subject/text visible"), true);
@@ -2018,7 +2018,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("activeSelection"), true);
     assert.equal(workbenchSource.includes("activeQuickAction"), true);
     assert.equal(workbenchSource.includes("创建二次优化节点"), true);
-    assert.equal(workbenchSource.includes("创建改尺寸任务"), true);
+    assert.equal(workbenchSource.includes("创建适配任务"), true);
     assert.equal(workbenchSource.includes("创建 AI 画质增强任务"), true);
     assert.equal(workbenchSource.includes("打开局部修改"), true);
     assert.equal(workbenchSource.includes("删除中..."), true);
@@ -2193,7 +2193,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(historyPanelSource.includes("sourceRequestId?: string"), true);
     assert.equal(historyPanelSource.includes("来源未记录"), true);
     assert.equal(historyPanelSource.includes('aria-label="加入画布"'), true);
-    assert.equal(historyPanelSource.includes('aria-label="改尺寸"'), true);
+    assert.equal(historyPanelSource.includes('aria-label="AI改版适配"'), true);
     assert.equal(historyPanelSource.includes('aria-label="画质增强"'), true);
     assert.equal(historyPanelSource.includes("confirmDeleteKey"), true);
     assert.equal(historyPanelSource.includes("确认删除图片"), true);

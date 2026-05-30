@@ -20,7 +20,7 @@ export function composerTitleForNode(node: FlowNode) {
   if (node.data.kind === "text_to_image") return "文生图";
   if (node.data.kind === "image_to_image") return "图生图";
   if (node.data.kind === "fuse_images") return "AI合成";
-  if (node.data.kind === "resize") return "改尺寸";
+  if (node.data.kind === "resize") return "AI改版适配";
   if (node.data.kind === "outpaint") return "扩图";
   if (node.data.kind === "hd_redraw") return "增强";
   if (node.data.kind === "mask_edit") return "局部修改";
@@ -55,7 +55,7 @@ export function composerHelperTextForNode(node: FlowNode) {
   }
   if (node.data.kind === "image_to_image") return "模型先分析原图版面、文案层级和主体，再按当前比例生成 2 个重新设计方案。";
   if (node.data.kind === "fuse_images") return "图1主体放入图2场景，生成自然版和广告版。";
-  if (node.data.kind === "resize") return "模型先分析原图版面，再按右侧目标比例重新构图，不拉伸不裁切。";
+  if (node.data.kind === "resize") return "模型先理解画面内容，再按右侧目标尺寸重新设计版式，不拉伸不裁切。";
   if (node.data.kind === "outpaint") return "说明补哪里、补什么。";
   if (node.data.kind === "hd_redraw") return "选择 Standard / Plus / Creative，按原比例输出 2K/4K/8K。";
   if (node.data.kind === "mask_edit") return "涂哪里，改哪里。";
@@ -87,7 +87,7 @@ export function composerSubmitStatus(node: FlowNode, prompt: string) {
   if (node.data.kind === "text_to_image") return "已更新文生图提示词并开始运行。";
   if (node.data.kind === "image_to_image") return prompt.trim() ? "已更新图生图想法并开始运行。" : "已按图生图默认要求开始运行。";
   if (node.data.kind === "fuse_images") return "已更新合成要求并开始运行。";
-  if (node.data.kind === "resize") return prompt.trim() ? "已更新改比例要求并开始运行。" : "已按当前比例、尺寸和清晰度设置开始运行。";
+  if (node.data.kind === "resize") return prompt.trim() ? "已更新适配要求并开始运行。" : "已按当前目标尺寸开始智能重排。";
   if (node.data.kind === "outpaint") return prompt.trim() ? "已更新扩图要求并开始运行。" : "已按当前扩图设置开始运行。";
   if (node.data.kind === "hd_redraw") return prompt.trim() ? "已更新画质增强要求并开始运行。" : "已按当前画质增强设置开始运行。";
   if (node.data.kind === "mask_edit") return "已更新局部修改内容并开始运行。";
@@ -102,7 +102,7 @@ export function nodeCreationHint(type: NodeKind, fromImage: boolean) {
   if (type === "text_to_image") return fromImage ? "已创建文生图节点，并连接当前图片作为参考。" : "已创建文生图节点。直接在底部输入需求即可生成。";
   if (type === "image_to_image") return fromImage ? "已创建图生图创意改版节点。会先分析原图版面，再生成 2 个重新设计方案。" : "已创建图生图创意改版节点。先连接图片，再写改版方向。";
   if (type === "fuse_images") return fromImage ? "已创建 AI 合成节点。当前图片是图1主体，再连接图2场景。" : "已创建 AI 合成节点。请连接图1主体和图2场景。";
-  if (type === "resize") return fromImage ? "已创建改比例节点。先在右侧选目标比例、尺寸和清晰度，再运行。" : "已创建改比例节点。请先连接图片，再选择目标比例、尺寸和清晰度。";
+  if (type === "resize") return fromImage ? "已创建 AI 改版适配节点。先在右侧选目标尺寸，再运行。" : "已创建 AI 改版适配节点。请先连接图片，再选择目标尺寸。";
   if (type === "outpaint") return fromImage ? "已创建扩图补画节点。下面可补充扩图想法，右侧可改方向和比例。" : "已创建扩图补画节点。请先连接图片，再决定扩到什么比例。";
   if (type === "mask_edit") return "已创建局部 AI 修改节点。先连接图片并打开涂抹面板，再写要改什么。";
   if (type === "hd_redraw") return fromImage ? "已创建画质增强节点。可选择 Standard / Plus / Creative，再输出 2K/4K/8K。" : "已创建画质增强节点。请先连接图片，再选择增强模式。";

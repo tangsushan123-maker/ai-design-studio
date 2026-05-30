@@ -361,7 +361,7 @@ function aiResizeTask({ name = "ai_resize_9x16_no_crop" } = {}) {
     const form = new FormData();
     form.append("sourceUrl", sources.poster);
     form.append("prompt", "把现有海报改成竖版 9:16，完整保留主体、标题、Logo、重要文字和底部信息；只重排空间，不裁切，不磨砂补边。");
-    form.append("modeLabel", "AI改尺寸");
+    form.append("modeLabel", "AI改版适配");
     form.append("aspectRatio", "9:16");
     form.append("quality", "standard");
     form.append("fitMode", "smart_relayout");

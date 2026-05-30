@@ -2100,7 +2100,7 @@ function NodeWorkflowWorkbench({
         return;
       }
       if (requiresConnectedImageForComposer(kind) && !hasLinkedImage) {
-        setStatus(kind === "resize" ? "改比例节点要先连接一张图片，再选择目标比例和尺寸。" : "这个节点要先连接一张图片，再运行。");
+        setStatus(kind === "resize" ? "AI改版适配节点要先连接一张图片，再选择目标尺寸。" : "这个节点要先连接一张图片，再运行。");
         return;
       }
 
@@ -3027,7 +3027,7 @@ function NodeWorkflowWorkbench({
     if (/image_to_image|图生图/.test(raw)) return "image_to_image";
     if (/design_optimize|设计优化/.test(raw)) return "design_optimize";
     if (/reference_remake|参考图重制/.test(raw)) return "reference_remake";
-    if (/resize|改尺寸|AI改尺寸/.test(raw)) return "resize";
+    if (/resize|改尺寸|AI改尺寸|改版适配|AI改版适配/.test(raw)) return "resize";
     if (/outpaint|AI扩图/.test(raw)) return "outpaint";
     if (/mask_edit|局部/.test(raw)) return "mask_edit";
     if (/hd_redraw|upscale_4k|画质增强/.test(raw)) return "hd_redraw";
@@ -3266,7 +3266,7 @@ function NodeWorkflowWorkbench({
     formData.append("quality", qualityParam(params.quality));
     appendImageModel(formData, node, stringParam(params.model));
     formData.append("keepOriginalRatio", "false");
-    formData.append("modeLabel", "AI改尺寸");
+    formData.append("modeLabel", "AI改版适配");
     formData.append("exactSize", "true");
     formData.append("fitMode", fitMode);
     appendTaskTrace(formData, taskId, node, "resize");
@@ -3879,7 +3879,7 @@ function NodeWorkflowWorkbench({
       ),
     );
     setPendingRunNodeId(operation.id);
-    setStatus(kind === "resize" ? `已按设置创建改尺寸任务：${ratioOptionLabel(resizeRatio)} · ${targetSize}` : `已创建画质增强任务：${targetSize}`);
+    setStatus(kind === "resize" ? `已创建 AI 改版适配任务：${ratioOptionLabel(resizeRatio)} · ${targetSize}` : `已创建画质增强任务：${targetSize}`);
   }
 
   function createMaskEditNodeFromHistory(image: ImageAsset, options: HistoryMaskEditOptions) {
@@ -3992,7 +3992,7 @@ function NodeWorkflowWorkbench({
     undismissResultImages([image]);
     const node = addNode("image_input", getViewportCenter(), { ...image, source: "history" });
     setSelectedNodeId(node.id);
-    setStatus("已加入画布，可以继续连接改比例、局部修改或4K节点。");
+    setStatus("已加入画布，可以继续连接 AI 改版适配、局部修改或4K节点。");
   }
 
   function applyHistoryFavoriteState(key: string, favorite: boolean) {
@@ -5689,7 +5689,7 @@ function NodeWorkflowWorkbench({
             }}
             onResizeHistory={(image) => {
               setLightboxImage(image);
-              setStatus("已打开图片，请先确认目标尺寸再创建改尺寸任务。");
+              setStatus("已打开图片，请先确认目标尺寸再创建 AI 改版适配任务。");
             }}
             onUpscaleHistory={(image) => {
               setLightboxImage(image);

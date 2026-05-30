@@ -138,8 +138,8 @@ export function LightboxEditPanels({
   if (activeEditTool === "resize") {
     return (
       <section className="apple-surface-section p-3">
-        <div className="apple-section-title">改比例</div>
-        <div className="apple-caption mt-1">选择常用比例；自定义再填写宽高。</div>
+        <div className="apple-section-title">AI改版适配</div>
+        <div className="apple-caption mt-1">选择目标尺寸，模型会理解画面后重新适配版式。</div>
         <RatioPresetGrid
           className="mt-2"
           label="比例"
@@ -160,18 +160,18 @@ export function LightboxEditPanels({
           <label className="block">
             <span className="apple-field-label mb-1 block">处理方式</span>
             <select className="apple-select h-9 w-full px-3 text-[11px] text-white/76 outline-none" value={resizeFitMode} onChange={(event) => onResizeFitModeChange(event.target.value as HistoryResizeOptions["fitMode"])}>
-              <option value="smart_relayout">智能改版</option>
-              <option value="smart_outpaint">扩图补画</option>
+              <option value="smart_relayout">智能重排</option>
+              <option value="smart_outpaint">保守扩图</option>
             </select>
           </label>
         </div>
         <button
           className="apple-button-primary mt-2 w-full px-3 py-2 text-[11px] font-semibold disabled:opacity-40"
           disabled={!parseTargetSize(resizeSize).width || !parseTargetSize(resizeSize).height || actionBusy}
-          onClick={() => void onRunAction("创建改尺寸任务", () => onResize({ targetRatio: resizeRatio, targetSize: resizeSize, fitMode: resizeFitMode, quality: "standard" }))}
+          onClick={() => void onRunAction("创建适配任务", () => onResize({ targetRatio: resizeRatio, targetSize: resizeSize, fitMode: resizeFitMode, quality: "standard" }))}
           type="button"
         >
-          {activeActionLabel === "创建改尺寸任务" ? "创建中..." : "按此尺寸创建任务"}
+          {activeActionLabel === "创建适配任务" ? "创建中..." : "按此尺寸智能适配"}
         </button>
       </section>
     );

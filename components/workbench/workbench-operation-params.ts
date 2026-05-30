@@ -7,19 +7,19 @@ import type {
 import type { PngLayerExportMode } from "@/components/workbench/result-preview-tools";
 
 export function resizeFitModeLabel(value: string) {
-  if (value === "smart_relayout") return "智能改版";
-  if (value === "smart_outpaint") return "扩图补画";
+  if (value === "smart_relayout") return "智能重排";
+  if (value === "smart_outpaint") return "保守扩图";
   if (value === "keep_ratio") return "Standard";
   if (value === "standard_enhance" || value === "faithful_enhance") return "Standard";
   if (value === "plus_enhance") return "Plus";
   if (value === "creative_redraw" || value === "texture_redraw" || value === "ai_redraw") return "Creative";
-  if (value === "crop" || value === "pad") return "智能改版";
-  return "智能改版";
+  if (value === "crop" || value === "pad") return "智能重排";
+  return "智能重排";
 }
 
 export function resizeFitModeValue(label: string) {
-  if (label === "智能改版") return "smart_relayout";
-  if (label === "扩图补画" || label === "智能扩图") return "smart_outpaint";
+  if (label === "智能重排" || label === "智能改版") return "smart_relayout";
+  if (label === "保守扩图" || label === "扩图补画" || label === "智能扩图") return "smart_outpaint";
   if (label === "保持比例放大") return "standard_enhance";
   if (label === "Standard" || label === "文字优先高清修复" || label === "保真增强") return "standard_enhance";
   if (label === "Plus" || label === "图文双清晰增强") return "plus_enhance";

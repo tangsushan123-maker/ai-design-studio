@@ -227,7 +227,7 @@ export function NodeInspectorPanel({
       ) : null}
 
       {node.data.kind === "resize" ? (
-        <InspectorSection title="改尺寸">
+        <InspectorSection title="AI改版适配">
           <SizePresetSelect
             label="比例"
             value={stringParam(params.sizePreset) === "自定义" ? "自定义" : findSizePresetByLabel(stringParam(params.sizePreset))?.label || activeResizePresetLabel(node.data)}
@@ -255,7 +255,7 @@ export function NodeInspectorPanel({
           <InlineChipRow
             label="处理"
             value={resizeFitModeLabel(stringParam(params.fitMode))}
-            options={["智能改版", "扩图补画"]}
+            options={["智能重排", "保守扩图"]}
             onChange={(label) => onParamChange(node.id, "fitMode", resizeFitModeValue(label))}
           />
         </InspectorSection>

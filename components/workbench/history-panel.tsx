@@ -318,13 +318,13 @@ export function HistoryPanel({
                   <Plus className="size-3" />
                 </button>
                 <button
-                  aria-label="改尺寸"
+                  aria-label="AI改版适配"
                   className="apple-button flex h-7 items-center justify-center text-white/62"
                   onClick={(event) => {
                     event.stopPropagation();
-                    runInlineAction("改尺寸", () => onResize(image));
+                    runInlineAction("AI改版适配", () => onResize(image));
                   }}
-                  title="改尺寸"
+                  title="AI改版适配"
                   type="button"
                 >
                   <Maximize2 className="size-3" />

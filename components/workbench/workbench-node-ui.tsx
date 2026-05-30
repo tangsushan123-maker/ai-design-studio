@@ -42,7 +42,7 @@ export function NodeSummary({ data }: { data: WorkflowNodeData }) {
   if (data.kind === "fuse_images") return <SummaryLine label="AI合成" value={stringParam(params.fusionMode) || "主体入景"} />;
   if (data.kind === "outpaint") return <SummaryLine label="AI扩图" value={`${stringParam(params.direction) || "四周"} · ${stringParam(params.targetRatio) || "16:9"}`} />;
   if (data.kind === "mask_edit") return <SummaryLine label="局部 AI 修改" value={stringParam(params.prompt) || "涂抹区域 + 一句话指令"} />;
-  if (data.kind === "resize") return <SummaryLine label="AI改尺寸" value={`${stringParam(params.targetSize) || defaultTargetSizeForRatio(ratioParam(params.targetRatio))} · ${resizeFitModeLabel(stringParam(params.fitMode))}`} />;
+  if (data.kind === "resize") return <SummaryLine label="AI改版适配" value={`${stringParam(params.targetSize) || defaultTargetSizeForRatio(ratioParam(params.targetRatio))} · ${resizeFitModeLabel(stringParam(params.fitMode))}`} />;
   if (data.kind === "hd_redraw") return <SummaryLine label="画质增强" value={`${qualityEnhanceModeLabel(qualityEnhanceModeParam(params.enhancementMode))} · ${upscaleTargetDisplayLabel(stringParam(params.targetSize) || "长边3840")}`} />;
   if (data.kind === "upscale_4k") return <SummaryLine label="画质增强" value={`${resizeFitModeLabel(stringParam(params.fitMode))} · ${upscaleTargetDisplayLabel(stringParam(params.targetSize) || "长边3840")}`} />;
   if (data.kind === "reference_remake") return <SummaryLine label="参考图重制" value={`${referenceRemakeModeLabel(referenceRemakeModeParam(params.mode))} · ${qualityParam(params.quality).toUpperCase()}`} />;
