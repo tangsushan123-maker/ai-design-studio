@@ -82,6 +82,7 @@ export const flowAriaLabelConfig = {
 };
 
 export const textReferenceRoleOptions: Array<{ value: TextReferenceRole; label: string }> = [
+  { value: "direct_use", label: "引用原图" },
   { value: "person", label: "使用人物" },
   { value: "product", label: "使用产品" },
   { value: "subject", label: "使用主体" },
@@ -102,9 +103,9 @@ export const textReferenceWeightOptions: Array<{ value: TextReferenceWeight; lab
   { value: "high", label: "高" },
 ];
 
-export const imageTaskTimeoutMs = 35 * 60 * 1000;
-export const imageTaskStuckMs = 12 * 60 * 1000;
-export const heavyImageTaskStuckMs = 30 * 60 * 1000;
+export const imageTaskTimeoutMs = 12 * 60 * 1000;
+export const imageTaskStuckMs = 6 * 60 * 1000;
+export const heavyImageTaskStuckMs = 18 * 60 * 1000;
 export const successfulTaskAutoHideMs = 8000;
 export const projectSnapshotLimit = 5;
 export const projectSnapshotIntervalMs = 30 * 1000;
@@ -139,12 +140,13 @@ export const defaultParamsByKind: Record<NodeKind, Record<string, unknown>> = {
   image_to_image: {
     prompt: IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST,
     model: "",
+    aspectRatio: "auto",
     strength: 0.75,
     quality: "standard",
-    keepOriginalRatio: true,
+    keepOriginalRatio: false,
   },
   fuse_images: {
-    prompt: "把图1主体自然合成到图2场景里，自动匹配大小、透视、光影、阴影、色温和边缘。",
+    prompt: "",
     model: "",
     fusionMode: "主体入景",
     quality: "standard",
@@ -152,7 +154,7 @@ export const defaultParamsByKind: Record<NodeKind, Record<string, unknown>> = {
   outpaint: {
     direction: "四周",
     targetRatio: "16:9",
-    prompt: "向外扩展画面，保持主体、文字、Logo 和版式完整。",
+    prompt: "用户没有额外要求，请根据输入图片自行分析并扩展成目标画面。",
     model: "",
     quality: "standard",
   },
@@ -168,7 +170,7 @@ export const defaultParamsByKind: Record<NodeKind, Record<string, unknown>> = {
     model: "",
   },
   mask_edit: {
-    prompt: "去掉这里并补全背景",
+    prompt: "",
     model: "",
     quality: "standard",
     preserveOutsideMask: true,

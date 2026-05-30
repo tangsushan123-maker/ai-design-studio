@@ -28,7 +28,7 @@ import { imageRequestOptions, runQueuedImageModelRequestWithRetry } from "@/lib/
 import { assertSupportedImage, getImageRatio } from "@/lib/request-guards";
 import { parseProtectionContext } from "@/lib/design-production";
 import { inspectImageQuality } from "@/lib/image-quality";
-import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
+import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, startTaskRunHeartbeat, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
 import { readBrandReferenceImages } from "@/lib/brand-reference-images";
 
@@ -38,10 +38,12 @@ export async function POST(request: Request) {
   return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
+  let stopTaskHeartbeat = () => {};
   try {
     const formData = await request.formData();
     taskTrace = taskTraceFromFormData(formData, "edit_image", "/api/edit-image");
     await recordTaskRunStarted(taskTrace);
+    stopTaskHeartbeat = startTaskRunHeartbeat(taskTrace, "图像编辑仍在处理：正在分析原图版面并按目标尺寸重新设计。");
     const uploadedImage = formData.get("image");
     const sourceUrl = String(formData.get("sourceUrl") ?? "");
     const promptText = String(formData.get("prompt") ?? "");
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
     const exactSize = String(formData.get("exactSize") ?? "") === "true";
     const requestedFitMode = String(formData.get("fitMode") ?? "smart_relayout");
     const fitMode = requestedFitMode === "crop" || requestedFitMode === "pad" ? "smart_relayout" : requestedFitMode;
-    const processingFitMode: ExactFitMode = fitMode === "pad" ? "pad" : "crop";
+    const processingFitMode: ExactFitMode = "strict_full_bleed";
 
     let imageBuffer: Buffer;
     let fileName = "design.png";
@@ -105,9 +107,9 @@ export async function POST(request: Request) {
         : promptText.trim();
     const userPrompt = sanitizedPromptText || (isCreativeImageToImage
       ? IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST
-      : isSmartResize
-        ? "按目标尺寸重新设计新版式。原图只作为主题、品牌色、核心内容和素材参考，文字、Logo、主体、卖点和视觉重心必须按新画布重新排版，不要保留原图坐标。"
-        : "保留原图核心内容、主体、文字、Logo、电话、地址和品牌识别，只优化光影、背景质感、清晰度和商业完成度。");
+    : isSmartResize
+        ? "用户没有额外要求，请根据输入图片自行分析，并按目标比例/尺寸原生重新构图和重绘画面。"
+        : "用户没有额外要求，请根据输入图片自行分析并优化。");
 
     const prompt = buildImageEditPrompt({
       task,
@@ -125,11 +127,7 @@ export async function POST(request: Request) {
       protectionContext,
     });
 
-    const targetCount = modeLabel.includes("AI改尺寸") || modeLabel.includes("4K")
-      ? 1
-      : wantsMultipleImageOutputs(promptText)
-        ? 2
-        : 1;
+    const targetCount = isLegacyQualityExport ? 1 : 2;
     const promptVariants = Array.from({ length: targetCount }, (_, index) =>
       isCreativeImageToImage
         ? buildImageEditPrompt({
@@ -147,9 +145,9 @@ export async function POST(request: Request) {
             creativeVariant: index === 1 ? "subject" : "headline",
             protectionContext,
           })
-        : prompt,
+        : buildEditVariantPrompt(prompt, task, index, outputRatioLabel, outputSize),
     );
-    const responsePrompt = isCreativeImageToImage ? promptVariants.join("\n\n---\n\n") : prompt;
+    const responsePrompt = promptVariants.join("\n\n---\n\n");
     if (isAiResize && (fitMode === "crop" || fitMode === "pad")) {
       const processed = exactSize && customWidth && customHeight
         ? await processToExactSize(imageBuffer, outputSize, "png", processingFitMode)
@@ -208,10 +206,9 @@ export async function POST(request: Request) {
 
     const shouldPrepareTargetCanvas = !keepOriginalRatio && (
       shouldUseAiOutpaint ||
-      isSmartResize ||
       (isCreativeImageToImage && ratioMismatch(originalRatio, ratio))
     );
-    const preparedTargetCanvas = shouldPrepareTargetCanvas ? await prepareOutpaintInput(imageBuffer, ratio, direction, isSmartResize ? outputSize : undefined) : null;
+    const preparedTargetCanvas = shouldPrepareTargetCanvas ? await prepareOutpaintInput(imageBuffer, ratio, direction) : null;
     const openai = getOpenAI();
     let creativeEditFallbackSummary: Promise<string> | null = null;
     const getCreativeEditFallbackSummary = () => {
@@ -228,7 +225,7 @@ export async function POST(request: Request) {
         brandFilesPromise,
         shouldUseAiOutpaint && preparedTargetCanvas ? toFile(preparedTargetCanvas.mask, "outpaint-mask.png", { type: "image/png" }) : Promise.resolve(undefined),
       ]);
-      const inputFidelity = (isCreativeImageToImage || isSmartResize) ? "low" : "high";
+      const inputFidelity = isCreativeImageToImage || isSmartResize ? "low" : "high";
       const runEditRequest = () => runQueuedImageModelRequestWithRetry(
         { label: `${modeLabel}/${imageModel}` },
         () => openai.images.edit({
@@ -246,7 +243,7 @@ export async function POST(request: Request) {
       );
       const result = await withTimeout(
         runEditRequest().catch(async (error) => {
-          if (!(isCreativeImageToImage || isSmartResize) || !shouldFallbackCreativeImageEdit(error)) throw error;
+          if (!isCreativeImageToImage || !shouldFallbackCreativeImageEdit(error)) throw error;
           const summary = await getCreativeEditFallbackSummary();
           const fallbackSize = requestSize === "auto" ? getOpenAIRequestedSize(ratio, quality, imageModel) : requestSize;
           const fallbackPrompt = isSmartResize
@@ -263,8 +260,8 @@ export async function POST(request: Request) {
             }, imageRequestOptions()),
           );
         }),
-        30 * 60 * 1000,
-        "图片模型排队或响应超过 30 分钟仍未返回，请稍后重试或换一个更快的模型。",
+        7 * 60 * 1000,
+        "图片模型排队或响应超过 7 分钟仍未返回，请稍后重试或换一个更快的模型。",
       );
       return {
         prompt: requestPrompt,
@@ -314,7 +311,8 @@ export async function POST(request: Request) {
           throw error;
         });
         if ((isCreativeImageToImage || isGeneratedResize || isOutpaint) && (!final || final.qualityCheck.compositionRisk)) {
-          for (let attempt = 1; attempt <= 2 && (!final || final.qualityCheck.compositionRisk); attempt += 1) {
+          const retryLimit = isGeneratedResize ? (final ? 0 : 1) : 2;
+          for (let attempt = 1; attempt <= retryLimit && (!final || final.qualityCheck.compositionRisk); attempt += 1) {
             const retryPrompt = !final
               ? buildNativeEditRatioRetryPrompt(imagePrompt, attempt, outputRatioLabel, outputSize)
               : (isAiResize || isOutpaint)
@@ -414,7 +412,7 @@ export async function POST(request: Request) {
           sourceNodeKind: taskTrace?.nodeKind,
           fitMode,
           outputFitMode: resultFitMode,
-          resizeRecoveryMode: isSmartResize && preparedTargetCanvas ? "target_canvas_relayout" : undefined,
+          resizeRecoveryMode: isSmartResize ? "native_smart_relayout" : shouldUseAiOutpaint && preparedTargetCanvas ? "target_canvas_outpaint" : undefined,
         };
         await saveImageMetadata(saved.fileName, image);
         return image;
@@ -423,7 +421,8 @@ export async function POST(request: Request) {
     const settledImageResults = collectSettledImages(processedSettled);
     let images = settledImageResults.images;
     const fillErrors = settledImageResults.errors;
-    for (let attempt = 1; images.length < targetCount && attempt <= targetCount * 2; attempt += 1) {
+    const fillAttemptLimit = isGeneratedResize ? 0 : targetCount * 2;
+    for (let attempt = 1; images.length < targetCount && attempt <= fillAttemptLimit; attempt += 1) {
       const variantIndex = images.length;
       const basePrompt = promptVariants[variantIndex] || promptVariants[0] || prompt;
       const fillPrompt = buildMissingEditVariantRetryPrompt(basePrompt, attempt, targetCount, outputRatioLabel, outputSize, isAiResize ? "resize" : isOutpaint ? "outpaint" : "image_to_image");
@@ -499,7 +498,7 @@ export async function POST(request: Request) {
         sourceNodeKind: taskTrace?.nodeKind,
         fitMode,
         outputFitMode: resultFitMode,
-        resizeRecoveryMode: isSmartResize && preparedTargetCanvas ? "target_canvas_relayout" : undefined,
+        resizeRecoveryMode: isSmartResize ? "native_smart_relayout" : shouldUseAiOutpaint && preparedTargetCanvas ? "target_canvas_outpaint" : undefined,
       };
       await saveImageMetadata(saved.fileName, image);
       images = [...images, image];
@@ -532,6 +531,8 @@ export async function POST(request: Request) {
     const apiError = toApiError(error, "改图失败。");
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
+  } finally {
+    stopTaskHeartbeat();
   }
 
   });
@@ -595,8 +596,8 @@ async function summarizeCreativeEditSourceImage(
             {
               type: "input_text",
               text: [
-                "请分析这张图生图参考图，输出简洁中文说明，供后续广告创意改版生图使用。",
-                "请说明：设计类型、行业、主题、主色调、版式结构、核心文字、主体元素、品牌识别、必须保留的信息、可以重新设计的方向。",
+                "请分析这张图生图参考图，输出简洁中文说明，供后续按目标尺寸重新排版和创意改版生图使用。",
+                "请说明：设计类型、行业、主题、主色调、版式结构、核心文字、主体元素、品牌识别、信息层级、视觉重心、必须保留的信息、可以重新设计的方向。",
                 "不要编造电话、地址、Logo 或二维码；无法识别的信息请写“未识别”。",
                 `用户改版需求：${userPrompt || "参考原图重新设计一版广告画面。"}`,
               ].join("\n"),
@@ -633,13 +634,14 @@ function buildCreativeImageEditFallbackPrompt(prompt: string, sourceSummary: str
 function buildSmartResizeGenerateFallbackPrompt(prompt: string, sourceSummary: string, ratioText: string, target: PixelSize) {
   const core = compactRetryPrompt(prompt);
   return [
-    "Generate a smart relayout for a new canvas based on the source image analysis.",
+    "Generate a native smart relayout for a new canvas based on the source image analysis.",
     `Core request:\n${core}`,
-    `Target canvas: ${ratioText}, ${target.width}x${target.height}. Redesign for this new size; do not keep old coordinates.`,
-    "Re-layout title, subject, selling points, logo/QR/info area using the new canvas reading order and safe margins.",
-    "Preserve source theme, brand color, subject/IP/product identity, and core copy meaning.",
+    `Target canvas: ${ratioText}, ${target.width}x${target.height}. Redesign and redraw natively for this new size; do not keep old coordinates.`,
+    "The source image is the only factual reference. Preserve the exact industry, subject/person/product/IP identity, headline meaning, brand color direction, and main visual idea.",
+    "Only re-layout existing title, subject, selling points, and user-requested logo/QR/info area using the new canvas reading order and safe margins.",
     `Source analysis:\n${sourceSummary}`,
-    "Avoid crop, edge-pressed content, half-poster, blur/frosted padding, centered small image, copied old layout, fake phone/address/logo/QR.",
+    "Do not stretch, squeeze, warp, or mechanically scale the source image. Keep typography, logo, QR code, person/IP character, and product proportions natural. Do not paste the old poster as a centered smaller image.",
+    "Do not invent a different product, packaging, person, industry, campaign, phone, address, logo, QR code, or unrelated poster. Avoid crop, edge-pressed content, half-poster, blur/frosted padding, copied old layout.",
   ].join("\n");
 }
 
@@ -653,17 +655,17 @@ function buildResizeCompositionRetryPrompt(prompt: string, attempt: number, rati
   const targetRatio = target.width / Math.max(1, target.height);
   const isPortrait = targetRatio < 0.92;
   const orientationFix = isPortrait
-    ? "竖版：左右 18% 只放背景；标题、主体边缘、手脚、Logo、二维码和底部信息进中心安全区。"
-    : "横版：上下 18% 只放背景；标题顶部、主体底部、页脚和二维码进中心安全区。";
+    ? "竖版：左右 18% 只放背景；标题、主体边缘、手脚和用户明确要求的 Logo/二维码/底部信息进中心安全区。"
+    : "横版：上下 18% 只放背景；标题顶部、主体底部和用户明确要求的页脚/二维码进中心安全区。";
   const modeFix = fitMode === "smart_outpaint"
     ? "扩图补画重试：保留原版式和原视觉重心，只向四周或指定方向补全背景、空间和光影，不要重排文字。 Outpaint retry: keep original layout and visual center; extend background, space, and lighting only."
-    : "智能改版重试：按目标画布重新排版，不照搬原图坐标；标题、主体、卖点和 Logo 必须服从新尺寸阅读顺序。 Smart relayout retry: use the target canvas reading order; do not copy old coordinates.";
+    : "智能改版重试：按目标画布原生重新构图和重绘，不照搬原图坐标；标题、主体、卖点和用户明确要求的 Logo 必须服从新尺寸阅读顺序。 Smart relayout retry: redraw natively for the target canvas; do not copy old coordinates.";
   return [
     "Regenerate the resize result after composition QA failed.",
     `Core request:\n${core}`,
     `Retry ${attempt}: native ${ratioText}, target ${target.width}x${target.height}.`,
     modeFix,
-    "Fix: full poster visible, complete subject/text visible, no cropping, zoom out, larger safe margins; edges should be background only.",
+    "Fix: full poster visible, complete subject/text visible, no cropping, no stretching/warping, natural typography and character/product proportions, zoom out, larger safe margins; edges should be background only.",
     orientationFix,
     attempt >= 2 ? "Second retry: make the whole layout 20% smaller, move footer info inward, keep only background at edges." : "",
     "Avoid half poster, side/top blur padding, frosted edges, blank margins, text/subject touching edges.",
@@ -676,7 +678,8 @@ function buildNativeEditRatioRetryPrompt(prompt: string, attempt: number, ratioT
     "Regenerate the same edit with corrected native canvas.",
     `Core request:\n${core}`,
     `Retry ${attempt}: native ${ratioText}, target ${target.width}x${target.height}.`,
-    "Keep subject/person/product/text/logo/QR complete, zoom out, and place all important elements inside safe margins.",
+    "Keep subject/person/product/text and user-requested logo/QR complete, zoom out, and place all important elements inside safe margins.",
+    "For resize/relayout tasks, redraw the composition natively for the target canvas instead of stretching, squeezing, warping, cropping, or pasting the old image. Text, logo, QR, person/IP, and product proportions must look natural.",
     "Avoid crop, centered smaller image, blur padding, frosted edges, white/black border, stretched background.",
   ].join("\n");
 }
@@ -688,8 +691,24 @@ function buildMissingEditVariantRetryPrompt(prompt: string, attempt: number, tar
     `Generate one additional usable ${taskText} candidate.`,
     `Core request:\n${core}`,
     `Need ${targetCount} total candidates; retry ${attempt}. Native ${ratioText}, target ${target.width}x${target.height}.`,
-    "Keep key subject/person/product/logo/QR/text complete and visible; do not crop, press content to edges, or return another ratio.",
+    task === "resize"
+      ? "This is resize/relayout, not a new unrelated poster and not mechanical scaling. Redraw natively for the target canvas while preserving the same source person/product/IP, industry, headline meaning, style family, color direction, and selling points. Do not stretch or warp the source image; keep text and character/product proportions natural."
+      : "",
+    "Keep key subject/person/product/text and user-requested logo/QR complete and visible; do not crop, press content to edges, or return another ratio.",
     "No blur/frosted padding and no centered small image.",
+  ].filter(Boolean).join("\n");
+}
+
+function buildEditVariantPrompt(prompt: string, task: "image_to_image" | "resize" | "outpaint", index: number, ratioText: string, target: PixelSize) {
+  return [
+    prompt,
+    "",
+    `请先自行分析输入图和用户要求，再输出最终图片。目标比例/尺寸：${ratioText} / ${target.width}×${target.height}。`,
+    index <= 0
+      ? "方案A：偏清晰直接、好理解、适合投放。"
+      : "方案B：偏高级、有创意、有品牌感；不要只是和方案A换颜色。",
+    task === "resize" ? "这是 AI 改比例任务：必须按目标画布原生重新构图和重绘，不要把原图拉伸、压扁、裁切、补黑边白边，也不要把旧图缩小贴在中间；字体、Logo、二维码、人物/IP、产品都要保持自然比例。" : "",
+    task === "outpaint" ? "这是扩图任务，请按用户要求扩展画面。" : "",
   ].join("\n");
 }
 
@@ -699,7 +718,7 @@ function buildEditModelNativeSizeFallbackPrompt(prompt: string, ratioText: strin
     "Generate the same edit with extra safe margins for system size adaptation.",
     `Core request:\n${core}`,
     `Final system output will be ${ratioText}, ${target.width}x${target.height}.`,
-    "Place subject/title/logo/product/person/QR safely away from edges and leave natural background around them.",
+    "Place subject/title/product/person and user-requested logo/QR safely away from edges and leave natural background around them.",
     "Avoid edge-touching important content, oversized full-bleed subject, border, blur/frosted padding, centered small image.",
   ].join("\n");
 }
@@ -715,7 +734,7 @@ function buildImageToImageCompositionRetryPrompt(prompt: string, attempt = 1) {
     "Regenerate the image-to-image result after composition QA failed.",
     `Core request:\n${core}`,
     `Retry ${attempt}: zoom out; make title and subject smaller; keep all text/subject/banner content complete.`,
-    "For ultra-wide canvas, keep the finished design inside the vertical center safe band and move title/logo/subject/selling points/footer away from top/bottom edges.",
+    "For ultra-wide canvas, keep the finished design inside the vertical center safe band and move title/subject/selling points/user-requested footer away from top/bottom edges.",
     attempt >= 2 ? "Second retry: title 20% smaller, subject 15% smaller, edges only background texture." : "",
   ].join("\n");
 }
@@ -827,10 +846,6 @@ function ratioMismatch(a: PixelSize, b: PixelSize) {
   const first = a.width / Math.max(1, a.height);
   const second = b.width / Math.max(1, b.height);
   return Math.abs(first - second) / Math.max(0.0001, second) > 0.012;
-}
-
-function wantsMultipleImageOutputs(text: string) {
-  return /(?:两张|2张|两个|2个|双方案|多方案|多版|方案一|方案二|A\/B|AB|variants?)/i.test(text);
 }
 
 async function imageResultToBuffer(base64?: string | null, url?: string | null) {

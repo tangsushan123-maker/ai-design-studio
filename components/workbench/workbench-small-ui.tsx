@@ -30,17 +30,17 @@ export function ToolbarButton({
 }) {
   return (
     <button
-      className={`flex items-center justify-center rounded-[18px] border transition ${
+      className={`flex items-center justify-center rounded-full border transition ${
         tone === "danger"
           ? "apple-button-danger text-[#ffb4a8]"
           : "apple-button text-white/72"
-      } ${expanded ? "w-full flex-col gap-1 px-1 py-2.5" : "size-10 px-0 py-0"}`}
+      } ${expanded ? "h-9 w-full justify-start gap-2 px-3" : "size-9 px-0 py-0"}`}
       onClick={onClick}
       title={label}
       type="button"
     >
-      {icon}
-      {expanded ? <span className="text-[11px] leading-none opacity-80">{label}</span> : null}
+      <span className="shrink-0">{icon}</span>
+      {expanded ? <span className="min-w-0 truncate text-[12px] leading-none opacity-85">{label}</span> : null}
     </button>
   );
 }
@@ -79,12 +79,29 @@ export function EmptyPanel({ description, icon, title }: { description: string; 
   );
 }
 
-export function InspectorSection({ children, title }: { children: ReactNode; title: string }) {
+export function InspectorSection({ children, title, hint }: { children: ReactNode; title: string; hint?: string }) {
   return (
     <section className="apple-surface-section space-y-2 p-3">
-      <div className="apple-section-title text-[12px] text-white/72">{title}</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="apple-section-title min-w-0 text-[12px] text-white/72">{title}</div>
+        {hint ? <div className="shrink-0 rounded-full border border-white/10 bg-white/[0.045] px-2 py-1 text-[11px] leading-none text-white/42">{hint}</div> : null}
+      </div>
       {children}
     </section>
+  );
+}
+
+export function InspectorAdvancedSection({ children, defaultOpen = false, title }: { children: ReactNode; defaultOpen?: boolean; title: string }) {
+  return (
+    <details className="group rounded-[16px] border border-white/10 bg-white/[0.035] p-2" open={defaultOpen}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-[12px] px-1 py-1 text-[11px] font-semibold text-white/56 marker:hidden">
+        <span>{title}</span>
+        <span className="text-[11px] text-white/34 transition group-open:rotate-180">⌄</span>
+      </summary>
+      <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
+        {children}
+      </div>
+    </details>
   );
 }
 

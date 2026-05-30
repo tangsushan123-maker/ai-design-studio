@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useState, type ReactNode } from "react";
-import { ArrowDownToLine, Images, Plus, RefreshCcw, Search, ShieldCheck, Star, Trash2, X } from "lucide-react";
+import { Copy, Images, RefreshCcw, RotateCcw, Search, Star, Trash2, X } from "lucide-react";
 import { ImageFrame } from "@/components/workbench/image-frame";
 import { imageManagerMatchesSearch } from "@/lib/workbench-image-manager";
 
@@ -70,27 +70,19 @@ type ImageManagerNode<TImage extends ImageManagerImage> = {
   };
 };
 
-type ImageManagerFilter = "全部" | "需复查" | "收藏" | "项目素材" | "节点引用" | "PNG三层" | "可清理" | "回收站";
+type ImageManagerFilter = "全部" | "收藏" | "回收站";
 
-const imageManagerFilters: ImageManagerFilter[] = ["全部", "需复查", "收藏", "项目素材", "节点引用", "PNG三层", "可清理", "回收站"];
+const imageManagerFilters: ImageManagerFilter[] = ["全部", "收藏", "回收站"];
 
 function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode extends ImageManagerNode<TImage>>({
-  downloadRemoteFile,
-  formatFileSize,
-  formatGeneratedAt,
   historyHasMore,
   historyLoadingMore,
   imageDeletionProtection,
-  imageSizeLabel,
-  imageSourceSummary,
   images,
   mergeImages,
   nodeOperationLabel,
   nodes,
-  onAddToCanvas,
-  onBatchDelete,
-  onBatchPermanentDelete,
-  onBatchRestore,
+  onCopyImage,
   onDelete,
   onLoadMore,
   onLoadMoreTrash,
@@ -112,19 +104,11 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   trashHasMore: boolean;
   trashImages: TImage[];
   trashLoadingMore: boolean;
-  downloadRemoteFile: (url: string, fileName: string) => Promise<void>;
-  formatFileSize: (bytes?: number) => string;
-  formatGeneratedAt: (value?: string) => string;
   imageDeletionProtection: (image: TImage, nodes: TNode[], projectAssets: TImage[]) => ImageDeletionProtection;
-  imageSizeLabel: (image: TImage) => string;
-  imageSourceSummary: (image: TImage, labelForOperation?: (value?: string) => string) => string;
   mergeImages: (incoming: TImage[], current: TImage[]) => TImage[];
   nodeOperationLabel: (value?: string) => string;
   shouldShowCheckerboard: (image: TImage | null | undefined) => boolean;
-  onAddToCanvas: (image: TImage) => void;
-  onBatchDelete: (images: TImage[]) => void | Promise<unknown>;
-  onBatchPermanentDelete: (images: TImage[]) => void | Promise<unknown>;
-  onBatchRestore: (images: TImage[]) => void | Promise<unknown>;
+  onCopyImage: (image: TImage) => void | Promise<unknown>;
   onDelete: (image: TImage) => void | Promise<unknown>;
   onLoadMore: () => void;
   onLoadMoreTrash: () => void;
@@ -135,119 +119,43 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
 }) {
   const [filter, setFilter] = useState<ImageManagerFilter>("全部");
   const [query, setQuery] = useState("");
-  const [batchActionLabel, setBatchActionLabel] = useState("");
-  const [downloadingKey, setDownloadingKey] = useState("");
+  const [copyingKey, setCopyingKey] = useState("");
   const [favoritingKey, setFavoritingKey] = useState("");
   const [rowActionKey, setRowActionKey] = useState("");
   const [confirmActionKey, setConfirmActionKey] = useState("");
   const [loadingMoreKey, setLoadingMoreKey] = useState("");
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const normalizedQuery = query.trim();
   const managedImages = useMemo(() => {
     const trashedImages = trashImages.map((image) => ({ ...image, trashed: true })) as TImage[];
-    const projectAssetImages = projectAssets.map((image) => ({ ...image, source: "asset" })) as TImage[];
-    return mergeImages(trashedImages, mergeImages(images, projectAssetImages));
-  }, [images, mergeImages, projectAssets, trashImages]);
+    return mergeImages(trashedImages, images);
+  }, [images, mergeImages, trashImages]);
   const managedRows = useMemo(
     () => managedImages.map((image) => ({ image, protection: imageDeletionProtection(image, nodes, projectAssets) })),
     [imageDeletionProtection, managedImages, nodes, projectAssets],
   );
-  const stats = useMemo(() => imageManagerStats(managedRows), [managedRows]);
   const filteredRows = useMemo(
-    () => managedRows.filter((row) => imageManagerMatchesFilter(row.image, row.protection, filter) && imageManagerMatchesSearch(row.image, row.protection, normalizedQuery, nodeOperationLabel)),
+    () => managedRows.filter((row) => imageManagerMatchesFilter(row.protection, filter) && imageManagerMatchesSearch(row.image, row.protection, normalizedQuery, nodeOperationLabel)),
     [filter, managedRows, nodeOperationLabel, normalizedQuery],
   );
-  const selectableRows = useMemo(
-    () => filteredRows.filter((row) => imageManagerRowSelectable(row.protection)),
-    [filteredRows],
-  );
-  const selectedSummary = useMemo(() => {
-    const rows = managedRows.filter((row) => selectedKeys.has(imageManagerKey(row.image)));
-    return rows.reduce((summary, row) => {
-      summary.images.push(row.image);
-      if (row.protection.isTrashed) summary.trashCount += 1;
-      if (row.protection.canDelete && !row.protection.isTrashed) summary.cleanableCount += 1;
-      return summary;
-    }, { rows, images: [] as TImage[], trashCount: 0, cleanableCount: 0 });
-  }, [managedRows, selectedKeys]);
-
-  const selectedRows = selectedSummary.rows;
-  const selectedImages = selectedSummary.images;
-  const selectedTrashCount = selectedSummary.trashCount;
-  const selectedCleanableCount = selectedSummary.cleanableCount;
-  const allVisibleSelectableSelected = Boolean(selectableRows.length && selectableRows.every((row) => selectedKeys.has(imageManagerKey(row.image))));
-
-  function toggleSelected(image: TImage) {
-    const key = imageManagerKey(image);
-    setSelectedKeys((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
-
-  function selectVisible() {
-    setSelectedKeys((current) => {
-      const next = new Set(current);
-      selectableRows.forEach((row) => next.add(imageManagerKey(row.image)));
-      return next;
-    });
-  }
 
   function clearSelected() {
-    setSelectedKeys(new Set());
-  }
-
-  function toggleVisibleSelection() {
-    if (allVisibleSelectableSelected) {
-      const visibleKeys = new Set(selectableRows.map((row) => imageManagerKey(row.image)));
-      setSelectedKeys((current) => new Set(Array.from(current).filter((key) => !visibleKeys.has(key))));
-      return;
-    }
-    selectVisible();
-  }
-
-  async function downloadImage(image: TImage) {
-    const key = imageManagerKey(image);
-    if (downloadingKey) return;
-    setDownloadingKey(key);
-    setActionMessage(null);
-    try {
-      await downloadRemoteFile(image.url, imageManagerDownloadName(image));
-      setActionMessage({ tone: "success", text: `已开始下载 ${imageManagerDownloadName(image)}。` });
-    } catch (error) {
-      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "下载失败。" });
-    } finally {
-      setDownloadingKey("");
-    }
-  }
-
-  async function runBatchAction(label: string, action: () => void | Promise<unknown>) {
-    if (batchActionLabel) return;
-    setBatchActionLabel(label);
-    setActionMessage(null);
-    try {
-      await action();
-      clearSelected();
-      setActionMessage({ tone: "success", text: `${label}已提交。` });
-    } catch (error) {
-      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : `${label}失败。` });
-    } finally {
-      setBatchActionLabel("");
-    }
-  }
-
-  async function runConfirmedBatchAction(label: string, action: () => void | Promise<unknown>) {
-    const key = `${label}:${selectedKeysKey(selectedKeys)}`;
-    if (confirmActionKey !== key) {
-      setConfirmActionKey(key);
-      setActionMessage({ tone: "success", text: `再点一次确认${label}。` });
-      return;
-    }
     setConfirmActionKey("");
-    await runBatchAction(label, action);
+  }
+
+  async function copyImage(image: TImage) {
+    const key = imageManagerKey(image);
+    if (copyingKey) return;
+    setCopyingKey(key);
+    setActionMessage(null);
+    try {
+      await onCopyImage(image);
+      setActionMessage({ tone: "success", text: "图片已复制。" });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "复制失败。" });
+    } finally {
+      setCopyingKey("");
+    }
   }
 
   async function runRowAction(label: string, image: TImage, action: () => void | Promise<unknown>) {
@@ -310,46 +218,32 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
         </div>
       );
     }
-    return <EmptyPanel icon={<Images className="size-8" />} title="暂无图片" description="生成或上传图片后，这里会显示来源、保护状态和可清理项。" />;
+    return <EmptyPanel icon={<Images className="size-8" />} title="暂无图片" description="生成或上传图片后，这里会显示项目图片。" />;
   }
 
   return (
     <div className="space-y-3">
-      <section className="apple-surface-section space-y-2.5 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="text-[13px] font-semibold text-white/84">图片管理</div>
-            <div className="apple-caption mt-1">
-              先保护收藏、项目素材和节点引用；当前显示 {filteredRows.length}/{managedRows.length} 张。
-            </div>
-          </div>
-          <ShieldCheck className="size-4 shrink-0 text-[#74e3c5]" />
+      <div className="apple-panel sticky top-0 z-10 rounded-[18px] p-2">
+        <div className="mb-2 flex items-center justify-between gap-2 px-1">
+          <div className="text-[13px] font-semibold text-white/82">项目图片</div>
+          <div className="apple-pill px-2 py-1 text-[11px]">{filteredRows.length}/{managedRows.length}</div>
         </div>
-        <div className="grid grid-cols-3 gap-1.5">
-          <ImageManagerStat label="图片" value={String(stats.totalCount)} />
-          <ImageManagerStat label="占用" value={stats.totalBytes ? formatFileSize(stats.totalBytes) : "未记录"} />
-          <ImageManagerStat label="保护" value={String(stats.protectedCount)} />
-          <ImageManagerStat label="复查" value={String(stats.reviewCount)} tone={stats.reviewCount ? "warning" : "muted"} />
-          <ImageManagerStat label="可清理" value={String(stats.cleanableCount)} tone={stats.cleanableCount ? "cleanable" : "muted"} />
-          <ImageManagerStat label="回收站" value={String(stats.trashCount)} tone={stats.trashCount ? "cleanable" : "muted"} />
+        <div className="grid grid-cols-3 gap-1">
+          {imageManagerFilters.map((item) => (
+            <button
+              className={`apple-segment min-w-0 truncate px-1.5 py-1.5 text-[11px] transition ${filter === item ? "apple-segment-active" : ""}`}
+              key={item}
+              onClick={() => {
+                setFilter(item);
+                clearSelected();
+              }}
+              type="button"
+            >
+              {item}
+            </button>
+          ))}
         </div>
-      </section>
-
-      <div className="apple-panel sticky top-0 z-10 grid grid-cols-3 gap-1 rounded-[18px] p-1.5">
-        {imageManagerFilters.map((item) => (
-          <button
-            className={`apple-segment px-2 py-1.5 text-[11px] transition ${filter === item ? "apple-segment-active" : ""}`}
-            key={item}
-            onClick={() => {
-              setFilter(item);
-              clearSelected();
-            }}
-            type="button"
-          >
-            {item}
-          </button>
-        ))}
-        <label className="col-span-3 mt-1 flex h-8 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.05] px-2.5 text-[11px] text-white/58 focus-within:border-[#8fa7ff]/40 focus-within:bg-white/[0.075]">
+        <label className="mt-1.5 flex h-8 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.05] px-2.5 text-[11px] text-white/58 focus-within:border-[#8fa7ff]/40 focus-within:bg-white/[0.075]">
           <Search className="size-3.5 shrink-0 text-white/38" />
           <input
             className="min-w-0 flex-1 bg-transparent text-white/72 outline-none placeholder:text-white/30"
@@ -357,7 +251,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
               setQuery(event.target.value);
               clearSelected();
             }}
-            placeholder="搜索文件、来源、质检、保护状态"
+            placeholder="搜索图片"
             value={query}
           />
           {query ? (
@@ -374,57 +268,6 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
             </button>
           ) : null}
         </label>
-      </div>
-
-      <div className="apple-surface-section flex flex-wrap items-center gap-1.5 p-2">
-        <button
-          className="apple-button h-8 px-2.5 text-[11px] text-white/66 disabled:opacity-40"
-          disabled={!selectableRows.length}
-          onClick={toggleVisibleSelection}
-          type="button"
-        >
-          {allVisibleSelectableSelected ? "取消本页" : "选择本页"}
-        </button>
-        <button
-          className="apple-button h-8 px-2.5 text-[11px] text-white/50 disabled:opacity-40"
-          disabled={!selectedRows.length}
-          onClick={clearSelected}
-          type="button"
-        >
-          清空选择
-        </button>
-        <span className="apple-caption ml-auto text-[11px]">
-          已选 {selectedRows.length} 张
-        </span>
-        {filter === "回收站" ? (
-          <>
-            <button
-              className="apple-pill-accent h-8 px-2.5 text-[11px] disabled:opacity-40"
-              disabled={!selectedTrashCount || Boolean(batchActionLabel)}
-              onClick={() => void runBatchAction("批量恢复", () => onBatchRestore(selectedImages))}
-              type="button"
-            >
-              {batchActionLabel === "批量恢复" ? "恢复中..." : "批量恢复"}
-            </button>
-            <button
-              className="apple-button h-8 px-2.5 text-[11px] text-[#ffb4a8] disabled:opacity-40"
-              disabled={!selectedTrashCount || Boolean(batchActionLabel)}
-              onClick={() => void runConfirmedBatchAction("批量彻删", () => onBatchPermanentDelete(selectedImages))}
-              type="button"
-            >
-              {batchActionLabel === "批量彻删" ? "删除中..." : confirmActionKey === `批量彻删:${selectedKeysKey(selectedKeys)}` ? "确认彻删" : "批量彻删"}
-            </button>
-          </>
-        ) : (
-          <button
-            className="apple-button h-8 px-2.5 text-[11px] text-[#ffb4a8] disabled:opacity-40"
-            disabled={!selectedCleanableCount || Boolean(batchActionLabel)}
-            onClick={() => void runConfirmedBatchAction("批量移到回收站", () => onBatchDelete(selectedImages))}
-            type="button"
-          >
-            {batchActionLabel === "批量移到回收站" ? "移动中..." : confirmActionKey === `批量移到回收站:${selectedKeysKey(selectedKeys)}` ? "确认移入回收站" : "批量移到回收站"}
-          </button>
-        )}
       </div>
 
       {actionMessage ? (
@@ -456,102 +299,83 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
         </div>
       ) : null}
 
-      <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
         {filteredRows.map(({ image, protection }) => (
-          <article className="apple-surface-section overflow-hidden p-2.5" key={imageManagerKey(image)}>
-            <div className="grid grid-cols-[22px_74px_minmax(0,1fr)] gap-2.5">
-              <label className="flex pt-1" title={imageManagerRowSelectable(protection) ? "选择图片" : `受保护：${protection.reasons.join("、") || "不可批量操作"}`}>
-                <input
-                  checked={selectedKeys.has(imageManagerKey(image))}
-                  className="size-4 accent-[#74e3c5] disabled:opacity-30"
-                  disabled={!imageManagerRowSelectable(protection)}
-                  onChange={() => toggleSelected(image)}
-                  type="checkbox"
-                />
-              </label>
-              <button className="block overflow-hidden rounded-[14px] text-left" onClick={() => onPreview(image)} type="button">
-                <ImageFrame
-                  alt={imageManagerTitle(image)}
-                  className="rounded-[14px] border-white/8"
-                  fit="contain"
-                  image={image}
-                  preserveRatio={false}
-                  showCheckerboard={shouldShowCheckerboard(image)}
-                  style={{ height: 74, width: 74 }}
-                  variant="thumbnail"
-                />
-              </button>
-              <div className="min-w-0">
-                <button className="block w-full min-w-0 text-left" onClick={() => onPreview(image)} type="button">
-                  <div className="truncate text-[11px] font-semibold text-white/76">{imageManagerTitle(image)}</div>
-                  <div className="mt-1 truncate text-[11px] text-white/40">{imageSourceSummary(image, nodeOperationLabel)}</div>
-                  <div className="mt-0.5 truncate text-[11px] text-white/36">
-                    {[imageSizeLabel(image), image.fileSizeBytes ? formatFileSize(image.fileSizeBytes) : "", formatGeneratedAt(image.generatedAt)].filter(Boolean).join(" · ")}
-                  </div>
-                </button>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {imageManagerTags(image, protection).map((tag) => (
-                    <span className={imageManagerTagClass(tag.tone)} key={tag.label}>{tag.label}</span>
-                  ))}
-                </div>
-              </div>
-            </div>
+          <article className="apple-surface-section min-w-0 overflow-hidden p-1.5" key={imageManagerKey(image)}>
+            <button className="relative block w-full overflow-hidden rounded-[14px] text-left" onClick={() => onPreview(image)} type="button">
+              <ImageFrame
+                alt={imageManagerTitle(image)}
+                className="rounded-[14px] border-white/8"
+                fit="contain"
+                image={image}
+                preserveRatio={false}
+                showCheckerboard={shouldShowCheckerboard(image)}
+                style={{ height: 112 }}
+                variant="thumbnail"
+              />
+            </button>
 
-            <div className="mt-2 grid grid-cols-5 gap-1">
-              <button className="apple-button flex h-8 items-center justify-center text-[11px]" onClick={() => onPreview(image)} type="button">
-                预览
-              </button>
+            <div className="mt-1.5 grid grid-cols-3 gap-1">
               {protection.isTrashed ? (
                 <button
-                  className="apple-button flex h-8 items-center justify-center gap-1 text-[11px] text-[#adf8e5] disabled:opacity-45"
+                  aria-label={rowActionKey === `恢复图片:${imageManagerKey(image)}` ? "恢复中" : "恢复"}
+                  className="apple-button col-span-2 flex h-8 min-w-0 items-center justify-center gap-1 text-[11px] text-[#adf8e5] disabled:opacity-45"
                   disabled={Boolean(rowActionKey)}
                   onClick={() => void runRowAction("恢复图片", image, () => onRestore(image))}
+                  title={rowActionKey === `恢复图片:${imageManagerKey(image)}` ? "恢复中" : "恢复"}
                   type="button"
                 >
-                  {rowActionKey === `恢复图片:${imageManagerKey(image)}` ? <RefreshCcw className="size-3 animate-spin" /> : <RefreshCcw className="size-3" />}
-                  {rowActionKey === `恢复图片:${imageManagerKey(image)}` ? "恢复中" : "恢复"}
+                  {rowActionKey === `恢复图片:${imageManagerKey(image)}` ? <RefreshCcw className="size-3 animate-spin" /> : <RotateCcw className="size-3" />}
+                  <span className="truncate">{rowActionKey === `恢复图片:${imageManagerKey(image)}` ? "恢复中" : "恢复"}</span>
                 </button>
-              ) : (
-                <button className="apple-button flex h-8 items-center justify-center gap-1 text-[11px]" onClick={() => onAddToCanvas(image)} type="button">
-                  <Plus className="size-3" />
-                  画布
-                </button>
-              )}
-              {protection.isTrashed ? (
-                <span className="apple-button flex h-8 items-center justify-center text-[11px] text-white/28">已删除</span>
               ) : (
                 <button
-                  className={`apple-button flex h-8 items-center justify-center gap-1 text-[11px] disabled:opacity-45 ${image.favorite ? "text-[#ffe1a0]" : ""}`}
+                  aria-label={image.favorite ? "取消收藏" : "收藏"}
+                  className={`apple-button flex h-8 min-w-0 items-center justify-center gap-1 px-1.5 text-[11px] disabled:opacity-45 ${image.favorite ? "text-[#ffe1a0]" : ""}`}
                   disabled={Boolean(favoritingKey)}
                   onClick={() => void toggleFavorite(image)}
+                  title={favoritingKey === imageManagerKey(image) ? (image.favorite ? "取消中" : "收藏中") : image.favorite ? "已收藏" : "收藏"}
                   type="button"
                 >
-                  <Star className={`size-3 ${favoritingKey === imageManagerKey(image) ? "animate-pulse" : ""} ${image.favorite ? "fill-current" : ""}`} />
-                  {favoritingKey === imageManagerKey(image) ? (image.favorite ? "取消中" : "收藏中") : image.favorite ? "已藏" : "收藏"}
+                  <Star className={`size-3.5 ${favoritingKey === imageManagerKey(image) ? "animate-pulse" : ""} ${image.favorite ? "fill-current" : ""}`} />
+                  <span className="hidden truncate min-[420px]:inline">{image.favorite ? "已藏" : "收藏"}</span>
                 </button>
               )}
+              {!protection.isTrashed ? (
+                <button
+                  aria-label={copyingKey === imageManagerKey(image) ? "复制中" : "复制"}
+                  className="apple-button flex h-8 min-w-0 items-center justify-center gap-1 px-1.5 text-[11px] disabled:opacity-45"
+                  disabled={Boolean(copyingKey)}
+                  onClick={() => void copyImage(image)}
+                  title={copyingKey === imageManagerKey(image) ? "复制中" : "复制"}
+                  type="button"
+                >
+                  {copyingKey === imageManagerKey(image) ? <RefreshCcw className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}
+                  <span className="hidden truncate min-[420px]:inline">复制</span>
+                </button>
+              ) : null}
               <button
-                className="apple-button flex h-8 items-center justify-center gap-1 text-[11px] disabled:opacity-45"
-                disabled={Boolean(downloadingKey)}
-                onClick={() => void downloadImage(image)}
-                type="button"
-              >
-                {downloadingKey === imageManagerKey(image) ? <RefreshCcw className="size-3 animate-spin" /> : <ArrowDownToLine className="size-3" />}
-                {downloadingKey === imageManagerKey(image) ? "下载中" : "下载"}
-              </button>
-              <button
-                className="apple-button flex h-8 items-center justify-center gap-1 text-[11px] text-[#ffb4a8] disabled:cursor-not-allowed disabled:text-white/28"
+                aria-label={
+                  rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}`
+                    ? "处理中"
+                    : confirmActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}`
+                      ? "确认删除"
+                      : protection.isTrashed ? "彻底删除" : "删除"
+                }
+                className="apple-button flex h-8 min-w-0 items-center justify-center gap-1 px-1.5 text-[11px] text-[#ffb4a8] disabled:cursor-not-allowed disabled:text-white/28"
                 disabled={Boolean(rowActionKey) || (!protection.canDelete && !protection.isTrashed)}
                 onClick={() => void runConfirmedRowAction(protection.isTrashed ? "彻底删除图片" : "删除图片", image, () => protection.isTrashed ? onPermanentDelete(image) : onDelete(image))}
-                title={protection.isTrashed ? "从回收站彻底删除" : protection.canDelete ? "移到回收站" : `受保护：${protection.reasons.join("、")}`}
+                title={
+                  rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}`
+                    ? "处理中"
+                    : confirmActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}`
+                      ? "再次点击确认删除"
+                    : protection.isTrashed ? "从回收站彻底删除" : protection.canDelete ? "移到回收站" : "正在使用，暂不能删除"
+                }
                 type="button"
               >
-                {rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}` ? <RefreshCcw className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
-                {rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}`
-                  ? "处理中"
-                  : confirmActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}`
-                    ? "确认"
-                    : protection.isTrashed ? "彻删" : "删除"}
+                {rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}` ? <RefreshCcw className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                <span className="hidden truncate min-[420px]:inline">{confirmActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}` ? "确认" : "删除"}</span>
               </button>
             </div>
           </article>
@@ -594,108 +418,17 @@ function EmptyPanel({ description, icon, title }: { description: string; icon: R
   );
 }
 
-function ImageManagerStat({ label, value, tone = "normal" }: { label: string; value: string; tone?: "normal" | "cleanable" | "warning" | "muted" }) {
-  const valueTone = tone === "cleanable" ? "text-[#ffe1a0]" : tone === "warning" ? "text-[#ffb4a8]" : tone === "muted" ? "text-white/46" : "text-white/82";
-  return (
-    <div className="rounded-[14px] border border-white/10 bg-white/[0.035] px-2 py-2 text-center">
-      <div className={`truncate text-[11px] font-semibold ${valueTone}`}>{value}</div>
-      <div className="mt-0.5 text-[11px] text-white/38">{label}</div>
-    </div>
-  );
-}
-
 function imageManagerKey(image: Pick<ImageManagerImage, "fileName" | "id" | "url">) {
   return image.fileName || image.id || image.url;
 }
 
-function selectedKeysKey(keys: Set<string>) {
-  return Array.from(keys).sort().join("|");
-}
-
-function imageManagerRowSelectable(protection: ImageDeletionProtection) {
-  return protection.isTrashed || (protection.canDelete && !protection.protected);
-}
-
-function imageManagerStats<TImage extends ImageManagerImage>(rows: Array<{ image: TImage; protection: ImageDeletionProtection }>) {
-  return rows.reduce(
-    (stats, row) => {
-      stats.totalCount += 1;
-      stats.totalBytes += row.image.fileSizeBytes || 0;
-      if (row.protection.protected) stats.protectedCount += 1;
-      if (row.protection.canDelete && !row.protection.isTrashed) stats.cleanableCount += 1;
-      if (row.protection.isProjectAsset) stats.projectAssetCount += 1;
-      if (row.protection.usedByNodes) stats.nodeReferencedCount += 1;
-      if (row.protection.isLayerPack) stats.layerPackCount += 1;
-      if (row.protection.isTrashed) stats.trashCount += 1;
-      if (!row.protection.isTrashed && imageManagerNeedsReview(row.image)) stats.reviewCount += 1;
-      return stats;
-    },
-    {
-      totalCount: 0,
-      totalBytes: 0,
-      protectedCount: 0,
-      cleanableCount: 0,
-      projectAssetCount: 0,
-      nodeReferencedCount: 0,
-      layerPackCount: 0,
-      trashCount: 0,
-      reviewCount: 0,
-    },
-  );
-}
-
-function imageManagerMatchesFilter(image: ImageManagerImage, protection: ImageDeletionProtection, filter: ImageManagerFilter) {
+function imageManagerMatchesFilter(protection: ImageDeletionProtection, filter: ImageManagerFilter) {
   if (protection.isTrashed) return filter === "回收站";
-  if (filter === "需复查") return imageManagerNeedsReview(image);
   if (filter === "收藏") return protection.isFavorite;
-  if (filter === "项目素材") return protection.isProjectAsset;
-  if (filter === "节点引用") return protection.usedByNodes > 0;
-  if (filter === "PNG三层") return protection.isLayerPack;
-  if (filter === "可清理") return protection.canDelete && !protection.isTrashed;
   if (filter === "回收站") return false;
   return true;
 }
 
 function imageManagerTitle(image: ImageManagerImage) {
-  if (image.materialType) return image.materialType;
-  if (image.branchLabel) return image.branchLabel;
-  if (image.nodeOperation === "png_layers" || image.pngLayerExport) return "PNG三层";
-  if (image.mode && image.mode !== "本地历史") return image.mode;
   return image.fileName?.split("/").pop() || image.id || "图片";
-}
-
-function imageManagerNeedsReview(image: ImageManagerImage) {
-  return image.qualityCheck?.deliverability === "needs_review" || image.qualityCheck?.deliverability === "not_ready" || Boolean(image.qualityCheck?.status && image.qualityCheck.status !== "passed");
-}
-
-function imageManagerQualityTag(image: ImageManagerImage) {
-  if (!imageManagerNeedsReview(image)) return null;
-  if (image.qualityCheck?.deliverability === "not_ready") return "不可交付";
-  if (image.qualityCheck?.status && image.qualityCheck.status !== "passed") return "质检未过";
-  return "需复查";
-}
-
-function imageManagerTags(image: ImageManagerImage, protection: ImageDeletionProtection) {
-  const tags: Array<{ label: string; tone: "safe" | "info" | "warning" | "danger" | "muted" }> = [];
-  const qualityTag = imageManagerQualityTag(image);
-  if (qualityTag && !protection.isTrashed) tags.push({ label: qualityTag, tone: "danger" });
-  if (protection.isFavorite) tags.push({ label: "收藏", tone: "warning" });
-  if (protection.isTrashed) tags.push({ label: "回收站", tone: "warning" });
-  if (protection.isProjectAsset) tags.push({ label: "项目素材", tone: "safe" });
-  if (protection.usedByNodes) tags.push({ label: `节点引用 ${protection.usedByNodes}`, tone: "info" });
-  if (protection.isLayerPack) tags.push({ label: "PNG三层", tone: "info" });
-  if (!tags.length) tags.push({ label: "可清理", tone: "muted" });
-  return tags;
-}
-
-function imageManagerTagClass(tone: "safe" | "info" | "warning" | "danger" | "muted") {
-  if (tone === "safe") return "rounded-full border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-2 py-0.5 text-[11px] text-[#adf8e5]";
-  if (tone === "danger") return "rounded-full border border-[#ff6b5f]/22 bg-[#ff6b5f]/10 px-2 py-0.5 text-[11px] text-[#ffc1b8]";
-  if (tone === "warning") return "rounded-full border border-[#ffd166]/18 bg-[#ffd166]/10 px-2 py-0.5 text-[11px] text-[#ffe1a0]";
-  if (tone === "info") return "rounded-full border border-white/12 bg-white/[0.06] px-2 py-0.5 text-[11px] text-white/58";
-  return "rounded-full border border-white/10 bg-white/[0.035] px-2 py-0.5 text-[11px] text-white/42";
-}
-
-function imageManagerDownloadName(image: ImageManagerImage) {
-  return image.fileName?.split("/").pop() || image.id || "image.png";
 }

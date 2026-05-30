@@ -62,6 +62,29 @@ export function uniqueImageAssets<T extends Pick<ImageAsset, "fileName" | "id" |
   });
 }
 
+export function isMaskUtilityImage(image: ImageAsset | null | undefined) {
+  if (!image) return false;
+  const fileFields = [
+    image.fileName,
+    image.resourceFileName,
+    image.originalFileName,
+    image.id,
+    image.url,
+    image.originalUrl,
+    image.thumbnailUrl,
+    image.previewUrl,
+  ].filter(Boolean).join(" ");
+  const metaFields = [
+    image.materialType,
+    image.mode,
+    image.nodeOperation,
+    image.sourceNodeKind,
+  ].filter(Boolean).join(" ");
+  return /(^|[\/\s])mask-[^\/\s]+\.(png|jpe?g|webp)\b/i.test(fileFields) ||
+    /\/masks\//i.test(fileFields) ||
+    /局部修改蒙版|涂抹蒙版|mask utility/i.test(metaFields);
+}
+
 export function imageKey(image: Pick<ImageAsset, "fileName" | "id" | "url">) {
   return image.fileName || image.id || image.url;
 }
@@ -156,10 +179,12 @@ export function sortResultImagesForDisplay(images: ImageAsset[]) {
 }
 
 export function isUserFacingResultImage(image: ImageAsset) {
+  if (isMaskUtilityImage(image)) return false;
   if (isRemovedFeatureImage(image)) return false;
   const fileName = image.fileName || image.id || image.url || "";
+  if (image.source === "asset" || /\/uploads\//i.test(fileName)) return false;
   if (/\/(?:full-preview|text-mask|text-layer-cropped|original|text_alpha_mask|repair_mask|text_cropped|background_first_pass)\.png$/i.test(fileName)) return false;
-  if (image.materialType === "原图" || image.materialType === "文字蒙版" || image.materialType === "文字Alpha蒙版" || image.materialType === "背景修复蒙版" || image.materialType === "背景首轮修复" || image.materialType === "文字裁剪PNG") return false;
+  if (image.materialType === "原图" || image.materialType === "文字蒙版" || image.materialType === "文字Alpha蒙版" || image.materialType === "背景修复蒙版" || image.materialType === "背景首轮修复" || image.materialType === "文字裁剪PNG" || image.materialType === "局部修改蒙版") return false;
   return true;
 }
 

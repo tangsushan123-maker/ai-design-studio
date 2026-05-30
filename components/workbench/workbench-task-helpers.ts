@@ -1,4 +1,4 @@
-import { imageKey, removedFeatureTextMarkers } from "@/components/workbench/workbench-image-collection";
+import { imageKey, isMaskUtilityImage, removedFeatureTextMarkers } from "@/components/workbench/workbench-image-collection";
 import { stripImageFile } from "@/components/workbench/workbench-image-lifecycle";
 import { isDeferredQueuedTask } from "@/components/workbench/workbench-task-state";
 import { stringParam } from "@/components/workbench/workbench-utils";
@@ -146,11 +146,30 @@ export function serverTaskRunOutputs(run: ServerTaskRunRecord): ImageAsset[] {
     }));
 }
 
+export function serverTaskRunFailureLabel(run: ServerTaskRunRecord) {
+  const categoryLabels: Record<string, string> = {
+    auth_or_billing: "Key、权限或余额异常",
+    content_blocked: "内容安全策略拒绝",
+    image_input_failed: "输入图片读取失败",
+    invalid_size: "尺寸或比例不支持",
+    model_timeout: "模型超时或上游网络不稳定",
+    rate_limited: "接口限流或额度不足",
+    save_failed: "结果保存失败",
+    server_restarted: "后台重启中断",
+    stale_heartbeat: "后台心跳超时",
+    unknown: "服务端任务失败",
+  };
+  const base = run.message || (run.errorCategory ? categoryLabels[run.errorCategory] : "") || run.error || "服务端任务失败";
+  if (run.retryable === true) return `${base}，可重试`;
+  if (run.retryable === false) return `${base}，需要检查配置、内容或素材`;
+  return base;
+}
+
 export function taskCandidateImagesFromNode(node: FlowNode) {
   return [
     node.data.output,
     ...(Array.isArray(node.data.outputs) ? node.data.outputs : []),
-  ].filter(isImageAssetLike);
+  ].filter((image): image is ImageAsset => isImageAssetLike(image) && !isMaskUtilityImage(image));
 }
 
 export function recoverTaskCanvasResultFromNodes(nodes: FlowNode[], task: TaskResultMatchContext) {

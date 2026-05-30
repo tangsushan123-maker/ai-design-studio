@@ -88,6 +88,17 @@ npm run build
 npm run preflight
 ```
 
+真实 AI 链路压测需要登录态，建议用专门测试账号执行：
+
+```bash
+BENCHMARK_MODE=smoke \
+BENCHMARK_EMAIL=测试账号 \
+BENCHMARK_PASSWORD=测试密码 \
+node scripts/benchmark-ai-workflows.mjs
+```
+
+报告会写入 `.cleanup-reports/`，用于检查各节点成功率、耗时、返回图片数量和后台任务状态。
+
 ## 重要文件
 
 - `app/`：Next.js 页面和 API 路由。

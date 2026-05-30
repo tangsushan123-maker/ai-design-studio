@@ -1,63 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
 import {
   addEdge,
   Background,
   BackgroundVariant,
-  Controls,
-  Handle,
   MiniMap,
-  Position,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
   useReactFlow,
   type Connection,
-  type NodeProps,
-  type NodeTypes,
   type OnConnect,
   type XYPosition,
 } from "@xyflow/react";
 import {
-  ArrowUp,
-  Brush,
-  Camera,
   Check,
-  ChevronDown,
   ChevronRight,
-  FileImage,
   Folder,
   FolderOpen,
-  ImagePlus,
   Images,
   KeyRound,
-  Layers,
-  Palette,
+  Maximize2,
+  Minus,
   Plus,
-  RefreshCcw,
   ScanLine,
-  ShieldCheck,
-  Sparkles,
-  Sticker,
   Trash2,
-  X,
 } from "lucide-react";
-import { type AspectRatioValue, type QualityValue, type TextReferenceImage, type TextReferenceRole, type TextReferenceWeight } from "@/lib/design-options";
-import { buildDeliverySummary, buildQualityReviewSummary, imageSizeLabel, qualityBadgeLabel, qualityTone } from "@/lib/workbench-delivery";
+import { type AspectRatioValue, type QualityValue, type TextReferenceRole, type TextReferenceWeight } from "@/lib/design-options";
+import { imageSizeLabel, qualityBadgeLabel } from "@/lib/workbench-delivery";
 import { formatDuration, formatFileSize, formatGeneratedAt } from "@/lib/workbench-format";
-import { historyMatchesFilter, historyMatchesQuery } from "@/lib/workbench-history";
 import { IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST } from "@/lib/prompt";
 import { buildCreativeBriefFallback, type CreativeBrief, type CreativeBriefInput, type CreativeDirection } from "@/lib/creative-brief";
-import { imageSourceDetailLines, imageSourceSummary } from "@/lib/workbench-image-source";
+import { ChatComposer } from "@/components/workbench/chat-composer";
+import { WORKBENCH_NODE_TYPES } from "@/components/workbench/workbench-flow-nodes";
 import {
-  canSubmitComposerForNode,
-  composerHelperTextForNode,
-  composerPlaceholderForNode,
+  composerRatioForNode,
   composerSubmitStatus,
-  composerTitleForNode,
   isComposerDrivenNode,
   nodeCreationHint,
   requiresConnectedImageForComposer,
@@ -65,25 +46,20 @@ import {
 import {
   createResultLineage,
   generatedFileNameForImage,
-  imageBranchVersions,
   imageKey,
   imageKeys,
   imageMatchesGeneratedFile,
+  isMaskUtilityImage,
   isUserFacingResultImage,
-  latestImagesForResultGroup,
   loadFavoriteIds,
   mergeImages,
   nodeImageReferences,
   removeImageFromNode,
   saveFavoriteIds,
   sortImagesByRecency,
-  sortResultImagesForDisplay,
-  uniqueImageAssets,
-  uniqueImagesByKey,
 } from "@/components/workbench/workbench-image-collection";
-import { pngLayerDisplayName } from "@/components/workbench/workbench-image-display";
 import { findDataImagePath, imageDeletionProtection, imageForComparison, stripImageFile } from "@/components/workbench/workbench-image-lifecycle";
-import { compactThumbStyle, imageNodePreviewMetrics, shouldShowCheckerboard } from "@/components/workbench/workbench-image-metrics";
+import { imageNodePreviewMetrics } from "@/components/workbench/workbench-image-metrics";
 import {
   arrangeWorkflowNodes,
   estimateWorkflowNodeHeight,
@@ -91,12 +67,8 @@ import {
   nodeAutoSpacingX,
 } from "@/components/workbench/workbench-layout";
 import {
-  designComparisonModeLabel,
   designComparisonModeParam,
-  designComparisonModeValue,
-  designOptimizationStrengthLabel,
   designOptimizationStrengthParam,
-  designOptimizationStrengthValue,
   exportFormatParam,
   isAiQualityEnhanceFitMode,
   pngLayerExportModeLabel,
@@ -105,30 +77,17 @@ import {
   qualityEnhanceModeFromFitMode,
   qualityEnhanceModeLabel,
   qualityEnhanceModeParam,
-  qualityEnhanceModeValue,
-  referenceRemakeModeLabel,
   referenceRemakeModeParam,
-  referenceRemakeModeValue,
-  resizeFitModeLabel,
-  resizeFitModeValue,
 } from "@/components/workbench/workbench-operation-params";
 import {
   defaultTextReferenceConfig,
   isTextReferenceTargetHandle,
   normalizeTextReferenceConfigs,
-  ratioFromImage,
-  shouldUseStrongTextReferenceMode,
 } from "@/components/workbench/workbench-text-references";
 import {
   inferTargetSizeFromImage,
-  qualityEnhanceDefaultTargetForImage,
-  qualityEnhanceQualityOptionsForTargets,
   qualityEnhanceQualityParam,
-  qualityEnhanceTargetForQuality,
-  qualityEnhanceTargetOptionsForImage,
-  qualityForQualityEnhanceTarget,
   resolveUpscaleTargetFromParams,
-  upscaleTargetDisplayLabel,
 } from "@/components/workbench/workbench-upscale";
 import {
   createDefaultProjectKnowledge,
@@ -137,23 +96,11 @@ import {
   type ProjectKnowledgeBase,
 } from "@/lib/project-system";
 import { mapWithConcurrency } from "@/lib/async-utils";
-import { findSizePresetByLabel } from "@/lib/size-presets";
-import { ImageFrame } from "@/components/workbench/image-frame";
-import { LightboxActionPanel } from "@/components/workbench/lightbox-action-panel";
-import { LightboxDeliveryPanel, type LightboxEditTool } from "@/components/workbench/lightbox-delivery-panel";
-import { LightboxEditPanels } from "@/components/workbench/lightbox-edit-panels";
-import { LightboxHeader } from "@/components/workbench/lightbox-header";
-import { LightboxInfoPanel } from "@/components/workbench/lightbox-info-panel";
-import { LightboxPreviewPanel } from "@/components/workbench/lightbox-preview-panel";
-import { LightboxVersionPanel } from "@/components/workbench/lightbox-version-panel";
-import { ImageManagerPanel } from "@/components/workbench/image-manager-panel";
-import { NodeResultsPanel } from "@/components/workbench/node-results-panel";
 import { AssetLibraryPanel } from "@/components/workbench/asset-library-panel";
 import { AccountSwitcher } from "@/components/account-switcher";
-import { HistoryPanel } from "@/components/workbench/history-panel";
+import { ImageLightbox } from "@/components/workbench/image-lightbox";
 import { ProjectHomeScreen } from "@/components/workbench/project-home-screen";
 import { ProjectCreationModal, type ProjectCreationDraft } from "@/components/workbench/project-creation-modal";
-import { NodeErrorNotice } from "@/components/workbench/node-error-notice";
 import {
   inferSimpleMaskEditIntent,
   maskEditEdgeBlendParam,
@@ -162,73 +109,55 @@ import {
   maskEditTaskModeParam,
 } from "@/components/workbench/mask-editing";
 import { clearMaskEditorDraft, MaskEditorModal } from "@/components/workbench/mask-editor-modal";
-import { PngLayerResultSection } from "@/components/workbench/png-layer-result-section";
 import { ProjectLibraryPanel } from "@/components/workbench/project-library-panel";
-import { SmartRecommendations } from "@/components/workbench/smart-recommendations";
+import { RightPanel } from "@/components/workbench/right-panel";
 import { NodeMenu, QuickMenu } from "@/components/workbench/workbench-menus";
 import { type PngLayerExportResult } from "@/components/workbench/result-preview-tools";
-import { TaskCenter } from "@/components/workbench/task-center";
-import { TextReferenceInspector } from "@/components/workbench/text-reference-inspector";
 import {
   defaultParamsByKind,
   emptyProjectCreationDraft,
   emptyProjectProfile,
   flowAriaLabelConfig,
   imageTaskTimeoutMs,
-  inputHandlesByKind,
   maskEditorDraftPrefix,
   maxTextReferenceImages,
   projectCapacityJsonWarningBytes,
   projectSnapshotIntervalMs,
   projectStorageKey,
-  successfulTaskAutoHideMs,
   textReferenceInputHandle,
   treeBranchVerticalGap,
   treeResultHorizontalGap,
 } from "@/components/workbench/workbench-config";
-import { imageModelProductHint, imageModelReadiness, initialImageModelFor, preferredAutoImageModelId } from "@/components/workbench/workbench-models";
+import { imageModelReadiness, initialImageModelFor, preferredAutoImageModelId } from "@/components/workbench/workbench-models";
 import { restoreNodes } from "@/components/workbench/workbench-node-restore";
 import {
-  batchImageActionSummary,
-  compactImageMeta,
-  completedTaskLabel,
   friendlyDisplayError,
-  imageNodeTitle,
   isInvalidMaskFailure,
   nodeKindLabel,
-  nodeOperationLabel,
   outputNodeTitle,
   shouldWaitForBackendAfterClientError,
   taskFailureHint,
   taskProgressLabel,
   taskStageLabel,
-  taskStatusLabel,
 } from "@/components/workbench/workbench-labels";
 import {
-  EmptyPanel,
-  InspectorInput,
-  InspectorSection,
-  InspectorTextarea,
-  StatusDot,
   ToolbarButton,
 } from "@/components/workbench/workbench-small-ui";
-import { isDeferredQueuedTask, isQualityGateBlocked, isTaskActivelyRunning, isTaskPossiblyStuck } from "@/components/workbench/workbench-task-state";
+import { isActiveNodeStatus, isQualityGateBlocked, isTaskActivelyRunning, isTaskPossiblyStuck } from "@/components/workbench/workbench-task-state";
 import {
-  adaptiveRatioOptions,
+  compressImageFileForUpload,
   customSize,
   dataUrlToFile,
   firstSupportedImageFile,
   getImageFileFromClipboard,
   hasClipboardImageCandidate,
   hasClipboardImageFile,
-  inferRatioFromTargetSize,
-  isLocalGeneratedUrl,
+  localGeneratedSourceUrlForImage,
   isSupportedImageFile,
   numericParam,
   parseTargetSize,
   qualityParam,
   ratioOptionLabel,
-  ratioOptions,
   ratioParam,
   resolveAdaptiveRatioFromPrompt,
   resolveRequestedAspectRatio,
@@ -236,7 +165,6 @@ import {
 } from "@/components/workbench/workbench-utils";
 import { nodeCatalog } from "@/components/workbench/workbench-node-catalog";
 import {
-  activeResizePresetLabel,
   buildOutpaintPrompt,
   buildResizePrompt,
   defaultTargetSizeForRatio,
@@ -253,29 +181,18 @@ import {
 } from "@/components/workbench/workbench-project-helpers";
 import {
   enrichPrompt,
-  isConservativeImageToImageNote,
   resolveNoVisibleProjectOutputPolicy,
   sanitizeCreativeDirectionPrompt,
   sanitizeLegacyImageToImagePrompt,
   shouldUseProjectPromptContext,
 } from "@/components/workbench/workbench-prompt-policy";
 import {
-  CompactOutputSummary,
-  InlineChipRow,
-  NodeSummary,
-  RatioGlyph,
-  RatioPresetGrid,
-  SizePresetSelect,
   isLegacyUnvalidatedMask,
-  maskEditBadge,
   maskEditorInitialMaskUrl,
-  operationNodeSubtitle,
-  operationNodeWidth,
   resolveNodeRenderLevel,
-  textReferenceNodeItems,
 } from "@/components/workbench/workbench-node-ui";
 import { appendDataUrlToForm, appendImageToForm, imageFromSingleResponse, imageSourcePayloadForPngLayerExport, imagesFromResponse } from "@/components/workbench/workbench-image-requests";
-import { copyImageToClipboard, copyTextToClipboard, downloadRemoteFile } from "@/components/workbench/workbench-file-actions";
+import { copyImageToClipboard, copyTextToClipboard } from "@/components/workbench/workbench-file-actions";
 import { readResponseErrorMessage, withClientTimeout } from "@/components/workbench/workbench-response";
 import {
   buildTaskRecoveredCompletionPatch,
@@ -283,6 +200,7 @@ import {
   imageBelongsToProject,
   recoverTaskCanvasResultFromNodes,
   restoreProjectTasks,
+  serverTaskRunFailureLabel,
   serverTaskRunOutputs,
   serverTaskRunState,
   strategyMetaFromParams,
@@ -292,7 +210,22 @@ import {
   taskNeedsServerSync,
 } from "@/components/workbench/workbench-task-helpers";
 import {
+  applyNodeGeneratedOutputs,
+  buildCompletedTaskOutputPatch,
+  countEdgesFromSource,
+  countImagesInResultGroup,
+  countProjectUserFacingImages,
+  countTextReferenceEdges,
+  mergeImageIdList,
+  saveStateLabel,
+  taskCandidateImagesFromNodes,
+  taskRecordFromServerRun,
+  taskRequestIds,
+  withConfiguredImageModel,
+} from "@/components/workbench/workbench-runtime-helpers";
+import {
   clearDeletedProjectBrowserCache,
+  filterDismissedProjectTasks,
   filterDismissedRestoredNodes,
   getStoredProject,
   imageSourceDismissedForProject,
@@ -302,6 +235,7 @@ import {
   markDismissedImageKeys,
   markDismissedNodeRefs,
   markDismissedTaskRefs,
+  mergeTaskRecords,
   persistProjectPayloadForLifecycleExit,
   readProjectSaveError,
   readProjectTaskCache,
@@ -317,6 +251,7 @@ import {
   buildProfileProtectionContext,
   buildProjectLibraryContext,
   buildProjectKnowledgeFromState,
+  findBrandAssets,
   getCurrentProjectBrandAssets,
   imageAssetToProjectAssetRecord,
   mergePendingFacts,
@@ -326,6 +261,7 @@ import {
   normalizeProjectProfile,
   projectProfileColors,
   resolveBrandReferenceAssets,
+  resolveSchemeDecisionBrandReferenceAssets,
   resolveProjectAssetText,
   resolveProjectAssets,
   resolveProjectKnowledge,
@@ -336,15 +272,11 @@ import {
   summarizeBrandAssets,
 } from "@/components/workbench/workbench-brand-context";
 import type {
-  BrandAssetSummary,
-  BrandAssetUsage,
   FlowEdge,
   FlowNode,
   GeneratedImage,
   HistoryMaskEditOptions,
   HistoryOperationOptions,
-  HistoryResizeOptions,
-  HistoryUpscaleOptions,
   ImageAsset,
   MaterialLibrarySummary,
   MenuState,
@@ -362,118 +294,22 @@ import type {
   ServerTaskRunRecord,
   TaskRecord,
   TaskResultMatchContext,
-  TextReferenceConfig,
   WorkbenchModelInfo,
 } from "@/components/workbench/workbench-types";
 import type { ModelCatalogItem } from "@/lib/openai-defaults";
 
 const projectResourceNormalizeConcurrency = 4;
-const batchImageMutationConcurrency = 3;
 const metadataPatchConcurrency = 4;
 const workbenchHomeOpenStorageKey = "ai-design-workbench-home-open-v1";
-
-function projectUserFacingImages(images: ImageAsset[], projectId: string) {
-  const visible: ImageAsset[] = [];
-  for (const image of images) {
-    if (imageBelongsToProject(image, projectId) && isUserFacingResultImage(image)) visible.push(image);
-  }
-  return visible;
-}
-
-function countProjectUserFacingImages(images: ImageAsset[], projectId: string) {
-  let count = 0;
-  for (const image of images) {
-    if (imageBelongsToProject(image, projectId) && isUserFacingResultImage(image)) count += 1;
-  }
-  return count;
-}
-
-function countTextReferenceEdges(edges: FlowEdge[], targetNodeId: string | null | undefined) {
-  if (!targetNodeId) return 0;
-  let count = 0;
-  for (const edge of edges) {
-    if (edge.target === targetNodeId && isTextReferenceTargetHandle(edge.targetHandle)) count += 1;
-  }
-  return count;
-}
-
-function countEdgesFromSource(edges: FlowEdge[], sourceNodeId: string) {
-  let count = 0;
-  for (const edge of edges) {
-    if (edge.source === sourceNodeId) count += 1;
-  }
-  return count;
-}
-
-function countSuccessfulResults(results: readonly unknown[]) {
-  let count = 0;
-  for (const result of results) {
-    if (result) count += 1;
-  }
-  return count;
-}
-
-function countImagesInResultGroup(images: ImageAsset[], resultGroupId: string | null | undefined) {
-  if (!resultGroupId) return 0;
-  let count = 0;
-  for (const image of images) {
-    if (image.resultGroupId === resultGroupId) count += 1;
-  }
-  return count;
-}
-
-function taskRequestIds(tasks: TaskRecord[]) {
-  const requestIds: string[] = [];
-  for (const task of tasks) {
-    if (task.requestId) requestIds.push(task.requestId);
-  }
-  return requestIds;
-}
-
-function withConfiguredImageModel(passedModels: ModelCatalogItem[], modelInfo: WorkbenchModelInfo) {
-  const configuredId = modelInfo.imageModel?.trim();
-  if (!modelInfo.hasKey || !configuredId || passedModels.some((item) => item.id === configuredId)) return passedModels;
-  const configured = modelInfo.modelsCache?.find((item) => item.id === configuredId && item.capabilities.includes("image"));
-  return [
-    ...passedModels,
-    configured || {
-      id: configuredId,
-      label: configuredId,
-      capabilities: ["image"],
-      testStatus: "untested",
-    },
-  ];
-}
-
-function readInitialHomeOpen() {
-  if (typeof window === "undefined") return true;
-  return window.localStorage.getItem(workbenchHomeOpenStorageKey) !== "canvas";
-}
+const canvasMinZoom = 0.18;
+const canvasMaxZoom = 4;
+const canvasFitMaxZoom = 1.15;
 
 function rememberWorkbenchHomeState(open: boolean) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(workbenchHomeOpenStorageKey, open ? "home" : "canvas");
   } catch {}
-}
-
-function taskCandidateImagesFromNodes(nodes: FlowNode[]) {
-  const images: ImageAsset[] = [];
-  for (const node of nodes) {
-    images.push(...taskCandidateImagesFromNode(node));
-  }
-  return images;
-}
-
-function mergeImageIdList(currentIds: string[] | undefined, nextIds: string[]) {
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  for (const id of [...(currentIds || []), ...nextIds]) {
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    ids.push(id);
-  }
-  return ids;
 }
 
 export default function WorkbenchClient({
@@ -525,6 +361,9 @@ function NodeWorkflowWorkbench({
   const taskProgressTimersRef = useRef<Record<string, number>>({});
   const taskCleanupTimersRef = useRef<Record<string, number>>({});
   const taskAbortControllersRef = useRef<Record<string, AbortController>>({});
+  const nodeRunQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const nodeRunQueueDepthRef = useRef(0);
+  const activeNodeRunTaskIdRef = useRef<string | null>(null);
   const taskProjectContextRef = useRef<Record<string, { projectId: string; projectName: string }>>({});
   const creativeStartBusyRef = useRef(false);
   const canvasFocusTimerRef = useRef<number | null>(null);
@@ -583,7 +422,7 @@ function NodeWorkflowWorkbench({
   const [projectSaveState, setProjectSaveState] = useState<"saved" | "saving" | "error">("saved");
   const [saveFeedback, setSaveFeedback] = useState<{ tone: "loading" | "success" | "error"; message: string } | null>(null);
   const [projectMemorySearchState, setProjectMemorySearchState] = useState<"idle" | "loading" | "done" | "error">("idle");
-  const [homeOpen, setHomeOpen] = useState(readInitialHomeOpen);
+  const [homeOpen, setHomeOpen] = useState(true);
   const [homeProjectPickerOpen, setHomeProjectPickerOpen] = useState(false);
   const [homeBusy, setHomeBusy] = useState(false);
   const [projectListLoading, setProjectListLoading] = useState(false);
@@ -625,26 +464,6 @@ function NodeWorkflowWorkbench({
   const hasTaskResultNodesOnCanvas = useCallback((task: TaskResultMatchContext) => {
     return hasTaskResultNodesOnCanvasFromNodes(nodesRef.current, task);
   }, []);
-  const scheduleSuccessfulTaskAutoHide = useCallback((taskId: string) => {
-    const existingTimer = taskCleanupTimersRef.current[taskId];
-    if (existingTimer) window.clearTimeout(existingTimer);
-    taskCleanupTimersRef.current[taskId] = window.setTimeout(() => {
-      setTasks((current) => {
-        const next = current.filter((task) => {
-          if (task.id !== taskId) return true;
-          const keep = task.status !== "completed" || !hasTaskResultNodesOnCanvas(task);
-          if (!keep) dismissedTaskRefsRef.current = markDismissedTaskRefs(projectId, [task]);
-          return keep;
-        });
-        tasksRef.current = next;
-        return next;
-      });
-      writeProjectCacheFromRefs();
-      delete taskCleanupTimersRef.current[taskId];
-    }, successfulTaskAutoHideMs);
-    // Cache writing reads snapshot refs; this timer should only reset when completion recovery/project scope changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasTaskResultNodesOnCanvas, projectId]);
   const passedImageModelOptions = useMemo(
     () => (modelInfo.modelsCache || []).filter((item) => item.capabilities.includes("image") && item.testStatus === "passed"),
     [modelInfo.modelsCache],
@@ -668,8 +487,8 @@ function NodeWorkflowWorkbench({
     [effectiveImageModel, modelInfo, passedImageModelOptions],
   );
   const selectedNode = selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) ?? null : null;
-  const composerDisplayRatio = selectedNode?.data.kind === "text_to_image" ? ratioParam(selectedNode.data.params.aspectRatio) : composerRatio;
-  const composerDisplayQuality = selectedNode?.data.kind === "text_to_image" ? qualityParam(selectedNode.data.params.quality) : composerQuality;
+  const composerDisplayRatio = selectedNode ? composerRatioForNode(selectedNode, composerRatio) : composerRatio;
+  const composerDisplayQuality = selectedNode && isComposerDrivenNode(selectedNode.data.kind) ? qualityParam(selectedNode.data.params.quality) : composerQuality;
   const isLowZoom = viewportZoom < 0.58;
   const isLargeWorkflow = nodes.length > 50;
   const isPerformanceMode = isLowZoom ||
@@ -777,6 +596,7 @@ function NodeWorkflowWorkbench({
           },
           onDelete: (nodeId: string) => nodeHandlersRef.current.deleteNode(nodeId),
           onParamChange: (nodeId: string, key: string, value: unknown) => nodeHandlersRef.current.updateNodeParam(nodeId, key, value),
+          onUseCanvasImageAsTextReference: (nodeId: string, role: TextReferenceRole) => attachCanvasImageAsTextReference(nodeId, role),
           onImageFile: (nodeId: string, file: File) => void nodeHandlersRef.current.attachFileToImageNode(nodeId, file),
           onPreview: (image: ImageAsset) => nodeHandlersRef.current.preview(image),
           onMaskEdit: (nodeId: string) => {
@@ -788,6 +608,18 @@ function NodeWorkflowWorkbench({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [isLargeWorkflow, isLowZoom, isPerformanceMode, nodes, selectedNodeId],
   );
+  const selectedInspectorNode = useMemo(() => {
+    if (!selectedNode) return null;
+    return {
+      ...selectedNode,
+      data: {
+        ...selectedNode.data,
+        textReferencePreviews: selectedNode.data.kind === "text_to_image" ? textReferencePreviewsForNode(selectedNode) : undefined,
+      },
+    };
+    // textReferencePreviewsForNode reads current nodes and edges.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edges, nodes, selectedNode]);
   const decoratedEdges = useMemo(
     () =>
       edges.map((edge) => ({
@@ -854,12 +686,6 @@ function NodeWorkflowWorkbench({
       performanceTimersRef.current = {};
     };
   }, []);
-  useEffect(() => {
-    tasks.forEach((task) => {
-      if (task.status !== "completed" || !hasTaskResultNodesOnCanvas(task) || taskCleanupTimersRef.current[task.id]) return;
-      scheduleSuccessfulTaskAutoHide(task.id);
-    });
-  }, [hasTaskResultNodesOnCanvas, nodes, scheduleSuccessfulTaskAutoHide, tasks]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setTasks((current) => {
@@ -959,6 +785,17 @@ function NodeWorkflowWorkbench({
   );
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        setHomeOpen(window.localStorage.getItem(workbenchHomeOpenStorageKey) !== "canvas");
+      } catch {
+        setHomeOpen(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     fetch("/api/health-openai")
       .then((response) => response.json())
       .then((data) => {
@@ -994,82 +831,57 @@ function NodeWorkflowWorkbench({
     void refreshMaterialLibraries({ quiet: true });
   }, []);
 
+  function applyStoredProject(stored: ProjectPayload | null) {
+    const restoredProjectId = stored?.id || "local-project";
+    const restoredProjectName = stored?.name || "节点设计项目";
+    if (stored?.id) setProjectId(stored.id);
+    if (stored?.name) setProjectName(stored.name);
+    setProjectOwnerUserId(stored?.ownerUserId || "");
+    setProjectOwnerEmail(stored?.ownerEmail || "");
+    setProjectOwnerName(stored?.ownerName || "");
+    setProjectKind(normalizeProjectKind(stored?.projectKind));
+    const restoredRuns = restoreProjectTasks(stored?.runs || []);
+    const restoredTasks = workflowRuntimeRef.current.resetTaskProjectContexts(
+      restoreProjectTasks(readProjectTaskCache(restoredProjectId, restoredRuns)),
+      restoredProjectId,
+      restoredProjectName,
+    );
+    const restoredNodes = filterDismissedRestoredNodes(restoredProjectId, restoreNodes(stored?.nodes || [], restoredTasks));
+    const restoredEdges = filterEdgesForNodes(stored?.edges || [], restoredNodes);
+    nodesRef.current = restoredNodes;
+    edgesRef.current = restoredEdges;
+    tasksRef.current = restoredTasks;
+    setNodes(restoredNodes);
+    setEdges(restoredEdges);
+    setStatus(restoredNodes.length ? `已恢复 ${restoredNodes.length} 个画布节点。` : "空画布。点击“添加节点”，或直接拖拽 / 粘贴图片。");
+    setTasks(restoredTasks);
+    writeProjectTaskCache(restoredProjectId, restoredTasks);
+    void mergeServerTaskRunsIntoProject(restoredProjectId, restoredProjectName);
+    const nextKnowledge = resolveProjectKnowledge(stored);
+    setProjectKnowledge(nextKnowledge);
+    setProjectAssets(resolveProjectAssets(stored, nextKnowledge));
+    setProjectAssetText(resolveProjectAssetText(stored, nextKnowledge));
+    setProjectProfile(resolveProjectProfile(stored, nextKnowledge));
+    setTextProtectionMode(stored?.textProtectionMode ?? true);
+    workflowRuntimeRef.current.restoreCanvasViewport(restoredNodes, stored?.viewport);
+  }
+
   useEffect(() => {
     fetch("/api/project")
       .then((response) => response.json())
       .then((project: ProjectPayload) => {
-        const stored = getStoredProject(project);
-        const restoredProjectId = stored?.id || "local-project";
-        const restoredProjectName = stored?.name || "节点设计项目";
-        if (stored?.id) setProjectId(stored.id);
-        if (stored?.name) setProjectName(stored.name);
-        setProjectOwnerUserId(stored?.ownerUserId || "");
-        setProjectOwnerEmail(stored?.ownerEmail || "");
-        setProjectOwnerName(stored?.ownerName || "");
-        setProjectKind(normalizeProjectKind(stored?.projectKind));
-        const restoredRuns = restoreProjectTasks(stored?.runs || []);
-        const restoredTasks = workflowRuntimeRef.current.resetTaskProjectContexts(
-          restoreProjectTasks(readProjectTaskCache(restoredProjectId, restoredRuns)),
-          restoredProjectId,
-          restoredProjectName,
-        );
-        const restoredNodes = filterDismissedRestoredNodes(restoredProjectId, restoreNodes(stored?.nodes || [], restoredTasks));
-        const restoredEdges = filterEdgesForNodes(stored?.edges || [], restoredNodes);
-        nodesRef.current = restoredNodes;
-        edgesRef.current = restoredEdges;
-        tasksRef.current = restoredTasks;
-        setNodes(restoredNodes);
-        setEdges(restoredEdges);
-        setStatus(restoredNodes.length ? `已恢复 ${restoredNodes.length} 个画布节点。` : "空画布。点击“添加节点”，或直接拖拽 / 粘贴图片。");
-        setTasks(restoredTasks);
-        writeProjectTaskCache(restoredProjectId, restoredTasks);
-        const nextKnowledge = resolveProjectKnowledge(stored);
-        setProjectKnowledge(nextKnowledge);
-        setProjectAssets(resolveProjectAssets(stored, nextKnowledge));
-        setProjectAssetText(resolveProjectAssetText(stored, nextKnowledge));
-        setProjectProfile(resolveProjectProfile(stored, nextKnowledge));
-        setTextProtectionMode(stored?.textProtectionMode ?? true);
-        workflowRuntimeRef.current.restoreCanvasViewport(restoredNodes, stored?.viewport);
+        applyStoredProject(getStoredProject(project));
       })
       .catch(() => {
-        const stored = getStoredProject(null);
-        const restoredProjectId = stored?.id || "local-project";
-        const restoredProjectName = stored?.name || "节点设计项目";
-        if (stored?.id) setProjectId(stored.id);
-        if (stored?.name) setProjectName(stored.name);
-        setProjectOwnerUserId(stored?.ownerUserId || "");
-        setProjectOwnerEmail(stored?.ownerEmail || "");
-        setProjectOwnerName(stored?.ownerName || "");
-        setProjectKind(normalizeProjectKind(stored?.projectKind));
-        const restoredRuns = restoreProjectTasks(stored?.runs || []);
-        const restoredTasks = workflowRuntimeRef.current.resetTaskProjectContexts(
-          restoreProjectTasks(readProjectTaskCache(restoredProjectId, restoredRuns)),
-          restoredProjectId,
-          restoredProjectName,
-        );
-        const restoredNodes = filterDismissedRestoredNodes(restoredProjectId, restoreNodes(stored?.nodes || [], restoredTasks));
-        const restoredEdges = filterEdgesForNodes(stored?.edges || [], restoredNodes);
-        nodesRef.current = restoredNodes;
-        edgesRef.current = restoredEdges;
-        tasksRef.current = restoredTasks;
-        setNodes(restoredNodes);
-        setEdges(restoredEdges);
-        setStatus(restoredNodes.length ? `已恢复 ${restoredNodes.length} 个画布节点。` : "空画布。点击“添加节点”，或直接拖拽 / 粘贴图片。");
-        setTasks(restoredTasks);
-        writeProjectTaskCache(restoredProjectId, restoredTasks);
-        const nextKnowledge = resolveProjectKnowledge(stored);
-        setProjectKnowledge(nextKnowledge);
-        setProjectAssets(resolveProjectAssets(stored, nextKnowledge));
-        setProjectAssetText(resolveProjectAssetText(stored, nextKnowledge));
-        setProjectProfile(resolveProjectProfile(stored, nextKnowledge));
-        setTextProtectionMode(stored?.textProtectionMode ?? true);
-        workflowRuntimeRef.current.restoreCanvasViewport(restoredNodes, stored?.viewport);
+        applyStoredProject(getStoredProject(null));
       })
       .finally(() => {
         projectLoadedRef.current = true;
         setProjectBootReady(true);
         setProjectSaveState("saved");
       });
+    // Initial project boot reads runtime helpers through refs and should not rerun during normal editing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setEdges, setNodes, setViewport]);
 
   useEffect(() => {
@@ -1136,6 +948,51 @@ function NodeWorkflowWorkbench({
 
   useEffect(() => {
     if (!projectLoadedRef.current) return;
+    const removedNodeIds = new Set<string>();
+    let changed = false;
+    const nextNodes: FlowNode[] = [];
+    for (const node of nodesRef.current) {
+      const isVisibleMaskNode = node.data.kind === "image_input" && (
+        isMaskUtilityImage(node.data.image) ||
+        isMaskUtilityImage(node.data.output) ||
+        (node.data.outputs || []).some(isMaskUtilityImage)
+      );
+      if (isVisibleMaskNode) {
+        removedNodeIds.add(node.id);
+        changed = true;
+        continue;
+      }
+      const filteredOutputs = (node.data.outputs || []).filter((image) => !isMaskUtilityImage(image));
+      const outputRemoved = isMaskUtilityImage(node.data.output);
+      if (filteredOutputs.length !== (node.data.outputs || []).length || outputRemoved) {
+        changed = true;
+        nextNodes.push({
+          ...node,
+          data: {
+            ...node.data,
+            output: outputRemoved ? filteredOutputs[0] || null : node.data.output,
+            outputs: filteredOutputs,
+            resultCount: filteredOutputs.length,
+          },
+        });
+        continue;
+      }
+      nextNodes.push(node);
+    }
+    if (!changed) return;
+    const nextEdges = edgesRef.current.filter((edge) => !removedNodeIds.has(edge.source) && !removedNodeIds.has(edge.target));
+    nodesRef.current = nextNodes;
+    edgesRef.current = nextEdges;
+    setNodes(nextNodes);
+    setEdges(nextEdges);
+    setSelectedNodeId((current) => (current && removedNodeIds.has(current) ? null : current));
+    writeProjectCacheFromRefs();
+    // Cleanup reads latest refs and must not recreate on helper identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edges, nodes]);
+
+  useEffect(() => {
+    if (!projectLoadedRef.current) return;
     const timer = window.setInterval(() => {
       saveProjectSnapshot("auto");
     }, projectSnapshotIntervalMs);
@@ -1195,6 +1052,40 @@ function NodeWorkflowWorkbench({
       .join(","),
     [projectId, tasks],
   );
+  const runningNodeIds = useMemo(
+    () => new Set(tasks
+      .filter((task) => taskBelongsToProject(task, projectId))
+      .filter(isTaskActivelyRunning)
+      .map((task) => task.nodeId)),
+    [projectId, tasks],
+  );
+
+  useEffect(() => {
+    if (!runningNodeIds.size) return;
+    const activeStatusByNodeId = new Map<string, NodeStatus>();
+    for (const task of tasks) {
+      if (!taskBelongsToProject(task, projectId) || !isTaskActivelyRunning(task)) continue;
+      activeStatusByNodeId.set(task.nodeId, task.status === "queued" || task.status === "saving" ? task.status : "running");
+    }
+    if (!activeStatusByNodeId.size) return;
+    let changed = false;
+    const nextNodes = nodesRef.current.map((node) => {
+      const activeStatus = activeStatusByNodeId.get(node.id);
+      if (!activeStatus) return node;
+      if (node.data.status === activeStatus && !node.data.error) return node;
+      changed = true;
+      return {
+        ...node,
+        data: { ...node.data, status: activeStatus, error: "" },
+      };
+    });
+    if (!changed) return;
+    nodesRef.current = nextNodes;
+    setNodes(nextNodes);
+    writeProjectCacheFromRefs();
+    // This effect only mirrors active task state onto nodes; cache writer reads refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, runningNodeIds, setNodes, tasks]);
 
   useEffect(() => {
     if (!backendTaskSyncKey) return;
@@ -1213,14 +1104,14 @@ function NodeWorkflowWorkbench({
           const run = task.requestId ? runByRequestId.get(task.requestId) : null;
           if (!run) return true;
           if (run.state === "finished" || run.state === "failed" || run.state === "cancelled") return !serverTaskRunOutputs(run).length;
-          return Date.now() - task.startedAt > 30_000;
+          return Date.now() - task.startedAt > 3_000;
         })
         .map((task) => task.requestId)
         .filter((requestId): requestId is string => Boolean(requestId));
       const historyOutputsByRequestId = await fetchTaskHistoryOutputsByRequests(historyCheckRequestIds, projectId);
-      const recoveredResults = new Map<string, { outputs: ImageAsset[]; resultNodeIds: string[] }>();
+      const recoveredResults = new Map<string, { outputs: ImageAsset[]; resultNodeIds: string[]; completeFromRecoveredOutputs: boolean }>();
       for (const task of syncTasks) {
-        if (!task.requestId || hasTaskResultNodesOnCanvas(task)) continue;
+        if (!task.requestId) continue;
         const run = runByRequestId.get(task.requestId);
         const terminal = !run || run.state === "finished" || run.state === "failed" || run.state === "cancelled";
         if (!terminal && !historyOutputsByRequestId.has(task.requestId)) continue;
@@ -1229,8 +1120,11 @@ function NodeWorkflowWorkbench({
         const outputs = (serverOutputs.length ? serverOutputs : historyOutputs)
           .filter((image) => !dismissedImageKeysRef.current.has(imageKey(image)));
         if (!outputs.length) continue;
-        const resultNodeIds = restoreTaskOutputNodes(task, outputs);
-        recoveredResults.set(task.requestId, { outputs, resultNodeIds });
+        const completeFromRecoveredOutputs = taskHasCompleteRecoveredOutputs(task, run, outputs);
+        const resultNodeIds = restoreTaskOutputNodes(task, outputs, {
+          sourceStatus: completeFromRecoveredOutputs ? "completed" : run && (run.state === "active" || run.state === "waiting") ? "running" : "completed",
+        });
+        recoveredResults.set(task.requestId, { outputs, resultNodeIds, completeFromRecoveredOutputs });
         if (historyOutputs.length) {
           setHistoryImages((current) => mergeImages(historyOutputs, current));
           setImageManagerImages((current) => mergeImages(historyOutputs, current));
@@ -1240,6 +1134,8 @@ function NodeWorkflowWorkbench({
         if (!task.requestId || hasTaskResultNodesOnCanvas(task)) continue;
         const run = runByRequestId.get(task.requestId);
         if (!run || (run.state !== "failed" && run.state !== "cancelled")) continue;
+        const recovered = recoveredResults.get(task.requestId);
+        if (recovered?.outputs.length || serverTaskRunOutputs(run).length) continue;
         markNodeFailed(task.nodeId, run.error || run.message || "服务端任务失败。");
       }
       if (!runs.length && !recoveredResults.size) return;
@@ -1272,7 +1168,7 @@ function NodeWorkflowWorkbench({
           const outputs = (recovered?.outputs || serverTaskRunOutputs(run))
             .filter((image) => !dismissedImageKeysRef.current.has(imageKey(image)));
           const backendRunState = serverTaskRunState(run);
-          if ((run.state === "finished" || recovered?.outputs.length) && outputs.length) {
+          if (run.state === "finished" && outputs.length) {
             stopTaskProgress(task.id);
             delete taskAbortControllersRef.current[task.id];
             return {
@@ -1294,18 +1190,78 @@ function NodeWorkflowWorkbench({
               lastHeartbeatAt: Date.now(),
             };
           }
+          if (recovered?.outputs.length && recovered.completeFromRecoveredOutputs && (run.state === "active" || run.state === "waiting")) {
+            stopTaskProgress(task.id);
+            delete taskAbortControllersRef.current[task.id];
+            return {
+              ...task,
+              status: "completed",
+              stage: "completed",
+              backendRunState: "finished",
+              endedAt: task.endedAt || Date.now(),
+              result: outputs[0],
+              outputs,
+              resultCount: outputs.length,
+              resultNodeIds: recovered.resultNodeIds,
+              resultOnCanvas: Boolean(recovered.resultNodeIds.length || task.resultOnCanvas),
+              error: "",
+              progress: 100,
+              progressLabel: `已从项目结果库找到完整结果，已展示 ${outputs.length} 张到画布`,
+              lastHeartbeatAt: Date.now(),
+            };
+          }
+          if (recovered?.outputs.length && (run.state === "active" || run.state === "waiting")) {
+            return {
+              ...task,
+              status: run.state === "waiting" ? "queued" : "running",
+              stage: run.state === "waiting" ? "queued" : (task.stage && task.stage !== "failed" && task.stage !== "cancelled" && task.stage !== "completed" ? task.stage : "generating"),
+              backendRunState,
+              result: outputs[0],
+              outputs,
+              resultCount: outputs.length,
+              resultNodeIds: recovered.resultNodeIds,
+              resultOnCanvas: Boolean(recovered.resultNodeIds.length || task.resultOnCanvas),
+              error: "",
+              progress: Math.max(55, Math.min(task.progress && task.progress < 100 ? task.progress : 72, 88)),
+              progressLabel: `已先展示 ${outputs.length} 张结果到画布，后台继续补齐剩余方案`,
+              lastHeartbeatAt: Date.now(),
+            };
+          }
+          if ((run.state === "failed" || run.state === "cancelled") && outputs.length) {
+            stopTaskProgress(task.id);
+            delete taskAbortControllersRef.current[task.id];
+            return {
+              ...task,
+              status: "completed",
+              stage: "completed",
+              backendRunState: "finished",
+              endedAt: task.endedAt || (run.endedAt ? Date.parse(run.endedAt) : Date.now()),
+              result: outputs[0],
+              outputs,
+              resultCount: outputs.length,
+              resultNodeIds: recovered?.resultNodeIds?.length ? recovered.resultNodeIds : task.resultNodeIds,
+              resultOnCanvas: Boolean(recovered?.resultNodeIds?.length || task.resultOnCanvas),
+              progress: 100,
+              error: "",
+              progressLabel: `服务端未完整结束，但已展示 ${outputs.length} 张可用结果`,
+              lastHeartbeatAt: Date.now(),
+            };
+          }
           if ((run.state === "failed" || run.state === "cancelled") && !hasTaskResultNodesOnCanvas(task)) {
             stopTaskProgress(task.id);
             delete taskAbortControllersRef.current[task.id];
+            const serverError = run.error || task.error || "服务端任务失败";
             return {
               ...task,
               status: run.state === "cancelled" ? "cancelled" : "failed",
               stage: run.state === "cancelled" ? "cancelled" : "failed",
               backendRunState,
               endedAt: task.endedAt || (run.endedAt ? Date.parse(run.endedAt) : Date.now()),
-              error: run.error || task.error || "服务端任务失败",
+              error: serverError,
+              errorCategory: run.errorCategory,
+              retryable: run.retryable,
               progress: 100,
-              progressLabel: run.error || run.message || "服务端确认任务失败",
+              progressLabel: serverTaskRunFailureLabel(run),
               lastHeartbeatAt: Date.now(),
             };
           }
@@ -1344,6 +1300,59 @@ function NodeWorkflowWorkbench({
     // This poll intentionally keys off request ids; task/node snapshots are read from the current render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendTaskSyncKey, projectId]);
+
+  useEffect(() => {
+    const stuckTasksWithVisibleResults = tasks.filter((task) =>
+      taskBelongsToProject(task, projectId) &&
+      isTaskPossiblyStuck(task) &&
+      taskHasResultImages(task));
+    if (!stuckTasksWithVisibleResults.length) return;
+
+    const now = Date.now();
+    const completed = new Map<string, { outputs: ImageAsset[]; resultNodeIds: string[] }>();
+    for (const task of stuckTasksWithVisibleResults) {
+      const outputs = (task.outputs?.length ? task.outputs : task.result ? [task.result] : [])
+        .filter((image) => !dismissedImageKeysRef.current.has(imageKey(image)));
+      if (!outputs.length) continue;
+      stopTaskProgress(task.id);
+      clearTaskCleanup(task.id);
+      delete taskAbortControllersRef.current[task.id];
+      const resultNodeIds = hasTaskResultNodesOnCanvas(task)
+        ? task.resultNodeIds || []
+        : restoreTaskOutputNodes(task, outputs, { focus: false, sourceStatus: "completed" });
+      completed.set(task.id, { outputs, resultNodeIds });
+    }
+    if (!completed.size) return;
+
+    setTasks((current) => {
+      const next = current.map((task) => {
+        const item = completed.get(task.id);
+        if (!item) return task;
+        return {
+          ...task,
+          status: "completed" as const,
+          stage: "completed" as const,
+          backendRunState: "finished" as const,
+          endedAt: task.endedAt || now,
+          result: item.outputs[0],
+          outputs: item.outputs,
+          resultCount: item.outputs.length,
+          resultNodeIds: item.resultNodeIds.length ? item.resultNodeIds : task.resultNodeIds,
+          resultOnCanvas: Boolean(item.resultNodeIds.length || task.resultOnCanvas),
+          progress: 100,
+          error: "",
+          progressLabel: `已生成 ${item.outputs.length} 张结果，后台补齐等待超时，已按可用结果完成`,
+          lastHeartbeatAt: now,
+        };
+      });
+      tasksRef.current = next;
+      return next;
+    });
+    writeProjectCacheFromRefs();
+    setStatus(`已自动修正 ${completed.size} 个长时间等待的任务：结果已生成，不再继续转圈。`);
+    // This is a recovery effect for task UI drift; helpers read live refs and should not restart from their identities.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, tasks]);
 
   useEffect(() => {
     if (!projectLoadedRef.current) return;
@@ -1440,8 +1449,14 @@ function NodeWorkflowWorkbench({
     }
 
     try {
+      const uploadFile = await compressImageFileForUpload(file);
+      if (uploadFile.size < file.size) {
+        const before = formatFileSize(file.size);
+        const after = formatFileSize(uploadFile.size);
+        setStatus(`已前端压缩图片：${before} → ${after}，上传和生图会更快。`);
+      }
       const formData = new FormData();
-      formData.append("image", file);
+      formData.append("image", uploadFile);
       formData.append("source", source);
       formData.append("projectId", projectId);
       if (assetKind) formData.append("materialType", projectAssetUploadLabel(assetKind));
@@ -1452,7 +1467,7 @@ function NodeWorkflowWorkbench({
       }
       return {
         ...data.image,
-        file,
+        file: uploadFile,
         source,
         materialType: assetKind ? projectAssetUploadLabel(assetKind) : data.image.materialType,
       } satisfies ImageAsset;
@@ -1573,6 +1588,10 @@ function NodeWorkflowWorkbench({
   }
 
   async function createImageNodeFromFile(file: File, position: XYPosition, source: "upload" | "paste") {
+    if (isMaskUtilityFileName(file.name)) {
+      setStatus("局部修改蒙版是系统辅助图，已隐藏，不会作为图片节点添加到画布。");
+      return null;
+    }
     if (imageImportInFlightRef.current) {
       setStatus("正在导入上一张图片，请稍候。");
       return null;
@@ -1940,11 +1959,11 @@ function NodeWorkflowWorkbench({
   function clearCanvas() {
     dismissNodeIds(nodesRef.current.map((node) => node.id));
     dismissResultImages(taskCandidateImagesFromNodes(nodesRef.current));
-    tasks.filter(isTaskActivelyRunning).forEach((task) => {
+    const runningTaskIds = new Set(tasks.filter(isTaskActivelyRunning).map((task) => task.id));
+    tasks.filter((task) => runningTaskIds.has(task.id)).forEach((task) => {
       taskAbortControllersRef.current[task.id]?.abort();
       void notifyBackendTaskCancelled(task);
     });
-    dismissTaskRecords(tasks);
     Object.keys(taskAbortControllersRef.current).forEach((taskId) => {
       delete taskAbortControllersRef.current[taskId];
     });
@@ -1952,14 +1971,30 @@ function NodeWorkflowWorkbench({
     Object.keys(taskCleanupTimersRef.current).forEach(clearTaskCleanup);
     nodesRef.current = [];
     edgesRef.current = [];
-    tasksRef.current = [];
+    const now = Date.now();
+    const nextTasks = tasksRef.current.map((task) =>
+      runningTaskIds.has(task.id)
+        ? {
+            ...task,
+            status: "cancelled" as const,
+            stage: "cancelled" as const,
+            backendRunState: "cancelled" as const,
+            endedAt: task.endedAt || now,
+            error: "清空画布时已停止",
+            progress: 100,
+            progressLabel: "画布已清空，运行中的请求已停止；任务记录保留",
+            cancelled: true,
+          }
+        : task,
+    );
+    tasksRef.current = nextTasks;
     setNodes([]);
     setEdges([]);
-    setTasks([]);
+    setTasks(nextTasks);
     setSelectedNodeId(null);
     setMenu(null);
     writeProjectCacheFromRefs();
-    setStatus("画布已清空；图片库文件仍保留，但已阻止历史结果节点自动补回。");
+    setStatus("画布已清空；任务记录和图片库文件仍保留，已阻止历史结果节点自动补回。");
   }
 
   function organizeCanvas() {
@@ -2015,11 +2050,33 @@ function NodeWorkflowWorkbench({
     ) || null;
   }
 
-  function submitComposer() {
+  function nodeHasActiveTask(nodeId: string) {
+    return tasksRef.current.some((task) =>
+      task.nodeId === nodeId &&
+      taskBelongsToProject(task, activeProjectIdRef.current) &&
+      isTaskActivelyRunning(task),
+    );
+  }
+
+  function changeComposerPrompt(value: string) {
     const selectedPromptNode = selectedNode && isComposerDrivenNode(selectedNode.data.kind) ? selectedNode : null;
-    const prompt = composerPrompt.trim();
+    if (selectedPromptNode) {
+      updateNodeParam(selectedPromptNode.id, "prompt", value);
+      setComposerPrompt("");
+      return;
+    }
+    setComposerPrompt(value);
+  }
+
+  function submitComposer(promptOverride?: string) {
+    const selectedPromptNode = selectedNode && isComposerDrivenNode(selectedNode.data.kind) ? selectedNode : null;
+    const prompt = (promptOverride ?? composerPrompt).trim();
 
     if (selectedPromptNode) {
+      if (isActiveNodeStatus(selectedPromptNode.data.status) || nodeHasActiveTask(selectedPromptNode.id)) {
+        setStatus("当前节点已有任务在运行，请等它完成后再重新运行。");
+        return;
+      }
       const kind = selectedPromptNode.data.kind;
       const hasLinkedImage = Boolean(resolveInputImage(selectedPromptNode.id, "image"));
       const currentNodePrompt = stringParam(selectedPromptNode.data.params.prompt).trim();
@@ -2030,14 +2087,34 @@ function NodeWorkflowWorkbench({
         setStatus("文生图先写提示词，再运行。");
         return;
       }
+      if (kind === "fuse_images" && !nextPrompt) {
+        setStatus("AI合成必须先写清楚合成要求，再运行。");
+        return;
+      }
+      if (kind === "mask_edit" && !nextPrompt) {
+        setStatus("局部修改必须先写清楚要怎么改，再运行。");
+        return;
+      }
+      if (kind === "fuse_images" && (!resolveInputImage(selectedPromptNode.id, "imageA") || !resolveInputImage(selectedPromptNode.id, "imageB"))) {
+        setStatus("AI合成需要连接图1主体和图2场景，再运行。");
+        return;
+      }
       if (requiresConnectedImageForComposer(kind) && !hasLinkedImage) {
         setStatus(kind === "resize" ? "改比例节点要先连接一张图片，再选择目标比例和尺寸。" : "这个节点要先连接一张图片，再运行。");
         return;
       }
 
       if (prompt) updateNodeParam(selectedPromptNode.id, "prompt", prompt);
-      if (kind === "text_to_image") {
+      if (kind === "text_to_image" || kind === "image_to_image" || kind === "fuse_images") {
         updateNodeParam(selectedPromptNode.id, "aspectRatio", composerDisplayRatio);
+        updateNodeParam(selectedPromptNode.id, "quality", composerDisplayQuality);
+      }
+      if (kind === "resize" || kind === "outpaint") {
+        updateNodeParam(selectedPromptNode.id, "targetRatio", composerDisplayRatio);
+        if (kind === "resize" && composerDisplayRatio !== "auto") {
+          updateNodeParam(selectedPromptNode.id, "targetSize", defaultTargetSizeForRatio(composerDisplayRatio));
+          updateNodeParam(selectedPromptNode.id, "sizePreset", composerDisplayRatio === "custom" ? "自定义" : composerDisplayRatio);
+        }
         updateNodeParam(selectedPromptNode.id, "quality", composerDisplayQuality);
       }
       if (composerModel && isComposerDrivenNode(kind)) updateNodeParam(selectedPromptNode.id, "model", composerModel);
@@ -2071,7 +2148,16 @@ function NodeWorkflowWorkbench({
 
   function changeComposerRatio(value: AspectRatioValue) {
     setComposerRatio(value);
-    if (selectedNode?.data.kind === "text_to_image") updateNodeParam(selectedNode.id, "aspectRatio", value);
+    if (selectedNode?.data.kind === "text_to_image" || selectedNode?.data.kind === "image_to_image" || selectedNode?.data.kind === "fuse_images") {
+      updateNodeParam(selectedNode.id, "aspectRatio", value);
+    }
+    if (selectedNode?.data.kind === "resize" || selectedNode?.data.kind === "outpaint") {
+      updateNodeParam(selectedNode.id, "targetRatio", value);
+      if (selectedNode.data.kind === "resize" && value !== "auto") {
+        updateNodeParam(selectedNode.id, "targetSize", defaultTargetSizeForRatio(value));
+        updateNodeParam(selectedNode.id, "sizePreset", value === "custom" ? "自定义" : value);
+      }
+    }
   }
 
   function changeComposerQuality(value: QualityValue) {
@@ -2158,12 +2244,79 @@ function NodeWorkflowWorkbench({
       .catch((error) => setStatus(error instanceof Error ? error.message : "添加图片参考失败。"));
   }
 
+  function attachCanvasImageAsTextReference(nodeId: string, role: TextReferenceRole) {
+    const target = nodes.find((node) => node.id === nodeId && node.data.kind === "text_to_image");
+    if (!target) return;
+    const referenceEdges = textReferenceEdgesForNode(nodeId);
+    if (referenceEdges.length >= maxTextReferenceImages) {
+      setStatus(`文生图图片参考最多连接 ${maxTextReferenceImages} 张。`);
+      return;
+    }
+    const connectedSources = new Set(referenceEdges.map((edge) => edge.source));
+    const candidates = nodes
+      .filter((node) => node.id !== nodeId && !connectedSources.has(node.id) && Boolean(node.data.output || node.data.image))
+      .sort((a, b) => {
+        const aDistance = Math.abs(a.position.x - target.position.x) + Math.abs(a.position.y - target.position.y);
+        const bDistance = Math.abs(b.position.x - target.position.x) + Math.abs(b.position.y - target.position.y);
+        return aDistance - bDistance;
+      });
+    const source = candidates[0];
+    if (!source) {
+      setStatus("画布上没有可用图片。先上传/粘贴图片，或把图片节点连到文生图左侧“图片参考”。");
+      return;
+    }
+    const current = normalizeTextReferenceConfigs(target.data.params.referenceConfigs);
+    const nextReferenceConfigs = [
+      ...referenceEdges.map((edge, index) => {
+        const existing = current[index] || current.find((config) => config.handle === (edge.targetHandle || textReferenceInputHandle));
+        return {
+          handle: edge.targetHandle || textReferenceInputHandle,
+          role: existing?.role || defaultTextReferenceConfig(edge.targetHandle || textReferenceInputHandle, index).role,
+          weight: existing?.weight || "high" as TextReferenceWeight,
+        };
+      }),
+      {
+        handle: textReferenceInputHandle,
+        role,
+        weight: role === "style" ? "medium" as TextReferenceWeight : "high" as TextReferenceWeight,
+      },
+    ];
+    updateNodeParam(nodeId, "referenceConfigs", nextReferenceConfigs);
+    setEdges((currentEdges) => {
+      const alreadyConnected = currentEdges.some((edge) => edge.source === source.id && edge.target === nodeId && isTextReferenceTargetHandle(edge.targetHandle));
+      if (alreadyConnected) return currentEdges;
+      return [
+        ...currentEdges,
+        {
+          id: `edge_${source.id}_${nodeId}_${Date.now()}`,
+          source: source.id,
+          sourceHandle: "image",
+          target: nodeId,
+          targetHandle: textReferenceInputHandle,
+          animated: true,
+          className: "workflow-edge",
+        },
+      ];
+    });
+    setSelectedNodeId(nodeId);
+    setStatus(role === "direct_use" ? "已把最近的画布图片设为引用原图。" : "已把最近的画布图片设为参考风格。");
+  }
+
   async function runNode(nodeId: string): Promise<ImageAsset[]> {
     const node = nodes.find((item) => item.id === nodeId);
     if (!node) return [];
     if (node.data.kind === "image_input") return node.data.output ? [node.data.output] as ImageAsset[] : [];
+    if (isActiveNodeStatus(node.data.status) || nodeHasActiveTask(nodeId)) {
+      setStatus("当前节点已有任务在运行，请等它完成后再重新运行。");
+      return [];
+    }
     if (!modelInfo.hasKey && node.data.kind !== "output") {
       markNodeFailed(nodeId, "请先配置 OpenAI API Key。");
+      return [];
+    }
+    if (node.data.kind === "text_to_image" && !stringParam(node.data.params.prompt).trim()) {
+      setNodeStatus(nodeId, "idle");
+      setStatus("文生图需要先输入文字需求。已连接的图片只作为引用/参考，不会单独触发空任务。");
       return [];
     }
     if (node.data.kind === "mask_edit" && isLegacyUnvalidatedMask(node)) {
@@ -2175,6 +2328,31 @@ function NodeWorkflowWorkbench({
 
     const taskProjectId = projectId;
     const taskId = createTask(node, taskProjectId);
+    setNodeStatus(nodeId, "queued");
+    updateTask(taskId, {
+      status: "queued",
+      stage: "queued",
+      backendRunState: "waiting",
+      progress: 4,
+      progressLabel: "已进入稳定队列，等待前一个节点任务完成。",
+    });
+    let releaseNodeRunSlot: (() => void) | null = null;
+    try {
+      releaseNodeRunSlot = await acquireNodeRunSlot(taskId, nodeId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "任务已停止。";
+      updateTask(taskId, {
+        status: "cancelled",
+        stage: "cancelled",
+        backendRunState: "cancelled",
+        endedAt: Date.now(),
+        error: message,
+        progress: 100,
+        progressLabel: "排队任务已停止",
+        cancelled: true,
+      });
+      return [];
+    }
     const abortController = new AbortController();
     taskAbortControllersRef.current[taskId] = abortController;
     startTaskProgress(taskId);
@@ -2251,40 +2429,15 @@ function NodeWorkflowWorkbench({
           }
           setHistoryImages((current) => mergeImages(outputs, current));
           setImageManagerImages((current) => mergeImages(outputs, current));
-          nodesRef.current = nodesRef.current.map((item) =>
-            item.id === nodeId
-              ? {
-                  ...item,
-                  data: {
-                    ...item.data,
-                    output: outputs[0],
-                    outputs,
-                    resultCount: outputs.length,
-                    status: "completed",
-                    error: "",
-                  },
-                }
-              : item,
-          );
-          setNodes((current) =>
-            current.map((item) =>
-              item.id === nodeId
-                ? {
-                    ...item,
-                    data: {
-                      ...item.data,
-                      output: outputs[0],
-                      outputs,
-                      resultCount: outputs.length,
-                      status: "completed",
-                      error: "",
-                    },
-                  }
-                : item,
-            ),
-          );
-          resultNodeIds = addOutputImageNodes(node, outputs);
-          focusCanvasOnNodes([node.id, ...resultNodeIds]);
+          nodesRef.current = applyNodeGeneratedOutputs(nodesRef.current, nodeId, outputs);
+          setNodes((current) => applyNodeGeneratedOutputs(current, nodeId, outputs));
+          if (shouldCreateSeparateResultNodes(node.data.kind)) {
+            resultNodeIds = addOutputImageNodes(node, outputs);
+            focusCanvasOnNodes([node.id, ...resultNodeIds]);
+          } else {
+            resultNodeIds = [node.id];
+            focusCanvasOnNodes([node.id]);
+          }
         }
       } else {
         if (activeProjectIdRef.current === taskProjectId) setNodeStatus(nodeId, "completed");
@@ -2296,24 +2449,19 @@ function NodeWorkflowWorkbench({
       const qualityWarning = Boolean(blockedOutput);
       const endedAt = Date.now();
       updateTask(taskId, {
-        status: "completed",
-        stage: "completed",
-        backendRunState: "finished",
-        endedAt,
-        result: outputs[0],
-        outputs,
-        resultCount: outputs.length,
-        resultNodeIds,
-        saveDurationMs: endedAt - saveStartedAt,
-        progress: 100,
-        progressLabel: qualityWarning ? `已生成结果，质检提醒：${blockedOutput ? qualityBadgeLabel(blockedOutput) : "请检查后交付"}` : completedTaskLabel(outputs.length, outputs[0]),
-        error: undefined,
+        ...buildCompletedTaskOutputPatch({
+          outputs,
+          resultNodeIds,
+          saveStartedAt,
+          endedAt,
+          qualityWarningLabel: qualityWarning ? (blockedOutput ? qualityBadgeLabel(blockedOutput) : "请检查后交付") : undefined,
+        }),
       });
       if (activeProjectIdRef.current === taskProjectId) {
         setStatus(
           qualityWarning
             ? `${node.data.title} 已生成 ${outputs.length} 张，质检提醒：${blockedOutput ? qualityBadgeLabel(blockedOutput) : "请检查尺寸和白边"}。结果已在画布，不再标为失败。`
-            : `${node.data.title} 完成：${outputs.length} 张，耗时 ${formatDuration(endedAt - requestStartedAt)}。画布右侧已生成结果节点。`,
+            : `${node.data.title} 完成：${outputs.length} 张，耗时 ${formatDuration(endedAt - requestStartedAt)}。结果已显示在当前节点。`,
         );
       }
       return outputs;
@@ -2342,38 +2490,8 @@ function NodeWorkflowWorkbench({
       if (recovered.outputs.length) {
         delete taskAbortControllersRef.current[taskId];
         if (activeProjectIdRef.current === taskProjectId) {
-          nodesRef.current = nodesRef.current.map((item) =>
-            item.id === nodeId
-              ? {
-                  ...item,
-                  data: {
-                    ...item.data,
-                    output: recovered.outputs[0],
-                    outputs: recovered.outputs,
-                    resultCount: recovered.outputs.length,
-                    status: "completed",
-                    error: "",
-                  },
-                }
-              : item,
-          );
-          setNodes((current) =>
-            current.map((item) =>
-              item.id === nodeId
-                ? {
-                    ...item,
-                    data: {
-                      ...item.data,
-                      output: recovered.outputs[0],
-                      outputs: recovered.outputs,
-                      resultCount: recovered.outputs.length,
-                      status: "completed",
-                      error: "",
-                    },
-                  }
-                : item,
-            ),
-          );
+          nodesRef.current = applyNodeGeneratedOutputs(nodesRef.current, nodeId, recovered.outputs);
+          setNodes((current) => applyNodeGeneratedOutputs(current, nodeId, recovered.outputs));
         }
         updateTask(taskId, {
           ...buildTaskRecoveredCompletionPatch({ id: taskId, nodeId, nodeName: node.data.title, type: nodeKindLabel(node.data.kind), model: activeImageModelForNode(node), status: "failed", startedAt: Date.now() } as TaskRecord, recovered),
@@ -2445,6 +2563,32 @@ function NodeWorkflowWorkbench({
             return historyOutputs;
           }
         }
+        if ((backendRun.state === "failed" || backendRun.state === "cancelled") && backendOutputs.length) {
+          delete taskAbortControllersRef.current[taskId];
+          const resultNodeIds = activeProjectIdRef.current === taskProjectId
+            ? restoreTaskOutputNodes({ id: taskId, requestId, nodeId, nodeName: node.data.title, type: nodeKindLabel(node.data.kind) }, backendOutputs, { sourceStatus: "completed" })
+            : [];
+          if (activeProjectIdRef.current === taskProjectId) {
+            setHistoryImages((current) => mergeImages(backendOutputs, current));
+            setImageManagerImages((current) => mergeImages(backendOutputs, current));
+          }
+          updateTask(taskId, {
+            status: "completed",
+            stage: "completed",
+            backendRunState: "finished",
+            endedAt: backendRun.endedAt ? Date.parse(backendRun.endedAt) : Date.now(),
+            result: backendOutputs[0],
+            outputs: backendOutputs,
+            resultCount: backendOutputs.length,
+            resultNodeIds,
+            resultOnCanvas: Boolean(resultNodeIds.length),
+            progress: 100,
+            error: "",
+            progressLabel: `服务端返回异常，但已拿到 ${backendOutputs.length} 张可用结果，已按完成处理`,
+          });
+          if (activeProjectIdRef.current === taskProjectId) setStatus(`${node.data.title} 已拿到可用结果，已同步到画布，不标失败。`);
+          return backendOutputs;
+        }
         if (backendRun.state === "finished") {
           delete taskAbortControllersRef.current[taskId];
           const backendMessage = backendRun.message || "服务端完成但没有返回可用图片。";
@@ -2462,6 +2606,33 @@ function NodeWorkflowWorkbench({
         }
         if (backendRun.state === "active" || backendRun.state === "waiting") {
           const queued = backendRun.state === "waiting";
+          const historyOutputs = await fetchTaskHistoryOutputs(requestId, taskProjectId);
+          if (historyOutputs.length && taskHasCompleteRecoveredOutputs({ id: taskId, requestId, nodeId, nodeName: node.data.title, type: nodeKindLabel(node.data.kind) }, backendRun, historyOutputs)) {
+            delete taskAbortControllersRef.current[taskId];
+            const resultNodeIds = activeProjectIdRef.current === taskProjectId
+              ? restoreTaskOutputNodes({ id: taskId, requestId, nodeId, nodeName: node.data.title, type: nodeKindLabel(node.data.kind) }, historyOutputs, { sourceStatus: "completed" })
+              : [];
+            if (activeProjectIdRef.current === taskProjectId) {
+              setHistoryImages((current) => mergeImages(historyOutputs, current));
+              setImageManagerImages((current) => mergeImages(historyOutputs, current));
+            }
+            updateTask(taskId, {
+              status: "completed",
+              stage: "completed",
+              backendRunState: "finished",
+              endedAt: Date.now(),
+              result: historyOutputs[0],
+              outputs: historyOutputs,
+              resultCount: historyOutputs.length,
+              resultNodeIds,
+              resultOnCanvas: Boolean(resultNodeIds.length),
+              progress: 100,
+              error: "",
+              progressLabel: "已从项目结果库找到完整结果，任务已自动完成",
+            });
+            if (activeProjectIdRef.current === taskProjectId) setStatus(`${node.data.title} 已找到生成图，结果已同步到画布。`);
+            return historyOutputs;
+          }
           if (activeProjectIdRef.current === taskProjectId) setNodeStatus(nodeId, "running");
           startTaskProgress(taskId);
           updateTask(taskId, {
@@ -2505,8 +2676,10 @@ function NodeWorkflowWorkbench({
             backendRunState,
             endedAt: backendRun.endedAt ? Date.parse(backendRun.endedAt) : Date.now(),
             error: maskMessage,
+            errorCategory: backendRun.errorCategory,
+            retryable: backendRun.retryable,
             progress: 100,
-            progressLabel: backendRun.message || taskFailureHint(maskMessage),
+            progressLabel: serverTaskRunFailureLabel(backendRun) || taskFailureHint(maskMessage),
           });
           return [];
         }
@@ -2537,7 +2710,48 @@ function NodeWorkflowWorkbench({
       updateTask(taskId, { status: "failed", stage: "failed", backendRunState: "failed", endedAt: Date.now(), error: maskMessage, progress: 100, progressLabel: taskFailureHint(maskMessage) });
       if (activeProjectIdRef.current === taskProjectId) setStatus(maskMessage);
       return [];
+    } finally {
+      releaseNodeRunSlot?.();
     }
+  }
+
+  async function acquireNodeRunSlot(taskId: string, nodeId: string) {
+    const hadQueue = Boolean(activeNodeRunTaskIdRef.current) || nodeRunQueueDepthRef.current > 0;
+    nodeRunQueueDepthRef.current += 1;
+    let releaseQueuedPromise = () => {};
+    const previous = nodeRunQueueRef.current.catch(() => undefined);
+    nodeRunQueueRef.current = previous.then(() => new Promise<void>((resolve) => {
+      releaseQueuedPromise = resolve;
+    }));
+    if (hadQueue) {
+      updateTask(taskId, {
+        status: "queued",
+        stage: "queued",
+        backendRunState: "waiting",
+        progress: 6,
+        progressLabel: "稳定队列：前面还有节点任务，当前任务暂不请求模型。",
+      });
+      setStatus("任务已加入稳定队列，会按顺序自动运行。");
+    }
+    await previous;
+    nodeRunQueueDepthRef.current = Math.max(0, nodeRunQueueDepthRef.current - 1);
+    if (cancelledTaskIdsRef.current.has(taskId)) {
+      releaseQueuedPromise();
+      throw new Error("排队期间已手动停止。");
+    }
+    activeNodeRunTaskIdRef.current = taskId;
+    setNodeStatus(nodeId, "running");
+    updateTask(taskId, {
+      status: "running",
+      stage: "preparing",
+      backendRunState: "active",
+      progress: 10,
+      progressLabel: "已轮到当前节点，正在准备请求素材。",
+    });
+    return () => {
+      if (activeNodeRunTaskIdRef.current === taskId) activeNodeRunTaskIdRef.current = null;
+      releaseQueuedPromise();
+    };
   }
 
   async function executeNode(node: FlowNode, signal?: AbortSignal, taskId?: string): Promise<ImageAsset[]> {
@@ -2558,8 +2772,66 @@ function NodeWorkflowWorkbench({
     return [];
   }
 
+  function currentProjectBrandAssets() {
+    return getCurrentProjectBrandAssets(projectAssets, projectKnowledge);
+  }
+
+  function hasSchemeDecisionAssets() {
+    const assets = currentProjectBrandAssets();
+    return Boolean(
+      projectProfile.organizationName.trim() ||
+      projectProfile.phone.trim() ||
+      projectProfile.address.trim() ||
+      projectProfile.logoName.trim() ||
+      projectProfile.qrCodeNote.trim() ||
+      projectProfile.commonCopy.trim() ||
+      projectProfileColors(projectProfile).length ||
+      resolveSchemeDecisionBrandReferenceAssets(assets).length,
+    );
+  }
+
+  function schemeAssetDecisionText(visibleRequestText: string) {
+    if (!hasSchemeDecisionAssets()) return "";
+    const hidden = resolveNoVisibleProjectOutputPolicy(visibleRequestText);
+    const assets = currentProjectBrandAssets();
+    const logoAssets = findBrandAssets(assets, "logo");
+    const ipAssets = findBrandAssets(assets, "ip");
+    const qrAssets = findBrandAssets(assets, "qrcode");
+    const colors = projectProfileColors(projectProfile);
+    const explicitAll = /放上|加上|加入|添加|写上|显示|展示|露出|带上|包含|需要|必须有|要有|使用|引用|贴上|保留|保持|沿用|复用/.test(visibleRequestText) &&
+      /电话|地址|联系方式|二维码|QR|qr|logo|Logo|LOGO|标志|品牌标识|IP形象|ip形象|吉祥物/.test(visibleRequestText);
+    return [
+      "【素材策略】电话/地址/Logo/二维码/IP只能用项目真实素材；缺失不编造。",
+      explicitAll
+        ? "用户明确要求素材：A/B都按真实素材使用。"
+        : "未明确要求时：A可放转化素材；B按需放Logo/IP；电话/地址/二维码非必要不放。",
+      hidden.noLogo ? "用户要求不要Logo：两个方案都禁止出现Logo或品牌标识。" : "",
+      hidden.noContact ? "用户要求不要联系方式：两个方案都禁止出现电话、地址、热线、联系卡片。" : "",
+      hidden.noQr ? "用户要求不要二维码：两个方案都禁止出现二维码、扫码区或假二维码。" : "",
+      hidden.noText ? "用户要求无文字/纯背景：项目文字资料只能后台参考，禁止上画。" : "",
+      projectProfile.organizationName && !hidden.noText ? `机构/品牌名称：${projectProfile.organizationName}` : "",
+      colors.length ? `品牌色：${colors.join("、")}` : "",
+      projectProfile.logoName && !hidden.noLogo ? `Logo名称：${projectProfile.logoName}` : "",
+      logoAssets.length && !hidden.noLogo ? `Logo图片：${logoAssets.length}个` : "",
+      ipAssets.length ? `IP形象：${ipAssets.length}个` : "",
+      projectProfile.phone && !hidden.noContact ? `真实电话：${projectProfile.phone}` : "",
+      projectProfile.address && !hidden.noContact ? `真实地址：${projectProfile.address}` : "",
+      projectProfile.qrCodeNote && !hidden.noQr ? `二维码说明：${projectProfile.qrCodeNote}` : "",
+      qrAssets.length && !hidden.noQr ? `二维码图片：${qrAssets.length}个` : "",
+      projectProfile.commonCopy && !hidden.noText ? `常用文案：${splitProfileLines(projectProfile.commonCopy).slice(0, 3).join("；")}` : "",
+      "Logo/二维码需要清晰完整；不要重绘成乱码。",
+    ].filter(Boolean).join("\n");
+  }
+
+  function projectAwareRequestText(visibleRequestText: string) {
+    return [visibleRequestText, schemeAssetDecisionText(visibleRequestText)].filter(Boolean).join("\n");
+  }
+
   function buildProductionProtectionContext(operation: string, sourceImages: ImageAsset[] = [], node?: FlowNode, visibleRequestText = "") {
-    if (operation === "text_to_image" && !shouldUseProjectPromptContext(visibleRequestText)) {
+    const projectAwareText = projectAwareRequestText(visibleRequestText);
+    const allowSchemeDecision = operation === "text_to_image" || operation === "image_to_image";
+    const canUseProjectAssets = shouldUseProjectPromptContext(visibleRequestText) || (allowSchemeDecision && Boolean(schemeAssetDecisionText(visibleRequestText)));
+    if ((operation === "text_to_image" || operation === "image_to_image" || operation === "resize" || operation === "outpaint") && !canUseProjectAssets) {
       return {
         protectedTexts: [],
         protectedAssets: [],
@@ -2577,8 +2849,8 @@ function NodeWorkflowWorkbench({
       projectId,
       operation,
       sourceImages,
-      brandAssets: getCurrentProjectBrandAssets(projectAssets, projectKnowledge),
-      visibleRequestText,
+      brandAssets: currentProjectBrandAssets(),
+      visibleRequestText: projectAwareText,
     });
     const creativeBrief = node?.data.params?.creativeBrief as CreativeBrief | undefined;
     if (!creativeBrief) return context;
@@ -2597,54 +2869,15 @@ function NodeWorkflowWorkbench({
   }
 
   function buildNodeProjectConstraintText(node: FlowNode, visibleRequestText: string) {
+    const projectAwareText = projectAwareRequestText(visibleRequestText);
     return buildProjectConstraintText(
       projectContextText,
       projectProfile,
       textProtectionMode,
       resolveLegacyTaskContextForNode(node),
-      visibleRequestText,
-      getCurrentProjectBrandAssets(projectAssets, projectKnowledge),
+      projectAwareText,
+      currentProjectBrandAssets(),
     );
-  }
-
-  function buildCreativeImageToImageConstraintText(node: FlowNode, visibleRequestText: string) {
-    const notes = buildNodeProjectConstraintText(node, visibleRequestText);
-    const cleaned = notes
-      .split("\n")
-      .filter((line) => !isConservativeImageToImageNote(line))
-      .join("\n");
-    return [
-      cleaned,
-      "图生图创意改版：项目资料只用于保护品牌识别、核心文案含义、真实联系方式、Logo 和主体识别度；允许重新设计标题位置、主体位置、卖点层级、背景光效、装饰元素和信息区布局。",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  function buildTextToImageConstraintText(node: FlowNode, visibleRequestText: string, references: TextReferenceImage[]) {
-    const base = shouldUseProjectPromptContext(visibleRequestText) ? buildNodeProjectConstraintText(node, visibleRequestText) : "";
-    if (!references.length) return base;
-    const strongReferenceMode = shouldUseStrongTextReferenceMode(visibleRequestText);
-    return [
-      base,
-      `带图片参考的文生图：以文字需求为主，连接到“图片参考”入口的图片作为素材参考参与生成；最多读取 ${maxTextReferenceImages} 张。`,
-      strongReferenceMode
-        ? "用户要求参考画面 / 活动信息 / 内容不变 / 1:1 / 复刻 / 保持版式配色时：第 1 张图片作为主参考，锁定活动主题、核心文案、版式骨架、配色比例、信息区位置和视觉重心；只替换用户明确要求修改的内容。"
-        : "这不是图生图，不要以某一张参考图为底稿复刻；删除或未连接的图片不得继续出现在生成结果里。",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  function buildAiCompositeConstraintText(node: FlowNode, visibleRequestText: string) {
-    return [
-      buildNodeProjectConstraintText(node, visibleRequestText),
-      "AI合成素材规则：图1是主体来源，图2是场景来源；不要把两张图平均融合、半透明叠加或左右拼接。",
-      "合成时优先处理主体大小、位置、透视、接触阴影、遮挡层次、光影方向、色温、边缘羽化和画面颗粒，让主体像真实处在图2场景里。",
-      "默认先输出 1 张真实自然合成；用户明确要求多方案时再输出广告设计合成方案。",
-    ]
-      .filter(Boolean)
-      .join("\n");
   }
 
   function resolveLegacyTaskContextForNode(node: FlowNode) {
@@ -2664,8 +2897,8 @@ function NodeWorkflowWorkbench({
       .join("\n");
   }
 
-  function appendProtectionContext(formData: FormData, operation: string, sourceImages: ImageAsset[] = [], node?: FlowNode) {
-    formData.append("protectionContext", JSON.stringify(buildProductionProtectionContext(operation, sourceImages, node)));
+  function appendProtectionContext(formData: FormData, operation: string, sourceImages: ImageAsset[] = [], node?: FlowNode, visibleRequestText = "") {
+    formData.append("protectionContext", JSON.stringify(buildProductionProtectionContext(operation, sourceImages, node, visibleRequestText)));
   }
 
   function taskTracePayload(taskId: string | undefined, node: FlowNode, operation: string) {
@@ -2695,6 +2928,33 @@ function NodeWorkflowWorkbench({
     if (!response?.ok) return null;
     const data = (await response.json().catch(() => ({}))) as { runs?: ServerTaskRunRecord[] };
     return data.runs?.find((run) => run.requestId === requestId) || null;
+  }
+
+  async function mergeServerTaskRunsIntoProject(taskProjectId: string, taskProjectName: string) {
+    if (!taskProjectId) return;
+    const params = new URLSearchParams({ projectId: taskProjectId });
+    const response = await fetch(`/api/task-runs?${params.toString()}`).catch(() => null);
+    if (!response?.ok) return;
+    const data = (await response.json().catch(() => ({}))) as { runs?: ServerTaskRunRecord[] };
+    const serverTasks = filterDismissedProjectTasks(
+      taskProjectId,
+      restoreProjectTasks((data.runs || [])
+        .map((run) => taskRecordFromServerRun(run, taskProjectId, taskProjectName))
+        .filter((task): task is TaskRecord => Boolean(task))),
+    );
+    if (!serverTasks.length) return;
+    const merged = workflowRuntimeRef.current.resetTaskProjectContexts(
+      restoreProjectTasks(mergeTaskRecords(tasksRef.current, serverTasks)),
+      taskProjectId,
+      taskProjectName,
+    );
+    const currentFingerprint = tasksRef.current.map((task) => `${task.id}:${task.status}:${task.resultCount || task.outputs?.length || 0}`).join("|");
+    const mergedFingerprint = merged.map((task) => `${task.id}:${task.status}:${task.resultCount || task.outputs?.length || 0}`).join("|");
+    if (mergedFingerprint === currentFingerprint) return;
+    tasksRef.current = merged;
+    setTasks(merged);
+    writeProjectTaskCache(taskProjectId, merged);
+    writeProjectCacheFromRefs();
   }
 
   async function fetchTaskHistoryOutputs(requestId: string, taskProjectId = projectId) {
@@ -2735,6 +2995,47 @@ function NodeWorkflowWorkbench({
     return grouped;
   }
 
+  function taskHasCompleteRecoveredOutputs(
+    task: Pick<TaskRecord, "id" | "requestId" | "nodeId" | "nodeName" | "type">,
+    run: ServerTaskRunRecord | null | undefined,
+    outputs: ImageAsset[],
+  ) {
+    if (!outputs.length) return false;
+    const expectedCount = run?.outputCount || expectedRecoveredOutputCount(task, run, outputs);
+    return outputs.length >= expectedCount;
+  }
+
+  function expectedRecoveredOutputCount(
+    task: Pick<TaskRecord, "nodeId" | "nodeName" | "type">,
+    run: ServerTaskRunRecord | null | undefined,
+    outputs: ImageAsset[],
+  ) {
+    const kind = recoveredOutputNodeKind(task, run, outputs);
+    if (kind === "text_to_image" || kind === "image_to_image" || kind === "resize" || kind === "design_optimize" || kind === "outpaint") return 2;
+    return 1;
+  }
+
+  function recoveredOutputNodeKind(
+    task: Pick<TaskRecord, "nodeId" | "nodeName" | "type">,
+    run: ServerTaskRunRecord | null | undefined,
+    outputs: ImageAsset[],
+  ) {
+    const sourceNodeKind = task.nodeId ? nodesRef.current.find((node) => node.id === task.nodeId)?.data.kind : "";
+    const outputNodeKind = outputs.find((image) => image.sourceNodeKind || image.nodeOperation)?.sourceNodeKind || outputs.find((image) => image.nodeOperation)?.nodeOperation;
+    const raw = `${sourceNodeKind || ""} ${run?.nodeKind || ""} ${outputNodeKind || ""} ${task.type || ""} ${task.nodeName || ""}`;
+    if (/text_to_image|文生图/.test(raw)) return "text_to_image";
+    if (/image_to_image|图生图/.test(raw)) return "image_to_image";
+    if (/design_optimize|设计优化/.test(raw)) return "design_optimize";
+    if (/reference_remake|参考图重制/.test(raw)) return "reference_remake";
+    if (/resize|改尺寸|AI改尺寸/.test(raw)) return "resize";
+    if (/outpaint|AI扩图/.test(raw)) return "outpaint";
+    if (/mask_edit|局部/.test(raw)) return "mask_edit";
+    if (/hd_redraw|upscale_4k|画质增强/.test(raw)) return "hd_redraw";
+    if (/png_layers|PNG/.test(raw)) return "png_layers";
+    if (/fuse_images|AI合成/.test(raw)) return "fuse_images";
+    return "";
+  }
+
   async function notifyBackendTaskCancelled(task: TaskRecord) {
     if (!task.requestId) return;
     await fetch("/api/task-runs", {
@@ -2755,10 +3056,12 @@ function NodeWorkflowWorkbench({
     });
   }
 
-  async function appendBrandReferenceAssets(formData: FormData, options: { requireExplicitProjectContext?: boolean; visibleRequestText?: string } = {}) {
-    if (options.requireExplicitProjectContext && !shouldUseProjectPromptContext(options.visibleRequestText || "")) return 0;
-    const assets = getCurrentProjectBrandAssets(projectAssets, projectKnowledge);
-    const refs = resolveBrandReferenceAssets(projectProfile, assets);
+  async function appendBrandReferenceAssets(formData: FormData, options: { requireExplicitProjectContext?: boolean; visibleRequestText?: string; allowSchemeDecision?: boolean } = {}) {
+    const visibleRequestText = options.visibleRequestText || "";
+    const allowSchemeDecision = Boolean(options.allowSchemeDecision && hasSchemeDecisionAssets());
+    if (options.requireExplicitProjectContext && !shouldUseProjectPromptContext(visibleRequestText) && !allowSchemeDecision) return 0;
+    const assets = currentProjectBrandAssets();
+    const refs = allowSchemeDecision ? resolveSchemeDecisionBrandReferenceAssets(assets) : resolveBrandReferenceAssets(projectProfile, assets);
     for (const [index, asset] of refs.entries()) {
       await appendImageToForm(formData, asset, `brandAsset_${index + 1}`, `brandAssetUrl_${index + 1}`, `brand-asset-${index + 1}.png`);
     }
@@ -2801,13 +3104,13 @@ function NodeWorkflowWorkbench({
     const params = node.data.params;
     const basePrompt = stringParam(params.prompt);
     const references = resolveTextReferenceInputs(node);
-    const requestRatio = resolveRequestedAspectRatio(params.aspectRatio, basePrompt);
+    const requestRatio = ratioParam(params.aspectRatio);
     const custom = customSize(params);
-    const prompt = enrichPrompt(basePrompt, buildTextToImageConstraintText(node, basePrompt, references.manifest));
+    const prompt = basePrompt.trim();
     if (!prompt) throw new Error("文生图节点需要填写 prompt。");
     setStatus("AI 正在后台分析需求、参考图和素材，并生成成品图。");
-    const shouldAttachProjectContext = shouldUseProjectPromptContext(basePrompt);
-    const brandReferences = shouldAttachProjectContext ? resolveBrandReferenceAssets(projectProfile, getCurrentProjectBrandAssets(projectAssets, projectKnowledge)) : [];
+    const shouldAttachProjectContext = shouldUseProjectPromptContext(basePrompt) || hasSchemeDecisionAssets();
+    const brandReferences = shouldAttachProjectContext ? resolveSchemeDecisionBrandReferenceAssets(currentProjectBrandAssets()) : [];
     if (brandReferences.length || references.items.length) {
       const formData = new FormData();
       formData.append("prompt", prompt);
@@ -2824,7 +3127,7 @@ function NodeWorkflowWorkbench({
       appendTextToImageCompositionSettings(formData, params);
       formData.append("protectionContext", JSON.stringify(buildProductionProtectionContext("text_to_image", references.items.map((item) => item.image), node, basePrompt)));
       await appendTextReferenceImages(formData, references.items);
-      await appendBrandReferenceAssets(formData, { requireExplicitProjectContext: true, visibleRequestText: basePrompt });
+      await appendBrandReferenceAssets(formData, { requireExplicitProjectContext: true, visibleRequestText: basePrompt, allowSchemeDecision: true });
       const response = await fetch("/api/generate-image", { method: "POST", body: formData, signal });
       return imagesFromResponse(response);
     }
@@ -2864,15 +3167,10 @@ function NodeWorkflowWorkbench({
     const imageToImagePrompt = sanitizeLegacyImageToImagePrompt(stringParam(params.prompt)) || IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST;
     const requestRatio = isOutpaint ? ratioParam(params.targetRatio) : resolveRequestedAspectRatio(params.aspectRatio, imageToImagePrompt);
     const requestText = isOutpaint ? buildOutpaintPrompt(params) : imageToImagePrompt;
-    const prompt = enrichPrompt(
-      isOutpaint
-        ? buildOutpaintPrompt(params)
-        : imageToImagePrompt,
-      isOutpaint ? buildNodeProjectConstraintText(node, requestText) : buildCreativeImageToImageConstraintText(node, requestText),
-    );
+    const prompt = requestText.trim();
     const formData = new FormData();
     await appendImageToForm(formData, image, "image", "sourceUrl", "source.png");
-    await appendBrandReferenceAssets(formData);
+    await appendBrandReferenceAssets(formData, { requireExplicitProjectContext: true, visibleRequestText: requestText, allowSchemeDecision: true });
     formData.append("prompt", prompt);
     formData.append("adType", "通用设计");
     formData.append("aspectRatio", requestRatio);
@@ -2880,11 +3178,11 @@ function NodeWorkflowWorkbench({
     formData.append("customHeight", String(customSize(params).height || 0));
     formData.append("quality", qualityParam(params.quality));
     appendImageModel(formData, node, stringParam(params.model));
-    formData.append("keepOriginalRatio", isOutpaint ? "false" : String(Boolean(params.keepOriginalRatio)));
+    formData.append("keepOriginalRatio", "false");
     if (isOutpaint) formData.append("direction", stringParam(params.direction) || "四周");
     formData.append("modeLabel", label);
     appendTaskTrace(formData, taskId, node, isOutpaint ? "outpaint" : "image_to_image");
-    appendProtectionContext(formData, isOutpaint ? "outpaint" : "image_to_image", [image], node);
+    appendProtectionContext(formData, isOutpaint ? "outpaint" : "image_to_image", [image], node, requestText);
     const response = await fetch("/api/edit-image", { method: "POST", body: formData, signal });
     return imagesFromResponse(response);
   }
@@ -2894,22 +3192,18 @@ function NodeWorkflowWorkbench({
     const imageB = resolveInputImage(node.id, "imageB");
     if (!imageA || !imageB) throw new Error("AI合成需要连接图1主体和图2场景。");
     const params = node.data.params;
+    const userPrompt = stringParam(params.prompt).trim();
+    if (!userPrompt) throw new Error("AI合成必须先写清楚合成要求，再运行。");
     const formData = new FormData();
     await appendImageToForm(formData, imageA, "imageA", "sourceUrlA", "image-a.png");
     await appendImageToForm(formData, imageB, "imageB", "sourceUrlB", "image-b.png");
     await appendBrandReferenceAssets(formData);
-    const requestRatio = resolveRequestedAspectRatio(params.aspectRatio, stringParam(params.prompt));
+    const requestRatio = resolveRequestedAspectRatio(params.aspectRatio, userPrompt);
     const visibleRequest = [
-      stringParam(params.prompt) || "把图1主体自然合成到图2场景里。",
+      userPrompt,
       `合成模式：${stringParam(params.fusionMode) || "主体入景"}`,
     ].join("\n");
-    formData.append(
-      "prompt",
-      enrichPrompt(
-        visibleRequest,
-        buildAiCompositeConstraintText(node, visibleRequest),
-      ),
-    );
+    formData.append("prompt", visibleRequest);
     formData.append("aspectRatio", requestRatio);
     formData.append("customWidth", String(customSize(params).width || 0));
     formData.append("customHeight", String(customSize(params).height || 0));
@@ -2938,13 +3232,7 @@ function NodeWorkflowWorkbench({
       const formData = new FormData();
       await appendImageToForm(formData, image, "image", "sourceUrl", "source.png");
       await appendBrandReferenceAssets(formData);
-      formData.append(
-        "prompt",
-        enrichPrompt(
-          userPrompt,
-          buildNodeProjectConstraintText(node, userPrompt),
-        ),
-      );
+      formData.append("prompt", userPrompt);
       formData.append("aspectRatio", "custom");
       formData.append("customWidth", String(target.width));
       formData.append("customHeight", String(target.height));
@@ -2966,14 +3254,11 @@ function NodeWorkflowWorkbench({
     const targetSize = customSize(params).width && customSize(params).height ? customSize(params) : parseTargetSize(fallbackSize);
     const formData = new FormData();
     await appendImageToForm(formData, image, "image", "sourceUrl", "source.png");
-    await appendBrandReferenceAssets(formData);
-    formData.append(
-      "prompt",
-      enrichPrompt(
-        buildResizePrompt(resizeParams, ratio),
-        buildNodeProjectConstraintText(node, buildResizePrompt(resizeParams, ratio)),
-      ),
-    );
+    const resizePrompt = buildResizePrompt(resizeParams, ratio);
+    const userResizePrompt = stringParam(params.prompt);
+    const shouldAttachResizeProjectContext = shouldUseProjectPromptContext(userResizePrompt);
+    await appendBrandReferenceAssets(formData, { requireExplicitProjectContext: true, visibleRequestText: userResizePrompt, allowSchemeDecision: false });
+    formData.append("prompt", resizePrompt);
     formData.append("adType", "通用设计");
     formData.append("aspectRatio", ratio);
     formData.append("customWidth", String(targetSize.width || 0));
@@ -2985,7 +3270,7 @@ function NodeWorkflowWorkbench({
     formData.append("exactSize", "true");
     formData.append("fitMode", fitMode);
     appendTaskTrace(formData, taskId, node, "resize");
-    appendProtectionContext(formData, "resize", [image], node);
+    appendProtectionContext(formData, "resize", [image], node, shouldAttachResizeProjectContext ? userResizePrompt : "");
     const response = await fetch("/api/edit-image", { method: "POST", body: formData, signal });
     return imagesFromResponse(response);
   }
@@ -2996,7 +3281,8 @@ function NodeWorkflowWorkbench({
     const params = node.data.params;
     const maskDataUrl = stringParam(params.maskDataUrl);
     const maskImageUrl = stringParam(params.maskImageUrl);
-    const prompt = stringParam(params.prompt).trim() || "去掉这里并补全背景";
+    const prompt = stringParam(params.prompt).trim();
+    if (!prompt) throw new Error("局部修改必须先写清楚要怎么改，再运行。");
     const intent = inferSimpleMaskEditIntent(prompt, {
       taskMode: maskEditTaskModeParam(params.taskMode),
       regionType: maskEditRegionTypeParam(params.regionType),
@@ -3071,7 +3357,7 @@ function NodeWorkflowWorkbench({
     const formData = new FormData();
     const prompt = stringParam(params.prompt).trim() || stringParam(defaultParamsByKind.reference_remake.prompt);
     await appendImageToForm(formData, image, "image", "sourceUrl", "reference.png");
-    formData.append("prompt", enrichPrompt(prompt, buildNodeProjectConstraintText(node, prompt)));
+    formData.append("prompt", prompt);
     formData.append("mode", referenceRemakeModeParam(params.mode));
     formData.append("quality", qualityParam(params.quality));
     appendImageModel(formData, node, stringParam(params.model));
@@ -3088,8 +3374,9 @@ function NodeWorkflowWorkbench({
     const formData = new FormData();
     const prompt = stringParam(params.prompt).trim() || stringParam(defaultParamsByKind.design_optimize.prompt);
     await appendImageToForm(formData, image, "image", "sourceUrl", "design.png");
-    if (isLocalGeneratedUrl(image.url)) formData.append("sourceCompareUrl", image.url);
-    formData.append("prompt", enrichPrompt(prompt, buildNodeProjectConstraintText(node, prompt)));
+    const sourceCompareUrl = localGeneratedSourceUrlForImage(image);
+    if (sourceCompareUrl) formData.append("sourceCompareUrl", sourceCompareUrl);
+    formData.append("prompt", prompt);
     formData.append("strength", designOptimizationStrengthParam(params.strength));
     formData.append("comparisonMode", designComparisonModeParam(params.comparisonMode));
     formData.append("quality", qualityParam(params.quality));
@@ -3234,9 +3521,16 @@ function NodeWorkflowWorkbench({
   }
 
   function textReferenceEdgesForNode(nodeId: string) {
-    return edges
-      .filter((edge) => edge.target === nodeId && isTextReferenceTargetHandle(edge.targetHandle))
-      .slice(0, maxTextReferenceImages);
+    const seenSources = new Set<string>();
+    const referenceEdges: FlowEdge[] = [];
+    for (const edge of edges) {
+      if (edge.target !== nodeId || !isTextReferenceTargetHandle(edge.targetHandle)) continue;
+      if (seenSources.has(edge.source)) continue;
+      seenSources.add(edge.source);
+      referenceEdges.push(edge);
+      if (referenceEdges.length >= maxTextReferenceImages) break;
+    }
+    return referenceEdges;
   }
 
   async function appendTextReferenceImages(formData: FormData, references: Array<{ image: ImageAsset }>) {
@@ -3252,6 +3546,7 @@ function NodeWorkflowWorkbench({
       void fitView({
         nodes: nodeIds.map((id) => ({ id })),
         padding: 0.28,
+        maxZoom: canvasFitMaxZoom,
         duration: 560,
       });
       canvasFocusTimerRef.current = null;
@@ -3266,11 +3561,15 @@ function NodeWorkflowWorkbench({
 
     const nodeIds = restoredNodes.map((node) => ({ id: node.id }));
     requestAnimationFrame(() => {
-      if (isFiniteViewport(viewport)) setViewport(viewport);
+      if (isFiniteViewport(viewport)) {
+        setViewport(viewport);
+        return;
+      }
       requestAnimationFrame(() => {
         void fitView({
           nodes: nodeIds,
           padding: restoredNodes.length > 8 ? 0.18 : 0.28,
+          maxZoom: canvasFitMaxZoom,
           duration: 0,
         });
       });
@@ -3323,15 +3622,94 @@ function NodeWorkflowWorkbench({
     return resultNodes.map((node) => node.id);
   }
 
-  function restoreTaskOutputNodes(task: Pick<TaskRecord, "id" | "requestId" | "nodeId" | "nodeName" | "type">, images: ImageAsset[], options: { focus?: boolean } = {}) {
-    const outputs = uniqueImagesNotOnCanvas(images);
-    if (!outputs.length) return recoverTaskCanvasResult(task).resultNodeIds;
+  function shouldCreateSeparateResultNodes(kind: NodeKind) {
+    return kind === "text_to_image" || kind === "output" || kind === "png_layers";
+  }
+
+  function restoreTaskOutputNodes(task: Pick<TaskRecord, "id" | "requestId" | "nodeId" | "nodeName" | "type">, images: ImageAsset[], options: { focus?: boolean; sourceStatus?: NodeStatus } = {}) {
+    const outputs = uniqueImagesNotOnCanvas(images).filter((image) => isUserFacingResultImage(image) && !dismissedImageKeysRef.current.has(imageKey(image)));
     const sourceNode = task.nodeId ? nodesRef.current.find((item) => item.id === task.nodeId) : null;
     if (sourceNode) {
-      const nodeIds = addOutputImageNodes(sourceNode, outputs);
+      const sourceOutputs = mergeImages(
+        (outputs.length ? outputs : images).filter((image) => isUserFacingResultImage(image) && !dismissedImageKeysRef.current.has(imageKey(image))),
+        taskCandidateImagesFromNode(sourceNode),
+      );
+      if (!outputs.length && !sourceOutputs.length) return recoverTaskCanvasResult(task).resultNodeIds;
+      const sourceStatus = options.sourceStatus || "completed";
+      if (!shouldCreateSeparateResultNodes(sourceNode.data.kind)) {
+        nodesRef.current = nodesRef.current.map((item) =>
+          item.id === sourceNode.id
+            ? {
+                ...item,
+                data: {
+                  ...item.data,
+                  output: sourceOutputs[0],
+                  outputs: sourceOutputs,
+                  resultCount: sourceOutputs.length,
+                  status: sourceStatus,
+                  error: sourceStatus === "completed" ? "" : item.data.error,
+                },
+              }
+            : item,
+        );
+        setNodes((current) =>
+          current.map((item) =>
+            item.id === sourceNode.id
+              ? {
+                  ...item,
+                  data: {
+                    ...item.data,
+                    output: sourceOutputs[0],
+                    outputs: sourceOutputs,
+                    resultCount: sourceOutputs.length,
+                    status: sourceStatus,
+                    error: sourceStatus === "completed" ? "" : item.data.error,
+                  },
+                }
+              : item,
+          ),
+        );
+        if (options.focus !== false) focusCanvasOnNodes([sourceNode.id]);
+        return [sourceNode.id];
+      }
+      const nodeIds = outputs.length ? addOutputImageNodes(sourceNode, outputs) : [];
+      nodesRef.current = nodesRef.current.map((item) =>
+        item.id === sourceNode.id
+          ? {
+              ...item,
+              data: {
+                ...item.data,
+                output: sourceOutputs[0],
+                outputs: sourceOutputs,
+                resultCount: sourceOutputs.length,
+                status: sourceStatus,
+                error: sourceStatus === "completed" ? "" : item.data.error,
+              },
+            }
+          : item,
+      );
+      setNodes((current) =>
+        current.map((item) =>
+          item.id === sourceNode.id
+            ? {
+                ...item,
+                data: {
+                  ...item.data,
+                  output: sourceOutputs[0],
+                  outputs: sourceOutputs,
+                  resultCount: sourceOutputs.length,
+                  status: sourceStatus,
+                  error: sourceStatus === "completed" ? "" : item.data.error,
+                },
+              }
+            : item,
+        ),
+      );
       if (nodeIds.length && options.focus !== false) focusCanvasOnNodes([sourceNode.id, ...nodeIds]);
-      return nodeIds;
+      if (!nodeIds.length && options.focus !== false) focusCanvasOnNodes([sourceNode.id]);
+      return [sourceNode.id, ...nodeIds];
     }
+    if (!outputs.length) return recoverTaskCanvasResult(task).resultNodeIds;
 
     const center = getViewportCenter();
     const yPositions = resultBranchYPositions(center.y, outputs);
@@ -3422,12 +3800,17 @@ function NodeWorkflowWorkbench({
     const seen = new Set<string>();
     const uniqueImages: ImageAsset[] = [];
     for (const image of images) {
+      if (isMaskUtilityImage(image)) continue;
       const key = imageKey(image);
       if (!key || seen.has(key) || existingKeys.has(key) || dismissedImageKeysRef.current.has(key)) continue;
       seen.add(key);
       uniqueImages.push(image);
     }
     return uniqueImages;
+  }
+
+  function isMaskUtilityFileName(fileName: string) {
+    return /^mask-[^/\\]+\.(png|jpe?g|webp)$/i.test(fileName.trim());
   }
 
   function resultBranchYPositions(sourceY: number, images: ImageAsset[]) {
@@ -3500,7 +3883,11 @@ function NodeWorkflowWorkbench({
   }
 
   function createMaskEditNodeFromHistory(image: ImageAsset, options: HistoryMaskEditOptions) {
-    const prompt = options.prompt.trim() || "去掉这里并补全背景";
+    const prompt = options.prompt.trim();
+    if (!prompt) {
+      setStatus("局部修改必须先写清楚要怎么改，再进入涂抹。");
+      return;
+    }
     const source = addNode("image_input", getViewportCenter(), { ...image, source: "history" });
     const operation = addNode(
       "mask_edit",
@@ -3883,11 +4270,12 @@ function NodeWorkflowWorkbench({
   }
 
   function setNodeStatus(nodeId: string, status: NodeStatus) {
+    const clearError = status === "queued" || status === "running" || status === "saving" || status === "completed";
     nodesRef.current = nodesRef.current.map((node) =>
       node.id === nodeId
         ? {
             ...node,
-            data: { ...node.data, status, error: status === "running" ? "" : node.data.error },
+            data: { ...node.data, status, error: clearError ? "" : node.data.error },
           }
         : node,
     );
@@ -3896,7 +4284,7 @@ function NodeWorkflowWorkbench({
         node.id === nodeId
           ? {
               ...node,
-              data: { ...node.data, status, error: status === "running" ? "" : node.data.error },
+              data: { ...node.data, status, error: clearError ? "" : node.data.error },
             }
           : node,
       ),
@@ -3958,6 +4346,27 @@ function NodeWorkflowWorkbench({
     const rect = wrapperRef.current?.getBoundingClientRect();
     if (!rect) return { x: 120, y: 120 };
     return screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  }
+
+  function clampCanvasZoom(value: number) {
+    return Math.max(canvasMinZoom, Math.min(canvasMaxZoom, Number(value.toFixed(2))));
+  }
+
+  function zoomCanvasBy(delta: number) {
+    const viewport = getViewport();
+    const zoom = clampCanvasZoom(viewport.zoom + delta);
+    void setViewport({ ...viewport, zoom }, { duration: 180 });
+    updateViewportZoom(zoom);
+    setCanvasInteractionFlag("isCanvasZooming", true, 220);
+  }
+
+  function fitCanvasToContent() {
+    if (nodes.length) {
+      void fitView({ padding: nodes.length > 8 ? 0.18 : 0.28, maxZoom: canvasFitMaxZoom, duration: 260 });
+      return;
+    }
+    void setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 180 });
+    updateViewportZoom(1);
   }
 
   function onPaneContextMenu(event: MouseEvent | ReactMouseEvent<Element, MouseEvent>) {
@@ -4439,6 +4848,7 @@ function NodeWorkflowWorkbench({
     setEdges(restoredEdges);
     setTasks(restoredTasks);
     writeProjectTaskCache(restoredProjectId, restoredTasks);
+    void mergeServerTaskRunsIntoProject(restoredProjectId, restoredProjectName);
     setHistoryImages([]);
     setHistoryHasMore(false);
     setHistoryNextOffset(0);
@@ -4469,6 +4879,45 @@ function NodeWorkflowWorkbench({
     return true;
   }
 
+  function resetDeletedActiveProjectState() {
+    const nextId = "local-project";
+    const nextName = "节点设计项目";
+    const nextKnowledge = createDefaultProjectKnowledge({ projectId: nextId, projectName: nextName });
+    Object.keys(taskAbortControllersRef.current).forEach((taskId) => {
+      taskAbortControllersRef.current[taskId]?.abort();
+      delete taskAbortControllersRef.current[taskId];
+    });
+    Object.keys(taskProgressTimersRef.current).forEach(stopTaskProgress);
+    Object.keys(taskCleanupTimersRef.current).forEach(clearTaskCleanup);
+    nodesRef.current = [];
+    edgesRef.current = [];
+    tasksRef.current = [];
+    taskProjectContextRef.current = {};
+    setNodes([]);
+    setEdges([]);
+    setTasks([]);
+    setHistoryImages([]);
+    setImageManagerImages([]);
+    setImageManagerTrashImages([]);
+    setHistoryHasMore(false);
+    setHistoryNextOffset(0);
+    setProjectAssets([]);
+    setProjectAssetText("");
+    setProjectProfile(emptyProjectProfile);
+    setProjectKnowledge(nextKnowledge);
+    setProjectKind("scratch");
+    setProjectId(nextId);
+    setProjectOwnerUserId("");
+    setProjectOwnerEmail("");
+    setProjectOwnerName("");
+    setProjectName(nextName);
+    setSelectedNodeId(null);
+    setLightboxImage(null);
+    setProjectSaveState("saved");
+    setHomeOpen(true);
+    rememberWorkbenchHomeState(true);
+  }
+
   async function deleteProject(id: string, ownerUserId?: string) {
     const deletingActiveProject = id === projectId && (!ownerUserId || !projectOwnerUserId || ownerUserId === projectOwnerUserId);
     const response = await fetch("/api/project", {
@@ -4494,8 +4943,7 @@ function NodeWorkflowWorkbench({
       if (replacement) {
         await loadProject(replacement.id, replacement.ownerUserId);
       } else {
-        setHomeOpen(true);
-        rememberWorkbenchHomeState(true);
+        resetDeletedActiveProjectState();
       }
     }
     void refreshProjectList();
@@ -4508,7 +4956,7 @@ function NodeWorkflowWorkbench({
   ) {
     const protection = imageDeletionProtection(image, nodes, projectAssets);
     if (!options.permanent && protection.protected) {
-      if (!options.quiet) setStatus(`这张图已受保护：${protection.reasons.join("、")}。先取消保护或移除引用后再删除。`);
+      if (!options.quiet) setStatus("这张图正在使用或已收藏，暂不能删除。先取消收藏或移除引用后再删除。");
       return false;
     }
     const fileName = generatedFileNameForImage(image);
@@ -4528,7 +4976,9 @@ function NodeWorkflowWorkbench({
     setHistoryImages((current) => current.filter((item) => !imageMatchesGeneratedFile(item, fileName)));
     setImageManagerImages((current) => current.filter((item) => !imageMatchesGeneratedFile(item, fileName)));
     setProjectAssets((current) => current.filter((item) => !imageMatchesGeneratedFile(item, fileName)));
-    setNodes((current) => current.map((node) => removeImageFromNode(node, fileName)));
+    const nextNodesAfterImageDelete = nodesRef.current.map((node) => removeImageFromNode(node, fileName));
+    nodesRef.current = nextNodesAfterImageDelete;
+    setNodes(nextNodesAfterImageDelete);
     setTasks((current) => {
       const removedTasks: TaskRecord[] = [];
       const next: TaskRecord[] = [];
@@ -4540,7 +4990,7 @@ function NodeWorkflowWorkbench({
           outputs,
           result: resultRemoved ? outputs[0] : task.result,
           resultCount: outputs.length || (resultRemoved ? 0 : task.resultCount),
-          resultNodeIds: task.resultNodeIds?.filter((nodeId) => nodesRef.current.some((node) => node.id === nodeId && !nodeImageReferences(node).some((item) => imageMatchesGeneratedFile(item, fileName)))),
+          resultNodeIds: task.resultNodeIds?.filter((nodeId) => nextNodesAfterImageDelete.some((node) => node.id === nodeId && !nodeImageReferences(node).some((item) => imageMatchesGeneratedFile(item, fileName)))),
         };
         if ((task.status === "completed" || task.status === "failed" || task.status === "cancelled") && !nextTask.outputs.length && !nextTask.result) {
           removedTasks.push(task);
@@ -4564,26 +5014,6 @@ function NodeWorkflowWorkbench({
     return true;
   }
 
-  async function deleteHistoryImagesBatch(images: ImageAsset[], options: { permanent?: boolean } = {}) {
-    const uniqueImages = uniqueImagesByKey(images);
-    const permanent = Boolean(options.permanent);
-    const candidates = uniqueImages.filter((image) => {
-      const protection = imageDeletionProtection(image, nodes, projectAssets);
-      return permanent ? protection.isTrashed : protection.canDelete && !protection.isTrashed;
-    });
-    if (!candidates.length) {
-      setStatus(permanent ? "没有可彻底删除的回收站图片。" : "没有可批量清理的未保护图片。");
-      return;
-    }
-    const results = await mapWithConcurrency(candidates, batchImageMutationConcurrency, (image) => deleteHistoryImage(image, { permanent, quiet: true, skipTrashRefresh: true }));
-    const success = countSuccessfulResults(results);
-    const failed = candidates.length - success;
-    const skipped = uniqueImages.length - candidates.length;
-    if (!permanent) void loadImageManagerTrash(true);
-    const summary = batchImageActionSummary({ success, failed, skipped });
-    setStatus(permanent ? `已彻底删除 ${summary}。` : `已将 ${summary} 移到回收站。`);
-  }
-
   async function restoreHistoryImage(image: ImageAsset, options: { quiet?: boolean; skipReload?: boolean } = {}) {
     const fileName = generatedFileNameForImage(image);
     if (!fileName) return false;
@@ -4603,21 +5033,6 @@ function NodeWorkflowWorkbench({
     return true;
   }
 
-  async function restoreHistoryImagesBatch(images: ImageAsset[]) {
-    const uniqueImages = uniqueImagesByKey(images);
-    const candidates = uniqueImages.filter((image) => imageDeletionProtection(image, nodes, projectAssets).isTrashed);
-    if (!candidates.length) {
-      setStatus("没有可恢复的回收站图片。");
-      return;
-    }
-    const results = await mapWithConcurrency(candidates, batchImageMutationConcurrency, (image) => restoreHistoryImage(image, { quiet: true, skipReload: true }));
-    const success = countSuccessfulResults(results);
-    const failed = candidates.length - success;
-    const skipped = uniqueImages.length - candidates.length;
-    void loadImageManagerHistory(true);
-    setStatus(`已从回收站恢复 ${batchImageActionSummary({ success, failed, skipped })}。`);
-  }
-
   function appendNextImageIds(image: ImageAsset, nextIds: string[]) {
     const key = imageKey(image);
     const patchIds = mergeImageIdList(image.nextImageIds, nextIds);
@@ -4625,17 +5040,17 @@ function NodeWorkflowWorkbench({
     const updateImage = (item: ImageAsset): ImageAsset => (imageKey(item) === key ? { ...item, nextImageIds: patchIds } : item);
     setHistoryImages((current) => current.map(updateImage));
     setLightboxImage((current) => (current && imageKey(current) === key ? { ...current, nextImageIds: patchIds } : current));
-    setNodes((current) =>
-      current.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          image: node.data.image ? updateImage(node.data.image) : node.data.image,
-          output: node.data.output ? updateImage(node.data.output) : node.data.output,
-          outputs: node.data.outputs?.map(updateImage),
-        },
-      })),
-    );
+    const nextNodes = nodesRef.current.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        image: node.data.image ? updateImage(node.data.image) : node.data.image,
+        output: node.data.output ? updateImage(node.data.output) : node.data.output,
+        outputs: node.data.outputs?.map(updateImage),
+      },
+    }));
+    nodesRef.current = nextNodes;
+    setNodes(nextNodes);
     if (image.fileName) {
       void fetch("/api/generated-images", {
         method: "PATCH",
@@ -4827,12 +5242,12 @@ function NodeWorkflowWorkbench({
   return (
     <main className="apple-shell flex h-screen overflow-hidden text-[#f5f7fb]">
       <aside
-        className={`apple-sidebar z-20 flex shrink-0 flex-col items-center gap-2 px-2 py-4 transition-[width] duration-200 ${
-          leftRailOpen ? "w-[118px]" : "w-[60px]"
+        className={`apple-sidebar z-20 flex shrink-0 flex-col items-center gap-1.5 px-1.5 py-3 transition-[width] duration-200 ${
+          leftRailOpen ? "w-[104px]" : "w-[54px]"
         }`}
       >
         <button
-          className="apple-button mb-2 flex size-8 items-center justify-center rounded-full text-white/66"
+          className="apple-button mb-1.5 flex size-8 items-center justify-center rounded-full text-white/66"
           onClick={() => setLeftRailOpen((value) => !value)}
           title={leftRailOpen ? "收起左栏" : "展开左栏"}
           type="button"
@@ -4840,14 +5255,14 @@ function NodeWorkflowWorkbench({
           <ChevronRight className={`size-4 transition ${leftRailOpen ? "rotate-180" : ""}`} />
         </button>
         <button
-          className={`apple-button-primary mb-1 flex items-center justify-center gap-2 rounded-full px-2 text-[#07121f] ${
-            leftRailOpen ? "h-10 w-full" : "size-10"
+          className={`apple-button-primary mb-0.5 flex items-center justify-center gap-1.5 rounded-full px-2 text-[#07121f] ${
+            leftRailOpen ? "h-9 w-full" : "size-9"
           }`}
           onClick={() => setNodeMenuOpen((value) => !value)}
           title="添加节点"
           type="button"
         >
-          <Plus className="size-5" />
+          <Plus className="size-4 shrink-0" />
           {leftRailOpen ? <span className="text-[12px] font-semibold">添加</span> : null}
         </button>
         <div className="w-full space-y-1">
@@ -4870,15 +5285,15 @@ function NodeWorkflowWorkbench({
             }}
           />
           <Link
-            className={`flex items-center justify-center rounded-[18px] border transition apple-button text-white/72 ${
-              leftRailOpen ? "w-full flex-col gap-1 px-1 py-2.5" : "size-10 px-0 py-0"
+            className={`apple-button flex items-center justify-center rounded-full border transition text-white/72 ${
+              leftRailOpen ? "h-9 w-full justify-start gap-2 px-3" : "size-9 px-0 py-0"
             }`}
             href="/settings"
             onClick={() => void saveProject()}
             title="设置"
           >
-            <KeyRound className="size-4" />
-            {leftRailOpen ? <span className="text-[11px] leading-none opacity-80">设置</span> : null}
+            <KeyRound className="size-4 shrink-0" />
+            {leftRailOpen ? <span className="min-w-0 truncate text-[12px] leading-none opacity-85">设置</span> : null}
           </Link>
           <AccountSwitcher compact expanded={leftRailOpen} />
         </div>
@@ -4942,9 +5357,9 @@ function NodeWorkflowWorkbench({
 
       <section className="relative min-w-0 flex-1" ref={wrapperRef}>
         <header className="pointer-events-none absolute left-4 right-4 top-4 z-20 flex items-start justify-between gap-3">
-          <div className="apple-panel pointer-events-auto min-w-[248px] max-w-[min(500px,calc(100vw-180px))] px-4 py-3">
+          <div className="apple-panel pointer-events-auto min-w-[220px] max-w-[min(430px,calc(100vw-220px))] px-3 py-2">
             <input
-              className="w-full max-w-[360px] bg-transparent text-[17px] font-semibold text-white/94 outline-none focus-visible:shadow-none"
+              className="w-full max-w-[320px] bg-transparent text-[14px] font-semibold leading-5 text-white/90 outline-none focus-visible:shadow-none"
               onChange={(event) => {
                 const nextName = event.target.value;
                 setProjectName(nextName);
@@ -4963,22 +5378,22 @@ function NodeWorkflowWorkbench({
               }}
               value={projectName}
             />
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {projectKind === "temporary" ? <span className="apple-pill-accent px-2 py-1 text-[11px]">临时项目</span> : null}
-              <span className={`apple-pill px-2 py-1 text-[11px] ${projectSaveState === "error" ? "text-[#ffb4a8]" : ""}`}>
-                {projectSaveState === "saving" ? "保存中" : projectSaveState === "error" ? "保存失败" : "已保存"}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {projectKind === "temporary" ? <span className="apple-pill-accent px-2 py-1 text-[11px] leading-none">临时项目</span> : null}
+              <span className={`apple-pill max-w-[170px] truncate px-2 py-1 text-[11px] leading-none ${projectSaveState === "error" ? "text-[#ffb4a8]" : projectSaveState === "saving" ? "text-[#ffe2a3]" : "text-[#adf8e5]"}`} title={projectSaveState === "saved" ? "项目、节点和任务记录已写入本地缓存；手动保存会同步到项目文件。" : ""}>
+                {saveStateLabel(projectSaveState, Boolean(saveQueuedRef.current))}
               </span>
-              <span className={`apple-pill px-2 py-1 text-[11px] ${imageModelStatus.toneClass}`} title={imageModelStatus.helper}>
+              <span className={`apple-pill max-w-[190px] truncate px-2 py-1 text-[11px] leading-none ${imageModelStatus.toneClass}`} title={imageModelStatus.helper}>
                 {imageModelStatus.label}
               </span>
-              <span className={`apple-pill px-2 py-1 text-[11px] ${projectCapacity.tone === "critical" ? "text-[#ffb4a8]" : projectCapacity.tone === "warning" ? "text-[#ffe2a3]" : ""}`}>
+              <span className={`apple-pill px-2 py-1 text-[11px] leading-none ${projectCapacity.tone === "critical" ? "text-[#ffb4a8]" : projectCapacity.tone === "warning" ? "text-[#ffe2a3]" : ""}`}>
                 节点 {nodes.length}
               </span>
-              <span className={`apple-pill px-2 py-1 text-[11px] ${projectCapacity.tone === "critical" ? "text-[#ffb4a8]" : projectCapacity.tone === "warning" ? "text-[#ffe2a3]" : ""}`}>
+              <span className={`apple-pill px-2 py-1 text-[11px] leading-none ${projectCapacity.tone === "critical" ? "text-[#ffb4a8]" : projectCapacity.tone === "warning" ? "text-[#ffe2a3]" : ""}`}>
                 图片 {projectImageCount}
               </span>
               {lastProjectJsonBytes ? (
-                <span className={`apple-pill px-2 py-1 text-[11px] ${lastProjectJsonBytes >= projectCapacityJsonWarningBytes ? "text-[#ffe2a3]" : ""}`} title={`项目 ${formatFileSize(lastProjectJsonBytes)}${lastSaveDurationMs ? ` · 保存 ${formatDuration(lastSaveDurationMs)}` : ""}`}>
+                <span className={`apple-pill px-2 py-1 text-[11px] leading-none ${lastProjectJsonBytes >= projectCapacityJsonWarningBytes ? "text-[#ffe2a3]" : ""}`} title={`项目 ${formatFileSize(lastProjectJsonBytes)}${lastSaveDurationMs ? ` · 保存 ${formatDuration(lastSaveDurationMs)}` : ""}`}>
                   项目
                 </span>
               ) : null}
@@ -5002,10 +5417,10 @@ function NodeWorkflowWorkbench({
               </div>
             ) : null}
           </div>
-          <div className="pointer-events-auto flex shrink-0 items-center gap-2">
+            <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
             {projectKind === "temporary" ? (
               <button
-                className="apple-button flex h-9 shrink-0 items-center gap-1.5 px-3 text-[11px] font-medium"
+                className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium"
                 onClick={convertTemporaryProject}
                 type="button"
               >
@@ -5015,7 +5430,7 @@ function NodeWorkflowWorkbench({
             ) : null}
             {nodes.length > 1 ? (
               <button
-                className="apple-button flex h-9 shrink-0 items-center gap-1.5 px-3 text-[11px] font-medium"
+                className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium"
                 onClick={organizeCanvas}
                 type="button"
               >
@@ -5025,7 +5440,7 @@ function NodeWorkflowWorkbench({
             ) : null}
             {nodes.length ? (
               <button
-                className="apple-button flex size-9 items-center justify-center text-white/52"
+                className="apple-button flex size-8 items-center justify-center text-white/52"
                 onClick={clearCanvas}
                 title="清空画布"
                 type="button"
@@ -5034,7 +5449,7 @@ function NodeWorkflowWorkbench({
               </button>
             ) : null}
             <button
-              className="apple-button flex h-9 shrink-0 items-center gap-1.5 px-3 text-[11px] font-medium"
+              className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium"
               disabled={projectSaveState === "saving"}
               onClick={() => void saveProject({ manual: true })}
               type="button"
@@ -5043,7 +5458,7 @@ function NodeWorkflowWorkbench({
               {projectSaveState === "saving" ? "保存中" : projectSaveState === "error" ? "重新保存" : "保存"}
             </button>
             <button
-              className="apple-button flex h-9 shrink-0 items-center gap-1.5 px-3 text-[11px] font-medium"
+              className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium"
               onClick={() => setRightPanelOpen((value) => !value)}
               type="button"
             >
@@ -5102,8 +5517,8 @@ function NodeWorkflowWorkbench({
           ariaLabelConfig={flowAriaLabelConfig}
           colorMode="dark"
           edges={decoratedEdges}
-          maxZoom={1.8}
-          minZoom={0.18}
+          maxZoom={canvasMaxZoom}
+          minZoom={canvasMinZoom}
           nodeTypes={WORKBENCH_NODE_TYPES}
           nodes={decoratedNodes}
           onlyRenderVisibleElements
@@ -5139,7 +5554,7 @@ function NodeWorkflowWorkbench({
             setNodeMenuOpen(false);
             setCanvasInteractionFlag("isCanvasPanning", true, 260);
           }}
-          onNodeClick={(_, node) => focusNodeParams(node.id)}
+          onNodeClick={(_, node) => focusNodeParams(node.id, { openPanel: true })}
           onNodeContextMenu={(event, node) => {
             if (isPerformanceMode) return;
             onNodeContextMenu(event, node);
@@ -5174,8 +5589,38 @@ function NodeWorkflowWorkbench({
               ariaLabel="缩略地图"
             />
           ) : null}
-          {nodes.length ? <Controls aria-label="画布控制" position="bottom-left" showInteractive={false} /> : null}
         </ReactFlow>
+
+        {nodes.length ? (
+          <div className="apple-panel pointer-events-auto absolute bottom-4 left-4 z-20 flex flex-col overflow-hidden p-1" aria-label="画布控制">
+            <button
+              aria-label="放大画布"
+              className="flex size-8 items-center justify-center rounded-xl text-white/74 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={viewportZoom >= canvasMaxZoom - 0.03}
+              onClick={() => zoomCanvasBy(0.18)}
+              type="button"
+            >
+              <Plus className="size-4" />
+            </button>
+            <button
+              aria-label="缩小画布"
+              className="flex size-8 items-center justify-center rounded-xl text-white/74 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={viewportZoom <= canvasMinZoom + 0.03}
+              onClick={() => zoomCanvasBy(-0.18)}
+              type="button"
+            >
+              <Minus className="size-4" />
+            </button>
+            <button
+              aria-label="适配视图"
+              className="flex size-8 items-center justify-center rounded-xl text-white/74 transition hover:bg-white/10"
+              onClick={fitCanvasToContent}
+              type="button"
+            >
+              <Maximize2 className="size-3.5" />
+            </button>
+          </div>
+        ) : null}
 
         <ChatComposer
           brandSummary={brandAssetSummary}
@@ -5188,12 +5633,13 @@ function NodeWorkflowWorkbench({
           prompt={composerPrompt}
           quality={composerDisplayQuality}
           ratio={composerDisplayRatio}
+          runningNodeIds={runningNodeIds}
           selectedNode={selectedNode}
           onModelChange={changeComposerModel}
           onBrandUsageChange={(usage) => setProjectProfile((current) => ({ ...current, brandAssetUsage: normalizeBrandAssetUsage(usage) }))}
           onImageFile={addComposerImageAsReference}
           onPasteHint={() => setStatus("可以使用系统截图后直接 Command/Ctrl+V 粘贴，或把图片拖到画布里。")}
-          onPromptChange={setComposerPrompt}
+          onPromptChange={changeComposerPrompt}
           onQualityChange={changeComposerQuality}
           onRatioChange={changeComposerRatio}
           onSubmit={submitComposer}
@@ -5233,9 +5679,10 @@ function NodeWorkflowWorkbench({
             tabHint={rightPanelTabHint}
             tabHintTick={rightPanelTabTick}
             onDeleteHistory={deleteHistoryImage}
-            onBatchDeleteHistory={deleteHistoryImagesBatch}
-            onBatchPermanentDeleteHistory={(images) => deleteHistoryImagesBatch(images, { permanent: true })}
-            onBatchRestoreHistory={restoreHistoryImagesBatch}
+            onCopyHistory={async (image) => {
+              await copyImageToClipboard(image);
+              setStatus("图片已复制。");
+            }}
             onDragHistory={(event, image) => {
               event.dataTransfer.setData("application/x-ai-history-image", JSON.stringify(stripImageFile(image)));
               event.dataTransfer.effectAllowed = "copy";
@@ -5258,7 +5705,7 @@ function NodeWorkflowWorkbench({
             onRestoreHistory={restoreHistoryImage}
             onPermanentDeleteHistory={(image) => deleteHistoryImage(image, { permanent: true })}
             onClose={() => setRightPanelOpen(false)}
-            selectedNode={selectedNode}
+            selectedNode={selectedInspectorNode}
             tasks={tasks.map((task) => ({ ...task, resultOnCanvas: hasTaskResultNodesOnCanvas(task) }))}
             onCancelTask={cancelTask}
             onDeleteTask={removeTask}
@@ -5334,8 +5781,8 @@ function NodeWorkflowWorkbench({
                           maskCanvasWidth: options.maskCanvasWidth,
                           maskCanvasHeight: options.maskCanvasHeight,
                           maskSavedAt: Date.now(),
-                          prompt: options.prompt || "去掉这里并补全背景",
-                          ...inferSimpleMaskEditIntent(options.prompt || "去掉这里并补全背景", options),
+                          prompt: options.prompt,
+                          ...inferSimpleMaskEditIntent(options.prompt, options),
                         },
                       },
                     }
@@ -5351,1632 +5798,5 @@ function NodeWorkflowWorkbench({
         />
       ) : null}
     </main>
-  );
-}
-
-const ImageInputNode = memo(function ImageInputNode({ id, data, selected }: NodeProps<FlowNode>) {
-  const outputImages = uniqueImageAssets(Array.isArray(data.outputs) ? data.outputs : []);
-  const image = data.image || data.output || outputImages[0] || null;
-  const metrics = imageNodePreviewMetrics(image);
-  const previewFit = textToImagePreviewFit(data.params);
-  const showUploadButton = !image;
-  const nodeTitle = image ? imageNodeTitle(image, data.title) : data.title;
-  const nodeMeta = image ? compactImageMeta(image) : "输入 image";
-  const renderLevel = data.nodeRenderLevel || "full";
-
-  if (renderLevel === "mini") {
-    return (
-      <section className={`apple-node-card rounded-[14px] px-2.5 py-2 text-white ${selected ? "is-input-selected" : ""}`} style={{ width: 132 }}>
-        <Handle id="source" position={Position.Left} type="target" className="!size-2.5 !border-white/30 !bg-[#0c0d11]" />
-        <Handle id="image" position={Position.Right} type="source" className="!size-2.5 !border-[#74e3c5] !bg-[#74e3c5]" />
-        <div className="flex items-center gap-1.5">
-          <StatusDot status={data.status || "idle"} />
-          <div className="min-w-0 truncate text-[11px] font-semibold text-white/78">{nodeTitle}</div>
-        </div>
-      </section>
-    );
-  }
-
-  if (renderLevel === "compact") {
-    return (
-      <section className={`apple-node-card rounded-[16px] p-2 text-white ${selected ? "is-input-selected" : ""}`} style={{ width: 176 }}>
-        <Handle id="source" position={Position.Left} type="target" className="!size-3 !border-white/36 !bg-[#0c0d11]" />
-        <Handle id="image" position={Position.Right} type="source" className="!size-3 !border-[#74e3c5] !bg-[#74e3c5]" />
-        <div className="flex items-center gap-2">
-          <div className="flex size-6 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.07] text-[#74e3c5]">
-            <FileImage className="size-3" />
-          </div>
-          <div className="min-w-0">
-            <div className="truncate text-[11px] font-semibold text-white/84">{nodeTitle}</div>
-            <div className="apple-caption mt-0.5 truncate text-[11px]">{nodeMeta}</div>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section
-      className={`apple-node-card group rounded-[20px] p-2 text-white ${selected ? "is-input-selected" : ""}`}
-      style={{ width: metrics.nodeWidth }}
-    >
-      <Handle id="source" position={Position.Left} type="target" className="!size-3 !border-white/40 !bg-[#0c0d11]" />
-      <Handle id="image" position={Position.Right} type="source" className="!size-3 !border-[#74e3c5] !bg-[#74e3c5]" />
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-[11px] font-semibold text-white/88">{nodeTitle}</div>
-          <div className="apple-caption mt-0.5 truncate text-[11px]">{nodeMeta}</div>
-        </div>
-        {showUploadButton ? (
-          <button
-            className="apple-button nodrag flex size-6 shrink-0 items-center justify-center text-white/62"
-            onClick={() => {
-              const input = document.createElement("input");
-              input.type = "file";
-              input.accept = "image/png,image/jpeg,image/webp";
-              input.onchange = () => {
-                const file = input.files?.[0];
-                if (file) data.onImageFile?.(id, file);
-              };
-              input.click();
-            }}
-            title="上传图片"
-            type="button"
-          >
-            <ImagePlus className="size-3.5" />
-          </button>
-        ) : null}
-        <button
-          className="apple-button-danger nodrag flex size-6 shrink-0 items-center justify-center opacity-0 transition group-hover:opacity-100"
-          onClick={() => data.onDelete?.(id)}
-          title="删除节点"
-          type="button"
-        >
-          <Trash2 className="size-3" />
-        </button>
-      </div>
-      {image ? (
-        outputImages.length > 1 ? (
-          <div className="grid grid-cols-2 gap-1.5">
-            {outputImages.slice(0, 2).map((item, index) => (
-              <button
-                className="apple-node-well nodrag relative block overflow-hidden rounded-[14px]"
-                key={`${item.id}-${index}`}
-                onClick={() => data.onPreview?.(item)}
-                style={{ ...compactThumbStyle(item, 108, 74), margin: "0 auto" }}
-                title={`查看第 ${index + 1} 张结果`}
-                type="button"
-              >
-                <ImageFrame
-                  alt={`${data.title}-${index + 1}`}
-                  className="pointer-events-none"
-                  image={item}
-                  fit={previewFit}
-                  imgClassName="pointer-events-none"
-                  preserveRatio={false}
-                  showCheckerboard={shouldShowCheckerboard(item)}
-                  style={{ height: "100%", width: "100%" }}
-                  variant="thumbnail"
-                />
-              </button>
-            ))}
-          </div>
-        ) : (
-          <button
-            className="apple-node-well nodrag relative block overflow-hidden rounded-[14px]"
-            onClick={() => data.onPreview?.(image)}
-            style={{ height: metrics.previewHeight, margin: "0 auto", width: metrics.previewWidth }}
-            type="button"
-          >
-            <ImageFrame alt={data.title} className="pointer-events-none" fit={previewFit} image={image} imgClassName="pointer-events-none" preserveRatio={false} showCheckerboard={shouldShowCheckerboard(image)} style={{ height: "100%", width: "100%" }} variant="thumbnail" />
-          </button>
-        )
-      ) : (
-        <label className="apple-node-well nodrag flex cursor-pointer flex-col items-center justify-center rounded-[14px] border-dashed p-4 text-center" style={{ height: metrics.previewHeight }}>
-          <ImagePlus className="mb-1.5 size-7 text-white/48" />
-          <span className="text-[10.5px] font-medium text-white/72">上传 / 拖拽 / 粘贴图片</span>
-          <span className="apple-caption mt-1 text-[11px]">PNG · JPG · WebP</span>
-          <input
-            className="hidden"
-            accept="image/png,image/jpeg,image/webp"
-            type="file"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) data.onImageFile?.(id, file);
-            }}
-          />
-        </label>
-      )}
-      {outputImages.length > 2 ? (
-        <div className="apple-caption mt-1.5 rounded-2xl border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
-          还有 {outputImages.length - 2} 张
-        </div>
-      ) : null}
-    </section>
-  );
-});
-
-const OperationNode = memo(function OperationNode({ id, data, selected }: NodeProps<FlowNode>) {
-  const catalog = nodeCatalog.find((item) => item.type === data.kind);
-  const inputs = inputHandlesByKind[data.kind] || [];
-  const output = data.output || null;
-  const outputs = uniqueImageAssets(Array.isArray(data.outputs) ? data.outputs : output ? [output] : []);
-  const isTerminalOutput = data.kind === "output";
-  const previewFit = data.kind === "text_to_image" ? textToImagePreviewFit(data.params) : "contain";
-  const singleOutput = output && outputs.length === 1 ? output : null;
-  const hasVisualOutput = Boolean(singleOutput || outputs.length > 1);
-  const textReferences = data.kind === "text_to_image" ? textReferenceNodeItems(data) : [];
-  const maskBadge = data.kind === "mask_edit" ? maskEditBadge(data) : null;
-  const contentShellClass = hasVisualOutput || data.kind === "mask_edit"
-    ? "apple-node-well space-y-1 rounded-[14px] p-1.5"
-    : "space-y-1 rounded-[12px] border border-white/[0.055] bg-white/[0.025] px-2 py-1.5";
-  const renderLevel = data.nodeRenderLevel || "full";
-
-  if (renderLevel === "mini") {
-    return (
-      <section
-        className={`apple-node-card relative rounded-[14px] px-2.5 py-2 text-white ${data.status === "failed" ? "is-danger" : selected ? "is-selected" : ""}`}
-        style={{ width: 142 }}
-      >
-        {inputs.map((input, index) => (
-          <Handle key={input.id} id={input.id} position={Position.Left} type="target" className="!size-2.5 !border-white/30 !bg-[#0c0d11]" style={{ top: 18 + index * 14 }} />
-        ))}
-        {!isTerminalOutput ? (
-          <Handle id="image" position={Position.Right} type="source" className="!size-2.5 !border-[#8fa7ff] !bg-[#8fa7ff]" />
-        ) : null}
-        <div className="flex items-center gap-1.5">
-          <StatusDot status={data.status || "idle"} />
-          <div className="min-w-0 truncate text-[11px] font-semibold text-white/80">{data.title}</div>
-        </div>
-      </section>
-    );
-  }
-
-  if (renderLevel === "compact") {
-    return (
-      <section
-        className={`apple-node-card relative rounded-[16px] p-2 text-white ${data.status === "failed" ? "is-danger" : selected ? "is-selected" : ""}`}
-        style={{ width: 196 }}
-      >
-        {inputs.map((input, index) => (
-          <Handle key={input.id} id={input.id} position={Position.Left} type="target" className="!size-3 !border-white/36 !bg-[#0c0d11]" style={{ top: 24 + index * 18 }} />
-        ))}
-        {!isTerminalOutput ? (
-          <Handle id="image" position={Position.Right} type="source" className="!size-3 !border-[#8fa7ff] !bg-[#8fa7ff]" />
-        ) : null}
-        <div className="flex items-center gap-2">
-          <div className="flex size-6 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.07] text-[#c8d4ff]">
-            {catalog?.icon || <Layers className="size-3" />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <h3 className="truncate text-[10.5px] font-semibold text-white/84">{data.title}</h3>
-              <StatusDot status={data.status || "idle"} />
-            </div>
-            <div className="apple-caption mt-0.5 truncate text-[11px]">
-              {outputs.length ? `${outputs.length} 个结果` : taskStatusLabel(data.status || "idle")}
-            </div>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section
-      className={`apple-node-card group relative rounded-[18px] p-2 text-white ${data.status === "failed" ? "is-danger" : selected ? "is-selected" : ""}`}
-      style={{ width: operationNodeWidth(data, outputs) }}
-    >
-      {inputs.map((input, index) => (
-        <div key={input.id} className="absolute left-[-36px] flex items-center gap-1.5 text-[11px] text-white/40" style={{ top: 48 + index * 24 }}>
-          <span>{input.label}</span>
-          <Handle id={input.id} position={Position.Left} type="target" className="!static !size-3 !translate-x-0 !translate-y-0 !border-white/40 !bg-[#0c0d11]" />
-        </div>
-      ))}
-      {!isTerminalOutput ? (
-        <Handle id="image" position={Position.Right} type="source" className="!size-3 !border-[#8fa7ff] !bg-[#8fa7ff]" />
-      ) : null}
-      <div className="mb-1.5 flex items-start gap-2">
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] text-[#c8d4ff]">
-          {catalog?.icon || <Layers className="size-3.5" />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <h3 className="truncate text-[11px] font-semibold text-white/88">{data.title}</h3>
-            <StatusDot status={data.status || "idle"} />
-            <span className="apple-caption shrink-0 text-[11px]">{taskStatusLabel(data.status || "idle")}</span>
-          </div>
-          <p className="apple-caption mt-0.5 line-clamp-1 text-[11px] leading-5">{operationNodeSubtitle(data, catalog?.description, textReferences.length)}</p>
-        </div>
-        <button
-          className="apple-button-danger nodrag flex size-6 shrink-0 items-center justify-center opacity-0 transition group-hover:opacity-100"
-          onClick={() => data.onDelete?.(id)}
-          title="删除节点"
-          type="button"
-        >
-          <Trash2 className="size-3" />
-        </button>
-      </div>
-
-      <div className={contentShellClass}>
-        {data.kind === "mask_edit" ? (
-          <div className="space-y-2">
-            <button
-              className="apple-button nodrag flex h-8 w-full items-center justify-center gap-1.5 text-[11px] transition"
-              onClick={() => data.onMaskEdit?.(id)}
-              type="button"
-            >
-              <Brush className="size-3.5" />
-              局部 AI 修改
-            </button>
-            <div className="apple-caption leading-5">
-              涂哪里，改哪里；未涂抹区域强制保持原图不变。
-            </div>
-            {maskBadge ? (
-              <div className={maskBadge.valid ? "apple-pill-accent rounded-xl px-2 py-1.5 text-[11px]" : "rounded-xl border border-[#ffd166]/18 bg-[#ffd166]/10 px-2 py-1.5 text-[11px] text-[#ffe1a3]"}>
-                {maskBadge.label}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {singleOutput ? (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-            <CompactOutputSummary images={outputs} />
-            <button
-              className="apple-node-well nodrag relative block overflow-hidden rounded-[12px]"
-              onClick={() => data.onPreview?.(singleOutput)}
-              style={compactThumbStyle(singleOutput, 72, 64)}
-              title="查看结果"
-              type="button"
-            >
-              <ImageFrame alt={data.title} className="pointer-events-none" fit={previewFit} image={singleOutput} imgClassName="pointer-events-none" preserveRatio={false} showCheckerboard={shouldShowCheckerboard(singleOutput)} style={{ height: "100%", width: "100%" }} variant="thumbnail" />
-            </button>
-          </div>
-        ) : (
-          <>
-            {outputs.length ? <CompactOutputSummary images={outputs} /> : <NodeSummary data={data} />}
-            {output && outputs.length > 1 ? (
-            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
-              {outputs.slice(0, 2).map((item, index) => (
-                <button
-                  className="apple-node-well nodrag relative block overflow-hidden rounded-[12px]"
-                  key={`${item.id}-${index}`}
-                  onClick={() => data.onPreview?.(item)}
-                  style={{ ...compactThumbStyle(item, 108, 68), margin: "0 auto" }}
-                  title={`查看第 ${index + 1} 张结果`}
-                  type="button"
-                >
-                  <ImageFrame alt={`${data.title}-${index + 1}`} className="pointer-events-none" fit={previewFit} image={item} imgClassName="pointer-events-none" preserveRatio={false} showCheckerboard={shouldShowCheckerboard(item)} style={{ height: "100%", width: "100%" }} variant="thumbnail" />
-                </button>
-              ))}
-            </div>
-            ) : null}
-          </>
-        )}
-        {outputs.length > 2 ? (
-          <div className="apple-caption mt-1.5 rounded-2xl border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
-            还有 {outputs.length - 2} 张
-          </div>
-        ) : null}
-        {data.error ? <NodeErrorNotice compact error={String(data.error)} /> : null}
-      </div>
-
-    </section>
-  );
-});
-
-const WORKBENCH_NODE_TYPES: NodeTypes = {
-  image_input: ImageInputNode,
-  text_to_image: OperationNode,
-  image_to_image: OperationNode,
-  fuse_images: OperationNode,
-  outpaint: OperationNode,
-  resize: OperationNode,
-  replace_product: OperationNode,
-  mask_edit: OperationNode,
-  hd_redraw: OperationNode,
-  upscale_4k: OperationNode,
-  reference_remake: OperationNode,
-  design_optimize: OperationNode,
-  png_layers: OperationNode,
-  output: OperationNode,
-};
-
-function ChatComposer({
-  brandSummary,
-  brandUsage,
-  effectiveModel,
-  focusTick,
-  hasKey,
-  model,
-  onBrandUsageChange,
-  onImageFile,
-  onModelChange,
-  onPasteHint,
-  onPromptChange,
-  onQualityChange,
-  onRatioChange,
-  onSubmit,
-  prompt,
-  quality,
-  ratio,
-  selectedNode,
-  modelOptions,
-}: {
-  brandSummary: BrandAssetSummary;
-  brandUsage: BrandAssetUsage;
-  effectiveModel: string;
-  focusTick: number;
-  hasKey: boolean;
-  model: string;
-  onBrandUsageChange: (value: BrandAssetUsage) => void;
-  onImageFile: (file: File) => void;
-  onModelChange: (value: string) => void;
-  onPasteHint: () => void;
-  onPromptChange: (value: string) => void;
-  onQualityChange: (value: QualityValue) => void;
-  onRatioChange: (value: AspectRatioValue) => void;
-  onSubmit: () => void;
-  prompt: string;
-  quality: QualityValue;
-  ratio: AspectRatioValue;
-  selectedNode: FlowNode | null;
-  modelOptions: ModelCatalogItem[];
-}) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const menuAreaRef = useRef<HTMLDivElement | null>(null);
-  const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
-  const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const [ratioMenuOpen, setRatioMenuOpen] = useState(false);
-  const [qualityMenuOpen, setQualityMenuOpen] = useState(false);
-  const [brandMenuOpen, setBrandMenuOpen] = useState(false);
-  const ratios: AspectRatioValue[] = adaptiveRatioOptions;
-  const qualityOptions = [
-    { label: "标准", description: "适合快速出图", value: "standard" as QualityValue },
-    { label: "2K", description: "更清晰，适合交付检查", value: "2k" as QualityValue },
-    { label: "4K", description: "高清输出，适合成品交付", value: "4k" as QualityValue },
-  ];
-  const menuModelOptions = useMemo(
-    () => [
-      {
-        label: modelOptions.length ? "Auto · 推荐" : hasKey ? "Auto · 待测试" : "Auto · 未配置",
-        description: modelOptions.length
-          ? `自动使用 ${preferredAutoImageModelId(modelOptions, effectiveModel) || "可用图片模型"}，优先 gpt-image-2 画质`
-          : hasKey ? "到 API 设置页测试图片模型后显示" : "先在 API 设置页配置 Key",
-        value: "",
-      },
-      ...modelOptions.map((item) => ({
-        label: item.label || item.id,
-        description: imageModelProductHint(item),
-        value: item.id,
-      })),
-    ],
-    [effectiveModel, hasKey, modelOptions],
-  );
-  const activeModelLabel = menuModelOptions.find((item) => item.value === model)?.label || model || "Auto";
-  const selectedPromptNode = selectedNode && isComposerDrivenNode(selectedNode.data.kind) ? selectedNode : null;
-  const selectedPromptNodeValue = selectedPromptNode ? stringParam(selectedPromptNode.data.params.prompt) : "";
-  const selectedPromptNodeDefault = selectedPromptNode ? stringParam(defaultParamsByKind[selectedPromptNode.data.kind]?.prompt) : "";
-  const displayPrompt = selectedPromptNode
-    ? prompt || (selectedPromptNodeValue.trim() && selectedPromptNodeValue.trim() !== selectedPromptNodeDefault.trim() ? selectedPromptNodeValue : "")
-      : prompt;
-  const composerPlaceholder = selectedPromptNode
-    ? composerPlaceholderForNode(selectedPromptNode)
-    : "输入提示词";
-  const composerTitle = selectedPromptNode
-    ? composerTitleForNode(selectedPromptNode)
-    : "文生图";
-  const composerHelper = selectedPromptNode
-    ? composerHelperTextForNode(selectedPromptNode)
-    : "";
-  const canSubmit = Boolean(effectiveModel) && (selectedPromptNode ? canSubmitComposerForNode(selectedPromptNode, displayPrompt) : Boolean(prompt.trim()));
-  const anyMenuOpen = uploadMenuOpen || modelMenuOpen || ratioMenuOpen || qualityMenuOpen || brandMenuOpen;
-  const apiSetupMessage = !hasKey
-    ? "还没有配置 API Key，配置后才能生成图片。"
-    : !effectiveModel
-      ? "Key 已配置，但还没有通过测试的图片模型。"
-      : "";
-
-  function closeMenus() {
-    setUploadMenuOpen(false);
-    setModelMenuOpen(false);
-    setRatioMenuOpen(false);
-    setQualityMenuOpen(false);
-    setBrandMenuOpen(false);
-  }
-
-  useEffect(() => {
-    if (!anyMenuOpen) return;
-    function onPointerDown(event: PointerEvent) {
-      if (event.target instanceof globalThis.Node && menuAreaRef.current?.contains(event.target)) return;
-      closeMenus();
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") closeMenus();
-    }
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
-  }, [anyMenuOpen]);
-
-  useEffect(() => {
-    const input = textareaRef.current;
-    if (!input) return;
-    const timer = window.setTimeout(() => {
-      input.focus();
-      const end = input.value.length;
-      input.setSelectionRange(end, end);
-    }, 30);
-    return () => window.clearTimeout(timer);
-  }, [focusTick]);
-
-  function handleFiles(files: FileList | File[]) {
-    const file = firstSupportedImageFile(files);
-    if (file) onImageFile(file);
-    setUploadMenuOpen(false);
-  }
-
-  return (
-    <div className="pointer-events-none absolute bottom-3 left-1/2 z-30 w-[min(680px,calc(100vw-24px))] -translate-x-1/2 px-2">
-      <div
-        className="apple-panel-strong pointer-events-auto relative overflow-visible"
-        onDragOver={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          event.dataTransfer.dropEffect = "copy";
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          handleFiles(event.dataTransfer.files);
-        }}
-      >
-        <div className="px-3.5 pb-0.5 pt-3 sm:px-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="apple-section-title">{composerTitle}</div>
-              {composerHelper ? <div className="apple-caption mt-0.5 line-clamp-1 max-w-[460px] text-white/42">{composerHelper}</div> : null}
-            </div>
-          </div>
-          <textarea
-            ref={textareaRef}
-            data-composer-input="true"
-            className="mt-1.5 max-h-[96px] min-h-[42px] w-full resize-none bg-transparent text-[14px] leading-5 text-white/92 outline-none placeholder:text-white/34 focus-visible:shadow-none"
-            onChange={(event) => onPromptChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-              event.preventDefault();
-              onSubmit();
-            }}
-            placeholder={composerPlaceholder}
-            value={displayPrompt}
-          />
-          {apiSetupMessage ? (
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] leading-5 text-[#ffe1a0]">
-              <span>{apiSetupMessage}</span>
-              <Link className="rounded-full border border-[#ffe1a0]/24 bg-[#ffe1a0]/10 px-2 py-0.5 font-semibold text-[#ffe1a0] hover:bg-[#ffe1a0]/16" href="/settings">
-                去设置
-              </Link>
-            </div>
-          ) : null}
-        </div>
-
-        <div ref={menuAreaRef} className="flex flex-wrap items-center gap-1.5 px-3.5 pb-3 sm:flex-nowrap sm:px-4">
-          <div className="relative">
-            <button
-              className={`apple-button flex size-8 items-center justify-center rounded-full text-white/74 transition ${
-                uploadMenuOpen ? "bg-white/[0.13] text-white" : ""
-              }`}
-              onClick={() => {
-                setUploadMenuOpen((value) => !value);
-                setModelMenuOpen(false);
-                setRatioMenuOpen(false);
-                setQualityMenuOpen(false);
-                setBrandMenuOpen(false);
-              }}
-              title="上传文件"
-              type="button"
-            >
-              <Plus className="size-5" />
-            </button>
-            {uploadMenuOpen ? (
-              <div className="apple-menu absolute bottom-12 left-0 w-[204px] overflow-hidden p-1.5">
-                <button className="apple-menu-item flex items-center gap-2 px-3 py-2.5 text-left text-[12px] font-medium" onClick={() => fileInputRef.current?.click()} type="button">
-                  <FileImage className="size-4 text-white/58" />
-                  <span>
-                    <span className="block">上传</span>
-                    <span className="apple-menu-meta mt-0.5 block">PNG / JPG / WebP</span>
-                  </span>
-                </button>
-                <button
-                  className="apple-menu-item flex items-center gap-2 px-3 py-2.5 text-left text-[12px] font-medium"
-                  onClick={() => {
-                    onPasteHint();
-                    setUploadMenuOpen(false);
-                  }}
-                  type="button"
-                >
-                  <Camera className="size-4 text-white/58" />
-                  <span>
-                    <span className="block">粘贴截图</span>
-                    <span className="apple-menu-meta mt-0.5 block">自动生成图片节点</span>
-                  </span>
-                </button>
-              </div>
-            ) : null}
-            <input
-              ref={fileInputRef}
-              className="hidden"
-              accept="image/png,image/jpeg,image/webp"
-              type="file"
-              onChange={(event) => {
-                if (event.target.files) handleFiles(event.target.files);
-                event.currentTarget.value = "";
-              }}
-            />
-          </div>
-
-          <div className="relative">
-            <button
-              className={`apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-semibold text-white/74 ${
-                ratioMenuOpen ? "bg-white/[0.13] text-white" : ""
-              }`}
-              onClick={() => {
-                setRatioMenuOpen((value) => !value);
-                setUploadMenuOpen(false);
-                setModelMenuOpen(false);
-                setQualityMenuOpen(false);
-                setBrandMenuOpen(false);
-              }}
-              title="切换比例"
-              type="button"
-            >
-              {ratioOptionLabel(ratio)}
-              <ChevronDown className="size-3.5 text-white/38" />
-            </button>
-            {ratioMenuOpen ? (
-              <div className="apple-menu absolute bottom-12 left-0 w-[214px] overflow-hidden p-2">
-                {ratios.map((item) => (
-                  <button
-                    className={`flex w-full items-center justify-between gap-2 rounded-[16px] px-3 py-2 text-left text-[13px] font-semibold transition ${
-                      ratio === item ? "bg-white text-[#07121f]" : "text-white/66 hover:bg-white/[0.08] hover:text-white/82"
-                    }`}
-                    key={item}
-                    onClick={() => {
-                      onRatioChange(item);
-                      setRatioMenuOpen(false);
-                    }}
-                    type="button"
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <RatioGlyph ratio={item} selected={ratio === item} />
-                      <span className="truncate">{ratioOptionLabel(item)}</span>
-                    </span>
-                    {ratio === item ? <Check className="size-4 shrink-0 text-[#07121f]/72" /> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="relative">
-            <button
-              className={`apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-semibold text-white/74 transition ${
-                qualityMenuOpen ? "bg-white/[0.13] text-white" : ""
-              }`}
-              onClick={() => {
-                setQualityMenuOpen((value) => !value);
-                setUploadMenuOpen(false);
-                setModelMenuOpen(false);
-                setRatioMenuOpen(false);
-                setBrandMenuOpen(false);
-              }}
-              title="切换分辨率"
-              type="button"
-            >
-              {qualityOptions.find((item) => item.value === quality)?.label || "标准"}
-              <ChevronDown className="size-3.5 text-white/38" />
-            </button>
-            {qualityMenuOpen ? (
-              <div className="apple-menu absolute bottom-12 left-0 w-[188px] overflow-hidden p-1.5">
-                {qualityOptions.map((item) => (
-                  <button
-                    className="apple-menu-item flex items-center justify-between gap-3 px-3 py-2.5 text-left text-[12px] font-medium"
-                    key={item.value}
-                    onClick={() => {
-                      onQualityChange(item.value);
-                      setQualityMenuOpen(false);
-                    }}
-                    type="button"
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-[12px] font-semibold text-white/88">{item.label}</span>
-                      <span className="apple-menu-meta mt-0.5 block truncate">{item.description}</span>
-                    </span>
-                    {quality === item.value ? <Check className="size-4 text-white/82" /> : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="relative">
-            <button
-              className={`apple-button flex h-8 max-w-[124px] shrink items-center gap-1.5 px-2.5 text-[11px] font-semibold text-white/74 sm:max-w-[176px] ${
-                modelMenuOpen ? "bg-white/[0.13] text-white" : ""
-              }`}
-              onClick={() => {
-                setModelMenuOpen((value) => !value);
-                setUploadMenuOpen(false);
-                setRatioMenuOpen(false);
-                setQualityMenuOpen(false);
-                setBrandMenuOpen(false);
-              }}
-              title="切换图片模型"
-              type="button"
-            >
-              <span className="truncate whitespace-nowrap">{activeModelLabel}</span>
-              <ChevronDown className="size-3.5 text-white/38" />
-            </button>
-            {modelMenuOpen ? (
-              <div className="apple-menu absolute bottom-12 left-0 w-[320px] p-2">
-                {menuModelOptions.map((item) => (
-                  <button
-                    className="apple-menu-item flex items-center justify-between gap-3 px-3 py-2.5 text-left"
-                    key={item.label}
-                    onClick={() => {
-                      onModelChange(item.value);
-                      setModelMenuOpen(false);
-                    }}
-                    type="button"
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-[13px] font-semibold text-white/88">{item.label}</span>
-                      <span className="apple-menu-meta mt-0.5 block truncate text-[11px]">{item.description}</span>
-                    </span>
-                    {(item.value || "") === (model || "") ? <Check className="size-4 shrink-0 text-white/82" /> : null}
-                  </button>
-                ))}
-                <div className="mt-1 border-t border-white/10 px-3 pt-2">
-                  <label className="apple-field-label block">自定义图片模型</label>
-                  <input
-                    className="apple-input mt-1 h-9 w-full px-3 text-[12px] outline-none"
-                    onChange={(event) => onModelChange(event.target.value)}
-                    placeholder="图片模型名"
-                    value={model}
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="relative">
-            <button
-              className={`apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-semibold text-white/74 ${
-                brandMenuOpen ? "bg-white/[0.13] text-white" : ""
-              }`}
-              onClick={() => {
-                setBrandMenuOpen((value) => !value);
-                setUploadMenuOpen(false);
-                setRatioMenuOpen(false);
-                setQualityMenuOpen(false);
-                setModelMenuOpen(false);
-              }}
-              title="项目资产调用"
-              type="button"
-            >
-              <Palette className="size-3.5" />
-              项目调用
-              <ChevronDown className="size-3.5 text-white/38" />
-            </button>
-            {brandMenuOpen ? (
-              <div className="apple-menu absolute bottom-12 left-0 w-[300px] p-2">
-                <div className="px-2 pb-2 pt-1">
-                  <div className="text-[12px] font-semibold text-white/86">项目资产调用</div>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    <span className="apple-pill px-2 py-1 text-[11px]">色卡 {brandSummary.colorCount}</span>
-                    <span className="apple-pill px-2 py-1 text-[11px]">Logo {brandSummary.logoCount}</span>
-                    <span className="apple-pill px-2 py-1 text-[11px]">IP {brandSummary.ipCount}</span>
-                    <span className="apple-pill px-2 py-1 text-[11px]">码 {brandSummary.qrCount}</span>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  {brandUsageItems.map((item) => (
-                    <button
-                      className="apple-menu-item flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
-                      key={item.key}
-                      onClick={() => onBrandUsageChange({ ...brandUsage, [item.key]: !brandUsage[item.key] })}
-                      type="button"
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/58">{item.icon}</span>
-                        <span className="min-w-0">
-                          <span className="block text-[12px] font-semibold text-white/86">{item.label}</span>
-                          <span className="apple-menu-meta mt-0.5 block truncate text-[11px]">{item.description}</span>
-                        </span>
-                      </span>
-                      <span className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition ${brandUsage[item.key] ? "bg-[#74e3c5]" : "bg-white/12"}`}>
-                        <span className={`block size-4 rounded-full bg-white transition ${brandUsage[item.key] ? "translate-x-4" : ""}`} />
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                {brandSummary.missing.length ? (
-                  <div className="mt-2 rounded-[14px] border border-[#ffe1a0]/14 bg-[#ffe1a0]/8 px-3 py-2 text-[11px] leading-5 text-[#ffe1a0]/82">
-                    缺：{brandSummary.missing.slice(0, 4).join(" / ")}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              className="apple-button-primary flex h-9 items-center justify-center gap-1.5 px-3.5 text-[12px] font-semibold disabled:bg-white/[0.08] disabled:text-white/30"
-              disabled={!canSubmit}
-              onClick={() => {
-                closeMenus();
-                onSubmit();
-              }}
-              title="生成"
-              type="button"
-            >
-              <ArrowUp className="size-4" />
-              {selectedPromptNode ? "运行" : "生成"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const brandUsageItems: Array<{
-  key: keyof BrandAssetUsage;
-  label: string;
-  description: string;
-  icon: React.ReactNode;
-}> = [
-  { key: "usePrimaryColors", label: "主色", description: "优先使用项目主色", icon: <Palette className="size-3.5" /> },
-  { key: "useSecondaryColors", label: "辅助配色", description: "带入辅助/强调/背景/文字色", icon: <Layers className="size-3.5" /> },
-  { key: "useLogo", label: "Logo", description: "明确要求时调用已上传 Logo", icon: <ShieldCheck className="size-3.5" /> },
-  { key: "useIpImage", label: "IP形象", description: "明确要求时参考项目 IP", icon: <Sticker className="size-3.5" /> },
-  { key: "useContact", label: "联系方式", description: "明确要求时引用电话/地址", icon: <FileImage className="size-3.5" /> },
-  { key: "useQrCode", label: "二维码", description: "明确要求时调用已上传二维码", icon: <ScanLine className="size-3.5" /> },
-  { key: "useCopy", label: "常用文案", description: "带入项目宣传语和卖点", icon: <Sparkles className="size-3.5" /> },
-  { key: "useForbiddenRules", label: "禁用规则", description: "避免改错品牌与敏感内容", icon: <ShieldCheck className="size-3.5" /> },
-];
-
-function RightPanel({
-  historyImages,
-  historyHasMore,
-  historyLoadingMore,
-  imageManagerHasMore,
-  imageManagerImages,
-  imageManagerLoading,
-  imageManagerTrashHasMore,
-  imageManagerTrashImages,
-  imageManagerTrashLoading,
-  imageModel,
-  nodes,
-  projectAssets,
-  projectId,
-  tabHint,
-  tabHintTick,
-  onDeleteHistory,
-  onBatchDeleteHistory,
-  onBatchPermanentDeleteHistory,
-  onBatchRestoreHistory,
-  onAddHistoryToCanvas,
-  onToggleFavorite,
-  onEnsureImageManager,
-  onLoadMoreImageManager,
-  onLoadMoreTrash,
-  onLoadMoreHistory,
-  onDragHistory,
-  onResizeHistory,
-  onUpscaleHistory,
-  onPreview,
-  onRestoreHistory,
-  onPermanentDeleteHistory,
-  onClose,
-  selectedNode,
-  tasks,
-  onCancelTask,
-  onDeleteTask,
-  onDeleteFinishedTasks,
-  onMaskEdit,
-  onParamChange,
-  onRetryTask,
-  onCreateAction,
-  onRunNode,
-}: {
-  historyImages: ImageAsset[];
-  historyHasMore: boolean;
-  historyLoadingMore: boolean;
-  imageManagerHasMore: boolean;
-  imageManagerImages: ImageAsset[];
-  imageManagerLoading: boolean;
-  imageManagerTrashHasMore: boolean;
-  imageManagerTrashImages: ImageAsset[];
-  imageManagerTrashLoading: boolean;
-  imageModel: string;
-  nodes: FlowNode[];
-  projectAssets: ImageAsset[];
-  projectId: string;
-  tabHint: RightPanelTab;
-  tabHintTick: number;
-  onDeleteHistory: (image: ImageAsset) => void | Promise<unknown>;
-  onBatchDeleteHistory: (images: ImageAsset[]) => void | Promise<unknown>;
-  onBatchPermanentDeleteHistory: (images: ImageAsset[]) => void | Promise<unknown>;
-  onBatchRestoreHistory: (images: ImageAsset[]) => void | Promise<unknown>;
-  onAddHistoryToCanvas: (image: ImageAsset) => void;
-  onToggleFavorite: (image: ImageAsset) => void | Promise<unknown>;
-  onEnsureImageManager: () => void;
-  onLoadMoreImageManager: () => void;
-  onLoadMoreTrash: () => void;
-  onLoadMoreHistory: () => void;
-  onDragHistory: (event: DragEvent<HTMLElement>, image: ImageAsset) => void;
-  onResizeHistory: (image: ImageAsset) => void;
-  onUpscaleHistory: (image: ImageAsset) => void;
-  onPreview: (image: ImageAsset) => void;
-  onRestoreHistory: (image: ImageAsset) => void | Promise<unknown>;
-  onPermanentDeleteHistory: (image: ImageAsset) => void | Promise<unknown>;
-  onClose: () => void;
-  selectedNode: FlowNode | null;
-  tasks: TaskRecord[];
-  onCancelTask: (taskId: string) => void | Promise<unknown>;
-  onDeleteTask: (taskId: string) => void | Promise<unknown>;
-  onDeleteFinishedTasks: (taskIds?: string[]) => void | Promise<unknown>;
-  onMaskEdit: (nodeId: string) => void;
-  onParamChange: (nodeId: string, key: string, value: unknown) => void;
-  onRetryTask: (taskId: string) => void | Promise<unknown>;
-  onCreateAction: (nodeId: string, type: NodeKind, handle: string, params?: Record<string, unknown>) => void;
-  onRunNode: (nodeId: string) => void;
-}) {
-  const rawSelectedOutputs = useMemo(
-    () => selectedNode?.data.outputs || (selectedNode?.data.output ? [selectedNode.data.output] : []),
-    [selectedNode],
-  );
-  const selectedOutputs = useMemo(() => sortResultImagesForDisplay(rawSelectedOutputs).filter(isUserFacingResultImage), [rawSelectedOutputs]);
-  const visibleHistoryImages = useMemo(() => projectUserFacingImages(historyImages, projectId), [historyImages, projectId]);
-  const imageManagerVisibleImages = useMemo(
-    () => (imageManagerImages.length ? imageManagerImages : historyImages).filter(isUserFacingResultImage),
-    [historyImages, imageManagerImages],
-  );
-  const [tab, setTab] = useState<RightPanelTab>("tasks");
-  const selectedPanelNodeId = selectedNode?.id;
-  const taskCounts = useMemo(() => {
-    let running = 0;
-    let deferred = 0;
-    let failed = 0;
-    for (const task of tasks) {
-      if (isTaskActivelyRunning(task)) running += 1;
-      if (isDeferredQueuedTask(task)) deferred += 1;
-      if (task.status === "failed" && !taskHasResultImages(task) && !task.resultCount) failed += 1;
-    }
-    return { running, deferred, failed };
-  }, [tasks]);
-  const runningTaskCount = taskCounts.running;
-  const deferredTaskCount = taskCounts.deferred;
-  const failedTaskCount = taskCounts.failed;
-  const taskBadgeCount = runningTaskCount + deferredTaskCount + failedTaskCount || tasks.length;
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setTab(tabHint);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [tabHint, tabHintTick]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setTab((current) => (!selectedPanelNodeId && current === "params" ? (tasks.length ? "tasks" : "library") : current));
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [selectedPanelNodeId, tasks.length]);
-
-  useEffect(() => {
-    if (tab === "images") onEnsureImageManager();
-  }, [onEnsureImageManager, tab]);
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="apple-hairline border-b p-3">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div>
-            <div className="text-[16px] font-semibold text-white/90">检查器</div>
-          </div>
-          <button
-            className="apple-button flex size-7 items-center justify-center text-white/56"
-            onClick={onClose}
-            title="收起右侧面板"
-            type="button"
-          >
-            <X className="size-3.5" />
-          </button>
-        </div>
-        <div className="apple-panel grid grid-cols-4 gap-1 p-0.5">
-          {[
-            ["params", "参数"],
-            ["tasks", "任务"],
-            ["library", "结果"],
-            ["images", "图片管理"],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              className={`apple-segment flex items-center justify-center gap-1 px-1.5 py-1.5 text-[11px] ${tab === value ? "apple-segment-active" : ""}`}
-              onClick={() => setTab(value as RightPanelTab)}
-              type="button"
-            >
-              <span>{label}</span>
-              {value === "tasks" && taskBadgeCount ? (
-                <span className={`rounded-full px-1.5 py-0.5 text-[11px] leading-none ${tab === value ? "bg-black/10 text-[#07121f]/70" : failedTaskCount ? "bg-[#ff6b5f]/18 text-[#ffb4a8]" : runningTaskCount ? "bg-[#ffd166]/18 text-[#ffe1a0]" : "bg-white/12 text-white/58"}`}>
-                  {taskBadgeCount}
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {tab === "params" ? (
-        <div className="min-h-0 flex-1 overflow-auto p-3">
-          <div className="space-y-3">
-            <NodeInspectorPanel imageModel={imageModel} node={selectedNode} onCreateAction={onCreateAction} onMaskEdit={onMaskEdit} onParamChange={onParamChange} onRunNode={onRunNode} />
-          </div>
-        </div>
-      ) : null}
-
-      {tab === "tasks" ? (
-        <div className="min-h-0 flex-1 overflow-auto p-3">
-          <TaskCenter
-            emptyState={
-              <EmptyPanel
-                icon={<Sparkles className="size-8" />}
-                title="暂无任务"
-                description="运行节点后会在这里显示进度、失败原因、重试入口和生成耗时。"
-              />
-            }
-            formatDuration={formatDuration}
-            formatGeneratedAt={formatGeneratedAt}
-            isDeferredQueuedTask={(task) => isDeferredQueuedTask(task as TaskRecord)}
-            isTaskPossiblyStuck={(task) => isTaskPossiblyStuck(task as TaskRecord)}
-            onCancel={onCancelTask}
-            onDelete={onDeleteTask}
-            onDeleteFinished={onDeleteFinishedTasks}
-            onPreview={(image) => onPreview(image as ImageAsset)}
-            onRetry={onRetryTask}
-            taskStatusLabel={(status) => taskStatusLabel(status as NodeStatus)}
-            tasks={tasks}
-          />
-        </div>
-      ) : null}
-
-      {tab === "library" ? (
-        <div className="min-h-0 flex-1 overflow-auto p-3">
-          <div className="space-y-3">
-            {selectedOutputs.length ? (
-              <NodeResultsPanel
-                compactThumbStyle={compactThumbStyle}
-                imageSourceSummary={imageSourceSummary}
-                images={selectedOutputs}
-                nodeOperationLabel={nodeOperationLabel}
-                onPreview={onPreview}
-                shouldShowCheckerboard={shouldShowCheckerboard}
-              />
-            ) : null}
-            <HistoryPanel
-              emptyState={
-                <EmptyPanel
-                  icon={<FileImage className="size-8" />}
-                  title="暂无结果"
-                  description="生成或导入图片后会显示交付状态、质检提示和可继续优化的结果。"
-                />
-              }
-              formatFileSize={formatFileSize}
-              historyMatchesFilter={(image, filter, currentProjectId) => historyMatchesFilter(image as ImageAsset, filter, currentProjectId)}
-              historyMatchesQuery={(image, query) => historyMatchesQuery(image as ImageAsset, query)}
-              images={visibleHistoryImages}
-              hasMoreFromServer={historyHasMore}
-              loadingMore={historyLoadingMore}
-              nodeOperationLabel={nodeOperationLabel}
-              projectId={projectId}
-              onAddToCanvas={(image) => onAddHistoryToCanvas(image as ImageAsset)}
-              onDrag={(event, image) => onDragHistory(event, image as ImageAsset)}
-              onLoadMore={onLoadMoreHistory}
-              onDelete={(image) => onDeleteHistory(image as ImageAsset)}
-              onPreview={(image) => onPreview(image as ImageAsset)}
-              onResize={(image) => onResizeHistory(image as ImageAsset)}
-              onToggleFavorite={(image) => onToggleFavorite(image as ImageAsset)}
-              onUpscale={(image) => onUpscaleHistory(image as ImageAsset)}
-              qualityBadgeLabel={(image) => qualityBadgeLabel(image as ImageAsset)}
-              qualityTone={(image) => qualityTone(image as ImageAsset)}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {tab === "images" ? (
-        <div className="min-h-0 flex-1 overflow-auto p-3">
-          <ImageManagerPanel
-            downloadRemoteFile={downloadRemoteFile}
-            formatFileSize={formatFileSize}
-            formatGeneratedAt={formatGeneratedAt}
-            images={imageManagerVisibleImages}
-            historyHasMore={imageManagerHasMore || (!imageManagerImages.length && historyHasMore)}
-            historyLoadingMore={imageManagerLoading || historyLoadingMore}
-            imageDeletionProtection={imageDeletionProtection}
-            imageSizeLabel={imageSizeLabel}
-            imageSourceSummary={imageSourceSummary}
-            mergeImages={mergeImages}
-            nodeOperationLabel={nodeOperationLabel}
-            nodes={nodes}
-            projectAssets={projectAssets}
-            shouldShowCheckerboard={shouldShowCheckerboard}
-            trashHasMore={imageManagerTrashHasMore}
-            trashImages={imageManagerTrashImages}
-            trashLoadingMore={imageManagerTrashLoading}
-            onAddToCanvas={onAddHistoryToCanvas}
-            onBatchDelete={onBatchDeleteHistory}
-            onBatchPermanentDelete={onBatchPermanentDeleteHistory}
-            onBatchRestore={onBatchRestoreHistory}
-            onDelete={onDeleteHistory}
-            onLoadMore={imageManagerImages.length ? onLoadMoreImageManager : onLoadMoreHistory}
-            onLoadMoreTrash={onLoadMoreTrash}
-            onPermanentDelete={onPermanentDeleteHistory}
-            onPreview={onPreview}
-            onRestore={onRestoreHistory}
-            onToggleFavorite={onToggleFavorite}
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function NodeInspectorPanel({
-  imageModel,
-  node,
-  onCreateAction,
-  onMaskEdit,
-  onParamChange,
-  onRunNode,
-}: {
-  imageModel: string;
-  node: FlowNode | null;
-  onCreateAction: (nodeId: string, type: NodeKind, handle: string, params?: Record<string, unknown>) => void;
-  onMaskEdit: (nodeId: string) => void;
-  onParamChange: (nodeId: string, key: string, value: unknown) => void;
-  onRunNode: (nodeId: string) => void;
-}) {
-  const [activeInspectorAction, setActiveInspectorAction] = useState("");
-
-  function runInspectorAction(label: string, action: () => void) {
-    if (activeInspectorAction) return;
-    setActiveInspectorAction(label);
-    action();
-    window.setTimeout(() => setActiveInspectorAction(""), 700);
-  }
-
-  if (!node) {
-    return (
-      <EmptyPanel
-        icon={<Layers className="size-8" />}
-        title="未选择节点"
-        description="点选画布节点可编辑参数；也可以从左侧添加节点或在底部输入需求开始。"
-      />
-    );
-  }
-
-  const params = node.data.params || {};
-  const isRunning = node.data.status === "running" || node.data.status === "queued" || node.data.status === "saving";
-  const hasModel = "model" in params || node.data.kind !== "image_input";
-  const hasPrompt = ["text_to_image", "image_to_image", "fuse_images", "outpaint", "resize", "replace_product", "mask_edit", "hd_redraw", "reference_remake", "design_optimize"].includes(node.data.kind);
-  const promptLivesInComposer = hasPrompt && isComposerDrivenNode(node.data.kind);
-  const modelLivesInComposer = hasModel && isComposerDrivenNode(node.data.kind);
-  const textReferenceItems = node.data.kind === "text_to_image" ? textReferenceNodeItems(node.data) : [];
-  const nodeId = node.id;
-  const qualityEnhanceImage = (node.data.image || node.data.output || null) as ImageAsset | null;
-  const qualityEnhanceTargets = qualityEnhanceTargetOptionsForImage(qualityEnhanceImage, stringParam(params.model) || imageModel);
-  const qualityEnhanceQualityOptions = qualityEnhanceQualityOptionsForTargets(qualityEnhanceTargets);
-  const qualityEnhanceQuality = qualityEnhanceQualityOptions.includes(qualityParam(params.quality))
-    ? qualityParam(params.quality)
-    : qualityForQualityEnhanceTarget(qualityEnhanceTargets[0] || "");
-
-  function updateTextReference(index: number, patch: Partial<TextReferenceConfig>) {
-    const current = normalizeTextReferenceConfigs(params.referenceConfigs);
-    const next = textReferenceItems.map((item, itemIndex) => {
-      const existing = current[itemIndex] || current.find((config) => config.handle === item.handle) || defaultTextReferenceConfig(item.handle, itemIndex, item.image);
-      return {
-        handle: item.handle,
-        role: itemIndex === index && patch.role ? patch.role : existing.role,
-        weight: itemIndex === index && patch.weight ? patch.weight : existing.weight,
-      };
-    });
-    onParamChange(nodeId, "referenceConfigs", next);
-  }
-
-  return (
-    <div className="space-y-3">
-      <section className="apple-surface-section px-3 py-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <div className="truncate text-[13px] font-semibold text-white/84">{node.data.title}</div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <StatusDot status={node.data.status || "idle"} />
-            <span className="apple-caption">{taskStatusLabel(node.data.status || "idle")}</span>
-          </div>
-        </div>
-        {node.data.error ? <NodeErrorNotice className="mt-3" error={String(node.data.error)} /> : null}
-      </section>
-
-      {hasPrompt && !promptLivesInComposer ? (
-        <InspectorTextarea
-          label={node.data.kind === "mask_edit" ? "要改什么" : "Prompt"}
-          onChange={(value) => onParamChange(node.id, "prompt", value)}
-          placeholder="写生成、修改或保留内容"
-          value={stringParam(params.prompt)}
-        />
-      ) : null}
-
-      {hasModel && !modelLivesInComposer ? (
-        <InspectorInput
-          label="图片模型"
-          onChange={(value) => onParamChange(node.id, "model", value)}
-          placeholder="默认图片模型"
-          value={stringParam(params.model)}
-        />
-      ) : null}
-
-      {node.data.kind === "image_input" ? (
-        <SmartRecommendations node={node} onCreateAction={onCreateAction} />
-      ) : null}
-
-      {node.data.kind === "text_to_image" ? (
-        <InspectorSection title="生成设置">
-          <RatioPresetGrid label="比例" value={ratioParam(params.aspectRatio)} options={adaptiveRatioOptions} onChange={(value) => onParamChange(node.id, "aspectRatio", value)} />
-          <InlineChipRow label="质量" value={qualityParam(params.quality)} options={["standard", "2k", "4k"]} onChange={(value) => onParamChange(node.id, "quality", value)} />
-          <InlineChipRow label="完整" value={textToImageCompositionCompleteness(params)} options={["标准", "更完整", "大留白", "全身/全物体"]} onChange={(value) => onParamChange(node.id, "compositionCompleteness", value)} />
-          <InlineChipRow label="边距" value={textToImageSafeMargin(params)} options={["5%", "10%", "15%", "20%"]} onChange={(value) => onParamChange(node.id, "safeMargin", value)} />
-          <InlineChipRow label="镜头" value={textToImageCameraDistance(params)} options={["近景", "中景", "远景", "自动"]} onChange={(value) => onParamChange(node.id, "cameraDistance", value)} />
-          <InlineChipRow label="主体" value={textToImageSubjectScale(params)} options={["大", "中", "小"]} onChange={(value) => onParamChange(node.id, "subjectScale", value)} />
-        </InspectorSection>
-      ) : null}
-
-      {node.data.kind === "text_to_image" ? (
-        <TextReferenceInspector
-          items={textReferenceItems}
-          onChange={updateTextReference}
-        />
-      ) : null}
-
-      {node.data.kind === "image_to_image" || node.data.kind === "fuse_images" ? (
-        <InspectorSection title="图像生成">
-          {node.data.kind === "fuse_images" ? (
-            <InlineChipRow
-              label="合成"
-              value={stringParam(params.fusionMode) || "主体入景"}
-              options={["主体入景", "产品入景", "人物换装", "产品换Logo", "IP入海报", "自定义合成"]}
-              onChange={(value) => onParamChange(node.id, "fusionMode", value)}
-            />
-          ) : (
-            <RatioPresetGrid label="比例" value={ratioParam(params.aspectRatio)} options={ratioOptions} onChange={(value) => onParamChange(node.id, "aspectRatio", value)} />
-          )}
-          <InlineChipRow label="质量" value={qualityParam(params.quality)} options={["standard", "2k", "4k"]} onChange={(value) => onParamChange(node.id, "quality", value)} />
-        </InspectorSection>
-      ) : null}
-
-      {node.data.kind === "outpaint" ? (
-        <InspectorSection title="扩图参数">
-          <RatioPresetGrid label="扩到" value={ratioParam(params.targetRatio)} options={ratioOptions} onChange={(value) => onParamChange(node.id, "targetRatio", value)} />
-          <InlineChipRow label="方向" value={stringParam(params.direction) || "四周"} options={["四周", "左", "右", "上", "下"]} onChange={(value) => onParamChange(node.id, "direction", value)} />
-          {ratioParam(params.targetRatio) === "custom" ? (
-            <InspectorInput label="目标尺寸" placeholder="例如 1920x750" value={stringParam(params.targetSize)} onChange={(value) => onParamChange(node.id, "targetSize", value)} />
-          ) : null}
-        </InspectorSection>
-      ) : null}
-
-      {node.data.kind === "resize" ? (
-        <InspectorSection title="改尺寸">
-          <SizePresetSelect
-            label="比例"
-            value={stringParam(params.sizePreset) === "自定义" ? "自定义" : findSizePresetByLabel(stringParam(params.sizePreset))?.label || activeResizePresetLabel(node.data)}
-            onChange={(label) => {
-              const preset = findSizePresetByLabel(label);
-              if (!preset) return;
-              onParamChange(node.id, "sizePreset", preset.label);
-              onParamChange(node.id, "targetRatio", preset.targetRatio);
-              onParamChange(node.id, "targetSize", preset.targetSize);
-              onParamChange(node.id, "fitMode", preset.recommendedMode);
-            }}
-          />
-          {ratioParam(params.targetRatio) === "custom" || stringParam(params.sizePreset) === "自定义" ? (
-            <InspectorInput
-              label="自定义宽高"
-              placeholder="例如 1920x1080"
-              value={stringParam(params.targetSize) || "1920x1080"}
-              onChange={(value) => {
-                onParamChange(node.id, "targetSize", value);
-                onParamChange(node.id, "targetRatio", inferRatioFromTargetSize(value));
-                onParamChange(node.id, "sizePreset", "自定义");
-              }}
-            />
-          ) : null}
-          <InlineChipRow
-            label="处理"
-            value={resizeFitModeLabel(stringParam(params.fitMode))}
-            options={["智能改版", "扩图补画"]}
-            onChange={(label) => onParamChange(node.id, "fitMode", resizeFitModeValue(label))}
-          />
-        </InspectorSection>
-      ) : null}
-
-      {node.data.kind === "upscale_4k" || node.data.kind === "hd_redraw" ? (
-        <InspectorSection title="画质增强">
-          {node.data.kind === "upscale_4k" ? (
-            <>
-              <InlineChipRow
-                label="模式"
-                value={resizeFitModeLabel(stringParam(params.fitMode))}
-                options={["Standard", "Plus", "Creative"]}
-                onChange={(value) => onParamChange(node.id, "fitMode", resizeFitModeValue(value))}
-              />
-              <InlineChipRow
-                label="目标"
-                value={upscaleTargetDisplayLabel(stringParam(params.targetSize) || "长边3840")}
-                options={qualityEnhanceTargets}
-                onChange={(value) => {
-                  onParamChange(node.id, "targetSize", value);
-                  onParamChange(node.id, "quality", qualityForQualityEnhanceTarget(value));
-                }}
-              />
-              <InlineChipRow label="格式" value={exportFormatParam(params.format)} options={["png", "jpg", "webp"]} onChange={(value) => onParamChange(node.id, "format", value)} />
-            </>
-          ) : null}
-          {node.data.kind === "hd_redraw" ? (
-            <>
-              <InlineChipRow
-                label="模式"
-                value={qualityEnhanceModeLabel(qualityEnhanceModeParam(params.enhancementMode))}
-                options={["Standard", "Plus", "Creative"]}
-                onChange={(value) => onParamChange(node.id, "enhancementMode", qualityEnhanceModeValue(value))}
-              />
-              <InlineChipRow
-                label="目标"
-                value={upscaleTargetDisplayLabel(stringParam(params.targetSize) || "长边3840")}
-                options={qualityEnhanceTargets}
-                onChange={(value) => {
-                  onParamChange(node.id, "targetSize", value);
-                  onParamChange(node.id, "quality", qualityForQualityEnhanceTarget(value));
-                }}
-              />
-              <InlineChipRow
-                label="质量"
-                value={qualityEnhanceQuality}
-                options={qualityEnhanceQualityOptions}
-                onChange={(value) => {
-                  onParamChange(node.id, "quality", value);
-                  onParamChange(node.id, "targetSize", qualityEnhanceTargetForQuality(qualityEnhanceTargets, qualityParam(value)));
-                }}
-              />
-              <InlineChipRow label="格式" value={exportFormatParam(params.format)} options={["png", "jpg", "webp"]} onChange={(value) => onParamChange(node.id, "format", value)} />
-            </>
-          ) : (
-            <InlineChipRow label="质量" value={qualityParam(params.quality)} options={qualityEnhanceQualityOptions} onChange={(value) => onParamChange(node.id, "quality", value)} />
-          )}
-        </InspectorSection>
-      ) : null}
-
-      {node.data.kind === "mask_edit" ? (
-        <InspectorSection title="局部 AI 修改">
-          <button
-            className="apple-button-primary flex h-9 w-full items-center justify-center gap-1.5 text-[11px] font-semibold transition disabled:opacity-45"
-            disabled={Boolean(activeInspectorAction)}
-            onClick={() => runInspectorAction("打开涂抹修改", () => onMaskEdit(node.id))}
-            type="button"
-          >
-            <Brush className="size-3.5" />
-            {activeInspectorAction === "打开涂抹修改" ? "打开中" : "打开涂抹修改"}
-          </button>
-        </InspectorSection>
-      ) : null}
-
-      {node.data.kind === "reference_remake" ? (
-        <InspectorSection title="参考图重制">
-          <InlineChipRow
-            label="模式"
-            value={referenceRemakeModeLabel(referenceRemakeModeParam(params.mode))}
-            options={["快速复刻", "精准重制"]}
-            onChange={(value) => onParamChange(node.id, "mode", referenceRemakeModeValue(value))}
-          />
-          <InlineChipRow label="质量" value={qualityParam(params.quality)} options={["standard", "2k", "4k"]} onChange={(value) => onParamChange(node.id, "quality", value)} />
-        </InspectorSection>
-      ) : null}
-
-      {node.data.kind === "design_optimize" ? (
-        <InspectorSection title="设计优化">
-          <InlineChipRow
-            label="强度"
-            value={designOptimizationStrengthLabel(designOptimizationStrengthParam(params.strength))}
-            options={["保守优化", "专业优化", "大幅优化"]}
-            onChange={(value) => onParamChange(node.id, "strength", designOptimizationStrengthValue(value))}
-          />
-          <InlineChipRow label="质量" value={qualityParam(params.quality)} options={["standard", "2k", "4k"]} onChange={(value) => onParamChange(node.id, "quality", value)} />
-          <InlineChipRow
-            label="对比"
-            value={designComparisonModeLabel(designComparisonModeParam(params.comparisonMode))}
-            options={["自动对比", "左右对比", "上下对比", "单独成品"]}
-            onChange={(value) => onParamChange(node.id, "comparisonMode", designComparisonModeValue(value))}
-          />
-          <InspectorInput label="行业" placeholder="自动识别，可手动填医疗健康/美妆/餐饮等" value={stringParam(params.industry)} onChange={(value) => onParamChange(node.id, "industry", value)} />
-          <InspectorInput label="类型" placeholder="自动识别，可手动填海报/横幅/专家介绍等" value={stringParam(params.designType)} onChange={(value) => onParamChange(node.id, "designType", value)} />
-          <InspectorInput label="场景" placeholder="自动识别，可手动填线上传播/线下投放等" value={stringParam(params.scene)} onChange={(value) => onParamChange(node.id, "scene", value)} />
-        </InspectorSection>
-      ) : null}
-
-      {node.data.kind === "png_layers" ? (
-        <InspectorSection title="PNG 三层">
-          <InlineChipRow
-            label="模式"
-            value={pngLayerExportModeLabel(pngLayerExportModeParam(params.mode))}
-            options={["AI三层精准", "快速三层"]}
-            onChange={(value) => onParamChange(node.id, "mode", value === "快速三层" ? "fast" : "ai_precise")}
-          />
-        </InspectorSection>
-      ) : null}
-
-      {node.data.kind === "output" ? (
-        <InspectorSection title="输出">
-          <InlineChipRow label="格式" value={exportFormatParam(params.format)} options={["png", "jpg", "webp"]} onChange={(value) => onParamChange(node.id, "format", value)} />
-        </InspectorSection>
-      ) : null}
-
-      {node.data.kind !== "image_input" && !isComposerDrivenNode(node.data.kind) ? (
-        <button
-          className="apple-button-primary flex h-10 w-full items-center justify-center gap-1.5 text-[12px] font-semibold transition disabled:opacity-45"
-          disabled={isRunning || Boolean(activeInspectorAction)}
-          onClick={() => runInspectorAction("运行节点", () => onRunNode(node.id))}
-          type="button"
-        >
-          {isRunning || activeInspectorAction === "运行节点" ? <RefreshCcw className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-          {activeInspectorAction === "运行节点" ? "启动中" : "运行"}
-        </button>
-      ) : node.data.kind !== "image_input" ? (
-        <div className="rounded-[14px] border border-white/10 bg-white/[0.035] px-3 py-2 text-[11px] leading-5 text-white/44">
-          在底部输入框写需求，按 Enter 或点“运行”执行当前节点。
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ImageLightbox({
-  image,
-  imageModel,
-  historyImages,
-  onClose,
-  onCopyImage,
-  onCopyPrompt,
-  onDelete,
-  onEditImage,
-  onMaskEdit,
-  onKeep,
-  onOpenVersion,
-  onResize,
-  onUpscale,
-}: {
-  image: ImageAsset;
-  imageModel: string;
-  historyImages: ImageAsset[];
-  onClose: () => void;
-  onCopyImage: (image: ImageAsset) => Promise<void>;
-  onCopyPrompt: (prompt: string) => Promise<void>;
-  onDelete: () => void;
-  onEditImage: (prompt?: string) => void;
-  onMaskEdit: (options: HistoryMaskEditOptions) => void;
-  onKeep: () => void;
-  onOpenVersion: (image: ImageAsset) => void;
-  onResize: (options: HistoryResizeOptions) => void;
-  onUpscale: (options: HistoryUpscaleOptions) => void;
-}) {
-  const [message, setMessage] = useState("");
-  const [sidebarTab, setSidebarTab] = useState<"actions" | "info">("actions");
-  const [activeEditTool, setActiveEditTool] = useState<LightboxEditTool | null>(null);
-  const [previewZoom, setPreviewZoom] = useState(0);
-  const [activeActionLabel, setActiveActionLabel] = useState("");
-  const [confirmLightboxAction, setConfirmLightboxAction] = useState("");
-  const [showPromptDetails, setShowPromptDetails] = useState(false);
-  const [showMoreFooterActions, setShowMoreFooterActions] = useState(false);
-  const [compareSplit, setCompareSplit] = useState(50);
-  const [activePngLayerFilename, setActivePngLayerFilename] = useState("");
-  const [optimizePrompt, setOptimizePrompt] = useState("");
-  const [maskPrompt, setMaskPrompt] = useState("");
-  const [resizeRatio, setResizeRatio] = useState<AspectRatioValue>(() => ratioFromImage(image));
-  const [resizeSize, setResizeSize] = useState(() => defaultTargetSizeForRatio(ratioFromImage(image)));
-  const [resizeFitMode, setResizeFitMode] = useState<HistoryResizeOptions["fitMode"]>("smart_relayout");
-  const [upscaleSize, setUpscaleSize] = useState(() => qualityEnhanceDefaultTargetForImage(image, imageModel));
-  const [upscaleFitMode, setUpscaleFitMode] = useState<HistoryUpscaleOptions["fitMode"]>("standard_enhance");
-  const [upscaleFormat, setUpscaleFormat] = useState<"png" | "jpg" | "webp">("png");
-  const branchVersions = useMemo(() => imageBranchVersions(historyImages, image), [historyImages, image]);
-  const branchLatestVariants = useMemo(() => latestImagesForResultGroup(historyImages, image), [historyImages, image]);
-  const actualSizeLabel = imageSizeLabel(image);
-  const expectedSizeLabel = image.expectedOutputSize ? `${image.expectedOutputSize.width} × ${image.expectedOutputSize.height}px` : "";
-  const sourceDetailLines = imageSourceDetailLines(image, { formatDuration, formatGeneratedAt, labelForOperation: nodeOperationLabel });
-  const lightboxTitle = `${image.branchLabel || `方案 ${image.variant || 1}`} · ${image.mode || image.materialType || "预览"}`;
-  const lightboxMeta = [
-    actualSizeLabel,
-    image.fileSizeBytes ? formatFileSize(image.fileSizeBytes) : "",
-  ].filter(Boolean).join(" · ");
-  const pngLayerResult = image.pngLayerExport || null;
-  const pngLayers = pngLayerResult?.layers || [];
-  const activePngLayer = pngLayers.find((layer) => layer.filename === activePngLayerFilename) || null;
-  const compareBefore = image.compareBefore?.url ? image.compareBefore : null;
-  const qualityEnhanceTargets = useMemo(() => qualityEnhanceTargetOptionsForImage(image, imageModel), [image, imageModel]);
-  const activeUpscaleSize = qualityEnhanceTargets.includes(upscaleSize) ? upscaleSize : qualityEnhanceTargets[0] || upscaleSize;
-  const deliverySummary = buildDeliverySummary(image, {
-    actualSizeLabel,
-    expectedSizeLabel,
-    formatFileSize,
-    qualityLabel: image.qualityCheck?.deliverabilityLabel || qualityBadgeLabel(image),
-  });
-  const qualityReviewSummary = buildQualityReviewSummary(image, {
-    actualSizeLabel,
-    expectedSizeLabel,
-    qualityLabel: image.qualityCheck?.deliverabilityLabel || qualityBadgeLabel(image),
-  });
-  const showQualityComparison = Boolean(
-    compareBefore
-    && (image.nodeOperation === "hd_redraw" || image.nodeOperation === "upscale_4k" || image.nodeOperation === "mask_edit" || image.nodeOperation === "design_optimize" || image.mode?.includes("画质增强") || image.mode?.includes("局部") || image.mode?.includes("设计优化")),
-  );
-  async function runAction(label: string, action: () => void | Promise<void>) {
-    if (activeActionLabel) return;
-    setConfirmLightboxAction("");
-    setActiveActionLabel(label);
-    setMessage(`${label}中...`);
-    try {
-      await action();
-      setMessage(`${label}成功`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : `${label}失败`);
-    } finally {
-      setActiveActionLabel("");
-    }
-  }
-
-  async function runConfirmedAction(label: string, action: () => void | Promise<void>) {
-    if (activeActionLabel) return;
-    if (confirmLightboxAction !== label) {
-      setConfirmLightboxAction(label);
-      setMessage(`再点一次确认${label}。`);
-      return;
-    }
-    await runAction(label, action);
-  }
-  const actionBusy = Boolean(activeActionLabel);
-
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(7,11,18,0.82)] p-2 sm:p-5" onClick={onClose}>
-      <div className="apple-panel-strong flex max-h-[94vh] w-[min(1280px,97vw)] flex-col overflow-hidden rounded-[22px] shadow-[0_30px_100px_rgba(0,0,0,0.34)] sm:rounded-[28px]" onClick={(event) => event.stopPropagation()}>
-        <LightboxHeader meta={lightboxMeta} title={lightboxTitle} onClose={onClose} />
-        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden bg-white/[0.025] lg:grid-cols-[minmax(0,1fr)_340px]">
-          <LightboxPreviewPanel
-            activePngLayer={activePngLayer}
-            compareBefore={compareBefore}
-            compareSplit={compareSplit}
-            image={image}
-            previewZoom={previewZoom}
-            showQualityComparison={showQualityComparison}
-            onCompareSplitChange={setCompareSplit}
-            onPreviewZoomChange={setPreviewZoom}
-          />
-          <aside className="min-h-0 overflow-auto border-t border-white/10 bg-white/[0.06] p-3 backdrop-blur-2xl sm:p-4 lg:border-l lg:border-t-0">
-            <div className="space-y-3">
-              <LightboxActionPanel
-                actionBusy={actionBusy}
-                activeActionLabel={activeActionLabel}
-                confirmActionLabel={confirmLightboxAction}
-                deliverySummary={deliverySummary}
-                image={image}
-                qualityReviewSummary={qualityReviewSummary}
-                showMoreActions={showMoreFooterActions}
-                sidebarTab={sidebarTab}
-                onCopyImage={onCopyImage}
-                onCopyPrompt={onCopyPrompt}
-                onDelete={onDelete}
-                onKeep={onKeep}
-                onRunAction={runAction}
-                onRunConfirmedAction={runConfirmedAction}
-                onSidebarTabChange={setSidebarTab}
-                onToggleMoreActions={() => setShowMoreFooterActions((value) => !value)}
-              />
-
-              {pngLayerResult ? (
-                <PngLayerResultSection
-                  activeFilename={activePngLayerFilename}
-                  result={pngLayerResult}
-                  onDownloadLayer={(layer) => runAction(`下载${pngLayerDisplayName(layer)}`, () => downloadRemoteFile(layer.url, layer.filename))}
-                  onPreviewLayer={(layer) => setActivePngLayerFilename(layer.filename)}
-                  onShowComposite={() => setActivePngLayerFilename("")}
-                />
-              ) : null}
-
-              <LightboxVersionPanel
-                currentImage={image}
-                latestVariants={branchLatestVariants}
-                versions={branchVersions}
-                onOpenVersion={onOpenVersion}
-              />
-
-              {sidebarTab === "actions" ? (
-                <>
-                  <LightboxDeliveryPanel
-                    actionBusy={actionBusy}
-                    activeEditTool={activeEditTool}
-                    image={image}
-                    onEditToolChange={setActiveEditTool}
-                    onRunAction={runAction}
-                    onShowQualityCheck={() => setSidebarTab("info")}
-                  />
-
-                  <LightboxEditPanels
-                    actionBusy={actionBusy}
-                    activeActionLabel={activeActionLabel}
-                    activeEditTool={activeEditTool}
-                    activeUpscaleSize={activeUpscaleSize}
-                    image={image}
-                    maskPrompt={maskPrompt}
-                    optimizePrompt={optimizePrompt}
-                    qualityEnhanceTargets={qualityEnhanceTargets}
-                    resizeFitMode={resizeFitMode}
-                    resizeRatio={resizeRatio}
-                    resizeSize={resizeSize}
-                    upscaleFitMode={upscaleFitMode}
-                    upscaleFormat={upscaleFormat}
-                    onEditImage={onEditImage}
-                    onMaskEdit={onMaskEdit}
-                    onMaskPromptChange={setMaskPrompt}
-                    onOptimizePromptChange={setOptimizePrompt}
-                    onResize={onResize}
-                    onResizeFitModeChange={setResizeFitMode}
-                    onResizeRatioChange={setResizeRatio}
-                    onResizeSizeChange={setResizeSize}
-                    onRunAction={runAction}
-                    onUpscale={onUpscale}
-                    onUpscaleFitModeChange={setUpscaleFitMode}
-                    onUpscaleFormatChange={setUpscaleFormat}
-                    onUpscaleSizeChange={setUpscaleSize}
-                  />
-
-                </>
-              ) : null}
-
-              {sidebarTab === "info" ? (
-                <LightboxInfoPanel
-                  actionBusy={actionBusy}
-                  actualSizeLabel={actualSizeLabel}
-                  branchVersionCount={branchVersions.length}
-                  expectedSizeLabel={expectedSizeLabel}
-                  image={image}
-                  showPromptDetails={showPromptDetails}
-                  sourceDetailLines={sourceDetailLines}
-                  onCopyImage={onCopyImage}
-                  onCopyPrompt={onCopyPrompt}
-                  onPromptDetailsToggle={() => setShowPromptDetails((value) => !value)}
-                  onRunAction={runAction}
-                />
-              ) : null}
-
-              {message ? <div className="apple-caption rounded-[14px] border border-white/10 bg-white/[0.055] px-3 py-2 text-white/44">{message}</div> : null}
-            </div>
-          </aside>
-        </div>
-      </div>
-    </div>
   );
 }

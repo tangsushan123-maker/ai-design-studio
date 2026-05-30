@@ -36,13 +36,13 @@ export function imageNodePreviewMetrics(image: ImageAsset | null) {
   }
 
   const ratio = imageRatio(image);
-  const nodeWidth = ratio >= 2.8 ? 164 : ratio >= 1.35 ? 170 : ratio >= 0.82 ? 158 : 148;
-  const previewHeight = ratio >= 2.8 ? 76 : ratio >= 1.35 ? 88 : ratio >= 0.82 ? 102 : 114;
-  const previewWidth = Math.max(48, Math.min(nodeWidth - 16, Math.round(previewHeight * ratio)));
+  const nodeWidth = ratio >= 2.8 ? 160 : ratio >= 1.35 ? 166 : ratio >= 0.82 ? 156 : 146;
+  const previewHeight = ratio >= 2.8 ? 70 : ratio >= 1.35 ? 82 : ratio >= 0.82 ? 94 : 106;
+  const previewWidth = Math.max(48, Math.min(nodeWidth - 14, Math.round(previewHeight * ratio)));
   return {
     previewWidth,
     previewHeight,
     nodeWidth,
-    estimatedNodeHeight: previewHeight + 52,
+    estimatedNodeHeight: previewHeight + 48,
   };
 }

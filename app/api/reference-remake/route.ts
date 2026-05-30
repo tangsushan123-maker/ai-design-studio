@@ -21,7 +21,7 @@ import { inspectImageQuality } from "@/lib/image-quality";
 import { getAnalysisModel, resolveImageModel, supportsConfigurableImageInputFidelity } from "@/lib/model-config";
 import { getOpenAI } from "@/lib/openai";
 import { assertSupportedImage, getImageRatio } from "@/lib/request-guards";
-import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
+import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, startTaskRunHeartbeat, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
 
 export const runtime = "nodejs";
@@ -95,10 +95,12 @@ export async function POST(request: Request) {
   return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
+  let stopTaskHeartbeat = () => {};
   try {
     const input = await parseMultipartInput(request);
     taskTrace = input.taskTrace || null;
     await recordTaskRunStarted(taskTrace);
+    stopTaskHeartbeat = startTaskRunHeartbeat(taskTrace, "参考图重制仍在处理：正在分析版式并生成高清结果。");
 
     const openai = getOpenAI();
     const imageModel = resolveImageModel(input.imageModel, input.model);
@@ -207,6 +209,8 @@ export async function POST(request: Request) {
     const apiError = toApiError(error, "参考图重制失败。");
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
+  } finally {
+    stopTaskHeartbeat();
   }
 
   });

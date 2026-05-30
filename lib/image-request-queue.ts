@@ -11,7 +11,7 @@ const globalQueue = globalThis as typeof globalThis & {
   };
 };
 
-const imageRequestTimeoutMs = 10 * 60 * 1000;
+const imageRequestTimeoutMs = 6 * 60 * 1000;
 const imageRequestConcurrency = 2;
 
 export function imageRequestOptions(): { timeout: number; maxRetries: number } {
@@ -31,7 +31,7 @@ export async function runQueuedImageModelRequest<T>({ label }: ImageRequestOptio
 }
 
 export async function runQueuedImageModelRequestWithRetry<T>(
-  { label, maxAttempts = 2, retryDelayMs = 1200 }: ImageRequestOptions & { maxAttempts?: number; retryDelayMs?: number },
+  { label, maxAttempts = 1, retryDelayMs = 1200 }: ImageRequestOptions & { maxAttempts?: number; retryDelayMs?: number },
   request: () => Promise<T>,
 ): Promise<T> {
   let lastError: unknown;

@@ -23,7 +23,7 @@ import { assertSupportedImage, getImageRatio } from "@/lib/request-guards";
 import { parseProtectionContext } from "@/lib/design-production";
 import { buildFuseImagesPrompt } from "@/lib/prompt";
 import { inspectImageQuality } from "@/lib/image-quality";
-import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
+import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, startTaskRunHeartbeat, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
 import { readBrandReferenceImages } from "@/lib/brand-reference-images";
 
@@ -33,12 +33,18 @@ export async function POST(request: Request) {
   return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
+  let stopTaskHeartbeat = () => {};
 
   try {
     const formData = await request.formData();
     taskTrace = taskTraceFromFormData(formData, "fuse_images", "/api/fuse-images");
     await recordTaskRunStarted(taskTrace);
+    stopTaskHeartbeat = startTaskRunHeartbeat(taskTrace, "AI 合成仍在处理：正在融合主体和场景。");
     const promptText = String(formData.get("prompt") ?? "");
+    if (!promptText.trim()) {
+      await recordTaskRunFailed(taskTrace, "AI合成必须填写合成要求。");
+      return NextResponse.json({ error: "AI合成必须填写合成要求。" }, { status: 400 });
+    }
     const [first, second] = await Promise.all([
       readImageInput(formData, "imageA", "sourceUrlA", "subject-source.png"),
       readImageInput(formData, "imageB", "sourceUrlB", "scene-source.png"),
@@ -237,6 +243,8 @@ export async function POST(request: Request) {
     const apiError = toApiError(error, "AI合成失败。");
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
+  } finally {
+    stopTaskHeartbeat();
   }
 
   });

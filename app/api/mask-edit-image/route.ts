@@ -18,7 +18,7 @@ import { imageRequestOptions, runQueuedImageModelRequestWithRetry } from "@/lib/
 import { assertSupportedImage } from "@/lib/request-guards";
 import { parseProtectionContext, type ProtectionContext } from "@/lib/design-production";
 import { inspectImageQuality } from "@/lib/image-quality";
-import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
+import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, startTaskRunHeartbeat, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
 import sharp from "sharp";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
 import { readBrandReferenceImages } from "@/lib/brand-reference-images";
@@ -96,11 +96,13 @@ export async function POST(request: Request) {
   return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
+  let stopTaskHeartbeat = () => {};
 
   try {
     const formData = await request.formData();
     taskTrace = taskTraceFromFormData(formData, "mask_edit", "/api/mask-edit-image");
     await recordTaskRunStarted(taskTrace);
+    stopTaskHeartbeat = startTaskRunHeartbeat(taskTrace, "局部修改仍在处理：正在生成和校验蒙版结果。");
     const promptText = String(formData.get("prompt") ?? "");
     const sourceUrl = String(formData.get("sourceUrl") ?? "");
     const uploadedImage = formData.get("image");
@@ -118,6 +120,11 @@ export async function POST(request: Request) {
     const clientMaskPixelCount = Math.max(0, Number(formData.get("maskPixelCount") || 0) || 0);
     const clientMaskCoverage = clamp(Number(formData.get("maskCoverage") || 0) || 0, 0, 1);
     const protectionContext = parseProtectionContext(formData.get("protectionContext"));
+
+    if (!promptText.trim()) {
+      await recordTaskRunFailed(taskTrace, "局部修改必须填写修改要求。");
+      return NextResponse.json({ error: "局部修改必须填写修改要求。" }, { status: 400 });
+    }
 
     if (requiresSpecificInstruction(taskMode) && !promptText.trim()) {
       await recordTaskRunFailed(taskTrace, taskMode === "replace" ? "请写清楚要替换成什么；具体产品建议先上传参考图。" : "请写清楚要替换/修复的新文字内容。");
@@ -411,6 +418,8 @@ export async function POST(request: Request) {
     const apiError = toApiError(error, "局部修改失败。");
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
+  } finally {
+    stopTaskHeartbeat();
   }
 
   });

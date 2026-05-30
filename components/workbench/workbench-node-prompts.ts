@@ -54,10 +54,8 @@ export function buildOutpaintPrompt(params: Record<string, unknown>) {
   const targetRatio = stringParam(params.targetRatio) || "16:9";
   const targetSize = stringParam(params.targetSize);
   return [
-    userPrompt || "保持原图核心内容，扩展成完整新比例设计稿。",
-    `AI 扩图：目标 ${targetRatio}${targetSize ? ` / ${targetSize}` : ""}，方向 ${direction}。`,
-    "向外补全背景、光影、空间和版式延展；不要拉伸、白边、模糊边框或裁掉主体。",
-    "保留原图真实标题、人物、产品、Logo、二维码和关键信息，不自行发明。",
+    userPrompt || "用户没有额外要求，请根据输入图片自行分析并扩展成目标画面。",
+    `目标比例/尺寸：${targetRatio}${targetSize ? ` / ${targetSize}` : ""}；扩展方向：${direction}。`,
   ].join("\n");
 }
 
@@ -66,33 +64,11 @@ export function buildResizePrompt(params: Record<string, unknown>, ratio: Aspect
   const preset = stringParam(params.sizePreset) || resizePresetLabelFromParams(params);
   const fitMode = stringParam(params.fitMode) || "smart_relayout";
   const userPrompt = stringParam(params.prompt);
-  const targetOrientation = resizeTargetOrientationPrompt(targetSize, ratio);
   return [
-    userPrompt ? `用户改尺寸要求：${userPrompt}` : "",
-    "AI 改尺寸 / resize 重绘。",
-    fitMode === "keep_ratio"
-      ? "保持原图比例和构图方向，只按目标尺寸导出，不改变版式和未指定内容。"
-      : fitMode === "smart_outpaint"
-        ? `扩展成 ${preset}，目标尺寸 ${targetSize}，保留原版式和视觉重心，只向四周补全背景、空间和光影。`
-        : `重新设计成 ${preset}，目标尺寸 ${targetSize}，版式、层级、留白、文字位置和视觉重心必须按新尺寸重新排版。`,
-    fitMode === "keep_ratio"
-      ? "保持比例放大：不要加边、裁切或改比例。"
-      : fitMode === "pad"
-      ? "补背景保完整：可补充背景，但不能白边或空边。"
-      : fitMode === "crop"
-        ? "安全裁切：主体和文字必须留在安全区。"
-      : fitMode === "smart_outpaint"
-          ? "扩图补画：保持原构图，向外补全背景和内容，禁止白边。"
-          : "智能改版：新尺寸新排版，原图只作为主题、品牌色、主体素材和核心信息参考；不要照搬原标题位置、主体位置或原坐标。",
-    fitMode === "smart_relayout"
-      ? `构图：先识别元素和信息层级，再重排阅读顺序；重要元素进中心 76% 安全区，四周 18% 只放背景和出血装饰。${targetOrientation}`
-      : "",
-    fitMode === "keep_ratio"
-      ? "目标：真实目标像素尺寸，文字不变形。"
-      : "目标：适配目标比例，主体、文字和品牌信息完整安全。",
-    fitMode === "smart_relayout"
-      ? "延续原图核心内容、标题含义、人物、产品、电话、地址、Logo 和二维码的识别度；允许按新尺寸重新安排位置，不要自行生成真实信息。"
-      : "保留原图核心内容、标题、人物、产品、电话、地址、Logo 和二维码；不要自行生成真实信息。",
+    userPrompt || "用户没有额外要求，请根据输入图片自行分析，并按目标比例/尺寸原生重新构图和重绘画面。",
+    `任务：AI 改比例，不是拉伸变形、不是裁切、不是简单缩放。目标：${preset}，${targetSize}。`,
+    `处理方式：${fitMode}；必须让标题、主体、卖点、背景和留白重新适配目标画布。`,
+    "字体、Logo、二维码、人物/IP、产品保持自然比例；可以重排和重画，但不能横向拉宽或纵向压扁。",
   ]
     .filter(Boolean)
     .join("\n");

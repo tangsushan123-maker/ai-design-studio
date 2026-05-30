@@ -262,7 +262,7 @@ export type ResolvedTextReference = {
   manifest: TextReferenceImage;
 };
 
-export type ProjectAssetUploadKind = "logo" | "qrcode" | "ip" | "background";
+export type ProjectAssetUploadKind = "logo" | "qrcode" | "ip";
 
 export type NodeKind =
   | "image_input"
@@ -298,6 +298,7 @@ export type WorkflowNodeData = {
   onRun?: (nodeId: string) => void;
   onDelete?: (nodeId: string) => void;
   onParamChange?: (nodeId: string, key: string, value: unknown) => void;
+  onUseCanvasImageAsTextReference?: (nodeId: string, role: TextReferenceRole) => void;
   onImageFile?: (nodeId: string, file: File) => void;
   onPreview?: (image: ImageAsset) => void;
   onMaskEdit?: (nodeId: string) => void;
@@ -327,6 +328,8 @@ export type TaskRecord = {
   modelDurationMs?: number;
   saveDurationMs?: number;
   error?: string;
+  errorCategory?: string;
+  retryable?: boolean;
   result?: ImageAsset;
   inputs?: ImageAsset[];
   outputs?: ImageAsset[];
@@ -362,6 +365,8 @@ export type ServerTaskRunRecord = {
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
   message?: string;
   error?: string;
+  errorCategory?: string;
+  retryable?: boolean;
   updatedAt?: string;
   endedAt?: string;
   durationMs?: number;

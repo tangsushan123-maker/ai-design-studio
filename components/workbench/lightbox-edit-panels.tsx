@@ -118,9 +118,9 @@ export function LightboxEditPanels({
         />
         <button
           className="apple-button-primary mt-2 w-full px-3 py-2 text-[11px] font-semibold disabled:opacity-40"
-          disabled={actionBusy}
+          disabled={!maskPrompt.trim() || actionBusy}
           onClick={() => void onRunAction("打开局部修改", () => {
-            const prompt = maskPrompt.trim() || "去掉这里并补全背景";
+            const prompt = maskPrompt.trim();
             onMaskEdit({
               prompt,
               quality: image.quality === "4k" ? "2k" : image.quality || "standard",

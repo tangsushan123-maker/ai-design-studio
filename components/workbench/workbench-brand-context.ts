@@ -223,7 +223,7 @@ export function summarizeBrandAssets(profile: ProjectProfile, brandAssets: Image
   };
 }
 
-export function countBrandAssets(assets: ImageAsset[], kind: "logo" | "ip" | "qrcode" | "background") {
+export function countBrandAssets(assets: ImageAsset[], kind: "logo" | "ip" | "qrcode") {
   let count = 0;
   for (const asset of assets) {
     if (assetMatchesBrandKind(asset, kind)) count += 1;
@@ -231,7 +231,7 @@ export function countBrandAssets(assets: ImageAsset[], kind: "logo" | "ip" | "qr
   return count;
 }
 
-export function findBrandAssets(assets: ImageAsset[], kind: "logo" | "ip" | "qrcode" | "background") {
+export function findBrandAssets(assets: ImageAsset[], kind: "logo" | "ip" | "qrcode") {
   return assets.filter((asset) => assetMatchesBrandKind(asset, kind));
 }
 
@@ -241,6 +241,21 @@ export function resolveBrandReferenceAssets(profile: ProjectProfile, assets: Ima
     ...(usage.useLogo ? findBrandAssets(assets, "logo").slice(0, 1) : []),
     ...(usage.useIpImage ? findBrandAssets(assets, "ip").slice(0, 1) : []),
     ...(usage.useQrCode ? findBrandAssets(assets, "qrcode").slice(0, 1) : []),
+  ];
+  const seen = new Set<string>();
+  return selected.filter((asset) => {
+    const key = asset.id || asset.url || asset.fileName || "";
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return Boolean(asset.url);
+  }).slice(0, 3);
+}
+
+export function resolveSchemeDecisionBrandReferenceAssets(assets: ImageAsset[]) {
+  const selected = [
+    ...findBrandAssets(assets, "logo").slice(0, 1),
+    ...findBrandAssets(assets, "ip").slice(0, 1),
+    ...findBrandAssets(assets, "qrcode").slice(0, 1),
   ];
   const seen = new Set<string>();
   return selected.filter((asset) => {
@@ -272,17 +287,9 @@ export function buildProjectLibraryContext(
   projectLibraries: MaterialLibrarySummary[],
   publicStyleLibraries: MaterialLibrarySummary[],
 ) {
-  const projectLibraryById = materialLibraryMap(projectLibraries);
   const publicStyleLibraryById = materialLibraryMap(publicStyleLibraries);
-  const referenceTexts = knowledge.references
-    .filter((item) => item.enabled)
-    .map((item) => {
-      const source = item.kind === "project"
-        ? projectLibraryById.get(item.libraryId)
-        : publicStyleLibraryById.get(item.libraryId);
-      const description = source?.description || source?.tags?.join(" / ") || "";
-      return `${item.libraryName}（${item.kind === "project" ? "项目素材库" : "公共风格库"}，${item.mode === "copy_into_project" ? "已复制到本项目" : "只读引用"}）${description ? `：${description}` : ""}`;
-    });
+  void projectLibraries;
+  const referenceCount = knowledge.references.filter((item) => item.enabled).length;
   const styleRuleTexts = knowledge.selection.activePublicStyleLibraryIds
     .map((libraryId) => publicStyleLibraryById.get(libraryId))
     .filter((library): library is MaterialLibrarySummary => Boolean(library))
@@ -291,14 +298,11 @@ export function buildProjectLibraryContext(
       const references = styleLibraryReferencePreview(library);
       return `${library.name}：${rules}${references ? `；参考：${references}` : ""}`;
     });
-  const localAssetSummary = knowledge.materialLibrary.items.slice(0, 6).map((item) => item.name).join(" / ");
   return [
-    `项目档案：${knowledge.archive.projectName}${knowledge.archive.organizationName ? `，机构 ${knowledge.archive.organizationName}` : ""}`,
-    localAssetSummary ? `当前项目素材库：${knowledge.materialLibrary.name}，已收录 ${knowledge.materialLibrary.items.length} 项，包括 ${localAssetSummary}` : `当前项目素材库：${knowledge.materialLibrary.name}，暂未上传素材。`,
-    referenceTexts.length ? `已引用素材库：${referenceTexts.join("；")}` : "未引用其他项目素材库或公共风格库，禁止跨项目自动混用。",
-    styleRuleTexts.length ? `公共风格规则：${styleRuleTexts.join("；")}` : "未启用公共风格规则，默认只按项目档案和当前需求生成。",
-    "素材来源规则：用户上传和 AI 生成素材可直接使用；网络参考素材必须标注来源，默认只作参考。",
-  ].join("\n");
+    `项目：${knowledge.archive.projectName}${knowledge.archive.organizationName ? `；机构：${knowledge.archive.organizationName}` : ""}`,
+    `素材库：${knowledge.materialLibrary.items.length}项${referenceCount ? `；引用库：${referenceCount}个` : ""}。只用当前项目真实素材，缺失不编造。`,
+    styleRuleTexts.length ? `风格：${styleRuleTexts.slice(0, 2).join("；")}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 function materialLibraryMap(libraries: MaterialLibrarySummary[]) {
@@ -354,13 +358,13 @@ function buildBrandAssetContextPack(profile: ProjectProfile, brandAssets: ImageA
   const logoAssets = findBrandAssets(brandAssets, "logo");
   const ipAssets = findBrandAssets(brandAssets, "ip");
   const qrAssets = findBrandAssets(brandAssets, "qrcode");
-  const backgroundAssets = findBrandAssets(brandAssets, "background");
   const primaryColors = extractColorValues(profile.primaryColors || profile.brandColors);
   const secondaryColors = secondaryProfileColors(profile);
   const visibleRequests = resolveVisibleProjectInfoRequests(visibleRequestText);
   const hiddenRequests = resolveNoVisibleProjectOutputPolicy(visibleRequestText);
+  const schemeDecisionMode = /两方案素材库调用策略|方案A（?转化广告版/.test(visibleRequestText);
   const lines = [
-    "【项目素材】",
+    "【项目素材简表】",
     !hiddenRequests.noText && visibleRequests.organization && profile.organizationName ? `机构名称：${profile.organizationName}` : "",
     usage.usePrimaryColors && primaryColors.length ? `项目主色：${primaryColors.join("、")}` : "",
     usage.useSecondaryColors && secondaryColors.length ? `辅助配色：${secondaryColors.join("、")}` : "",
@@ -371,13 +375,13 @@ function buildBrandAssetContextPack(profile: ProjectProfile, brandAssets: ImageA
     !hiddenRequests.noQr && usage.useQrCode && (profile.qrCodeNote || qrAssets.length) ? `二维码：${[profile.qrCodeNote, assetNames(qrAssets)].filter(Boolean).join("；")}` : "",
     !hiddenRequests.noText && usage.useCopy && visibleRequests.copy && profile.commonCopy ? `常用宣传语：${splitProfileLines(profile.commonCopy).join("；")}` : "",
     usage.useForbiddenRules && profile.forbiddenContent ? `禁止事项：${splitProfileLines(profile.forbiddenContent).join("；")}` : "",
-    backgroundAssets.length ? `常用背景：${assetNames(backgroundAssets)}` : "",
     visibleRequests.phone && !profile.phone ? "用户要求电话但项目资料未填写电话：请提示缺少电话，不要编造。" : "",
     visibleRequests.address && !profile.address ? "用户要求地址但项目资料未填写地址：请提示缺少地址，不要编造。" : "",
     visibleRequests.logo && !profile.logoName && !logoAssets.length ? "用户要求 Logo 但项目素材库未提供 Logo：不要编造 Logo。" : "",
     visibleRequests.qr && !profile.qrCodeNote && !qrAssets.length ? "用户要求二维码但项目素材库未提供二维码：不要生成假二维码。" : "",
-    "调用规则：只用当前项目素材；电话/地址/Logo/二维码只有用户明确要求或开关启用才上画；缺失则不编造。",
-    missingBrandAssetWarning(profile, brandAssets),
+    schemeDecisionMode
+      ? "调用：A可放真实转化素材；B按需放Logo/IP；电话/地址/二维码非必要不放；缺失不编造。"
+      : "调用：电话/地址/Logo/二维码只在用户明确要求或开关启用时上画；缺失不编造。",
   ].filter(Boolean);
   return lines.length > 3 ? lines.join("\n") : "";
 }
@@ -394,18 +398,6 @@ function secondaryProfileColors(profile: ProjectProfile) {
     for (const color of extractColorValues(value)) colors.add(color);
   }
   return Array.from(colors);
-}
-
-function missingBrandAssetWarning(profile: ProjectProfile, brandAssets: ImageAsset[]) {
-  const missing = [
-    projectProfileColors(profile).length ? "" : "主色",
-    findBrandAssets(brandAssets, "logo").length || profile.logoName ? "" : "Logo",
-    profile.phone || profile.address ? "" : "联系方式",
-    findBrandAssets(brandAssets, "ip").length ? "" : "IP形象",
-  ].filter(Boolean);
-  return missing.length
-    ? `当前项目还没有完整品牌资产，建议补充${missing.join("、")}，生成结果会更准确。缺少品牌素材时，生成结果只能作为灵感初稿，不能当正式交付稿。`
-    : "";
 }
 
 function sourceImageVersionRefs(sourceImages: ImageAsset[]) {
@@ -584,15 +576,14 @@ export function styleLibraryReferencePreview(library: MaterialLibrarySummary) {
     .join(" / ");
 }
 
-function assetMatchesBrandKind(asset: ImageAsset, kind: "logo" | "ip" | "qrcode" | "background") {
+function assetMatchesBrandKind(asset: ImageAsset, kind: "logo" | "ip" | "qrcode") {
   const source = [asset.fileName, asset.mode, asset.materialType, ...(Array.isArray((asset as { tags?: string[] }).tags) ? (asset as { tags?: string[] }).tags || [] : [])]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
   if (kind === "logo") return source.includes("logo") || source.includes("标志") || source.includes("品牌标识");
   if (kind === "qrcode") return source.includes("二维码") || source.includes("qrcode") || /\bqr\b/.test(source);
-  if (kind === "ip") return source.includes("ip形象") || source.includes("ip") || source.includes("吉祥物") || source.includes("卡通") || source.includes("角色");
-  return source.includes("背景") || source.includes("background");
+  return source.includes("ip形象") || source.includes("ip") || source.includes("吉祥物") || source.includes("卡通") || source.includes("角色");
 }
 
 function mergeLegacyDataIntoKnowledge(

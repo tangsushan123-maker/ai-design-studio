@@ -9,7 +9,7 @@ import { imageRequestOptions, runQueuedImageModelRequestWithRetry } from "@/lib/
 import { ensureGeneratedDir, getGeneratedDir, getGeneratedProjectRelativeDir, getGeneratedUrl, parseDataUrl, readImageMetadata, readPublicImageUrl } from "@/lib/image-utils";
 import { resolveImageModel } from "@/lib/model-config";
 import { getOpenAI } from "@/lib/openai";
-import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromJson, type TaskRunTrace } from "@/lib/task-run-ledger";
+import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, startTaskRunHeartbeat, taskRunResponseMeta, taskTraceFromJson, type TaskRunTrace } from "@/lib/task-run-ledger";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
 
 export const runtime = "nodejs";
@@ -75,10 +75,12 @@ export async function POST(request: Request) {
   return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
+  let stopTaskHeartbeat = () => {};
   try {
     const body = await parsePngLayerExportPayload(request);
     taskTrace = taskTraceFromJson(body as Record<string, unknown>, "png_layers", "/api/export-png-layers");
     await recordTaskRunStarted(taskTrace);
+    stopTaskHeartbeat = startTaskRunHeartbeat(taskTrace, "PNG 分层仍在处理：正在拆分和保存图层。");
     if (!body.imageUrl && !body.imageData) {
       await recordTaskRunFailed(taskTrace, "请提供要导出分层的图片。");
       return NextResponse.json({ error: "请提供要导出分层的图片。" }, { status: 400 });
@@ -195,6 +197,8 @@ export async function POST(request: Request) {
     const apiError = toApiError(error, "PNG 分层导出失败。");
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
+  } finally {
+    stopTaskHeartbeat();
   }
 
   });

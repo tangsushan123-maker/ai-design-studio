@@ -31,13 +31,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "图片文件过大，请上传小于 50MB 的图片。" }, { status: 413 });
     }
 
+    const isMaskResource = file.name?.startsWith("mask-") || false;
     const extension = extensionFromMime(file.type);
     const [saved, metadata, alphaCheck] = await Promise.all([
       saveImageBuffer(buffer, extension, {
         ratioLabel: materialType || "asset",
         quality: "standard",
         projectId,
-        storageKind: file.name?.startsWith("mask-") ? "masks" : "uploads",
+        storageKind: isMaskResource ? "masks" : "uploads",
       }),
       readImageMetadata(buffer),
       inspectPngAlpha(buffer).catch(() => ({
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
       savedPath: saved.path,
       source,
       projectId: projectId || undefined,
-      materialType: materialType || undefined,
+      materialType: isMaskResource ? "局部修改蒙版" : materialType || undefined,
       alphaCheck,
     };
 
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
       ownerEmail: user.email,
       ownerName: user.name,
       projectId: projectId || undefined,
-      materialType: materialType || undefined,
+      materialType: isMaskResource ? "局部修改蒙版" : materialType || undefined,
       alphaCheck,
     });
 
@@ -98,6 +99,7 @@ export async function POST(request: Request) {
         fileName: saved.fileName,
         resourceFileName: saved.fileName,
         originalFileName: file.name,
+        materialType: isMaskResource ? "局部修改蒙版" : materialType || undefined,
       },
     });
   } catch (error) {

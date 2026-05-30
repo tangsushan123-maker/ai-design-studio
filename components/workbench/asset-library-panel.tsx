@@ -8,9 +8,7 @@ import {
   Palette,
   RefreshCcw,
   ScanLine,
-  Sparkles,
   Sticker,
-  SwatchBook,
   Upload,
   X,
 } from "lucide-react";
@@ -85,20 +83,14 @@ type AssetCategoryKey =
   | "logo"
   | "qrcode"
   | "ip"
-  | "background"
   ;
 
-type UploadCategoryKey = "logo" | "qrcode" | "ip" | "background";
+type UploadCategoryKey = "logo" | "qrcode" | "ip";
 
 const TAB_ITEMS = [
   { id: "memory", label: "记忆" },
   { id: "assets", label: "素材" },
-  { id: "styles", label: "风格" },
 ] as const;
-
-const STYLE_OPTIONS = ["简约高级", "科技感", "医疗专业", "活动促销", "儿童亲和", "中医国风", "政务正式"] as const;
-const COMPOSITION_OPTIONS = ["留白多", "信息密集", "大标题突出", "产品突出", "人物突出", "品牌突出"] as const;
-const SIZE_OPTIONS = ["1:1", "3:4", "4:5", "16:9", "9:16", "自定义"] as const;
 
 const CATEGORY_META: Array<{
   key: AssetCategoryKey;
@@ -109,7 +101,6 @@ const CATEGORY_META: Array<{
   { key: "logo", label: "Logo", icon: Palette, matches: (asset) => includesAny([asset.fileName, asset.mode, asset.materialType], ["logo"]) },
   { key: "qrcode", label: "二维码", icon: ScanLine, matches: (asset) => includesAny([asset.fileName, asset.mode, asset.materialType], ["二维码", "qr", "qrcode"]) },
   { key: "ip", label: "IP形象", icon: Sticker, matches: (asset) => includesAny([asset.fileName, asset.mode, asset.materialType], ["ip", "吉祥物", "卡通", "角色", "icon"]) },
-  { key: "background", label: "背景图", icon: Sparkles, matches: (asset) => includesAny([asset.fileName, asset.mode, asset.materialType], ["背景", "background"]) },
 ];
 
 type AssetLibraryPanelProps = {
@@ -163,10 +154,7 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
     initialTab = "memory",
     profile,
     publicInfoSearchState,
-    publicStyleLibraries,
     splitProfileLines,
-    styleLibraryReferencePreview,
-    styleLibraryRulePreview,
     text,
     textProtectionMode,
   } = props;
@@ -197,10 +185,6 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
 
     return buckets;
   }, [mergedAssets]);
-
-  const selectedStyles = useMemo(() => new Set(splitProfileLines(profile.styleNotes)), [profile.styleNotes, splitProfileLines]);
-  const selectedSizes = useMemo(() => new Set(splitProfileLines(profile.commonSizes)), [profile.commonSizes, splitProfileLines]);
-  const activeStyleLibraries = useMemo(() => new Set(knowledge.selection.activePublicStyleLibraryIds), [knowledge.selection.activePublicStyleLibraryIds]);
 
   const summaryOrganization = knowledge.archive.organizationName || profile.organizationName || "未填写";
   const allBrandColors = profileBrandColorValues(profile);
@@ -305,33 +289,6 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
     updateKnowledge({ [field]: value });
   }
 
-  function toggleStylePreference(value: string) {
-    const next = new Set(selectedStyles);
-    if (next.has(value)) next.delete(value);
-    else next.add(value);
-    onProfileChange({ ...profile, styleNotes: Array.from(next).join("\n") });
-  }
-
-  function toggleSizePreference(value: string) {
-    const next = new Set(selectedSizes);
-    if (next.has(value)) next.delete(value);
-    else next.add(value);
-    onProfileChange({ ...profile, commonSizes: Array.from(next).join("\n") });
-  }
-
-  function togglePublicStyleLibrary(libraryId: string) {
-    const next = new Set(activeStyleLibraries);
-    if (next.has(libraryId)) next.delete(libraryId);
-    else next.add(libraryId);
-    onKnowledgeChange({
-      ...knowledge,
-      selection: {
-        ...knowledge.selection,
-        activePublicStyleLibraryIds: Array.from(next),
-      },
-    });
-  }
-
   async function runPanelAction(label: string, key: string, action: () => void | Promise<unknown>) {
     const actionKey = `${label}:${key}`;
     if (activePanelAction) return;
@@ -387,7 +344,7 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
           ) : null}
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-1.5">
+        <div className="mt-4 grid grid-cols-2 gap-1.5">
           {TAB_ITEMS.map((item) => (
             <button
               className={`apple-segment h-9 rounded-full px-2 text-[12px] font-medium ${tab === item.id ? "apple-segment-active" : ""}`}
@@ -602,15 +559,23 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
 
         {tab === "assets" ? (
           <div className="space-y-4">
-            <section className="apple-panel p-4">
-              <div className="mb-3">
-                <div className="mb-2.5 text-[11px] text-white/42">素材类型</div>
-                <div className="flex flex-wrap gap-2">
+            <section className="apple-panel p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-[14px] font-semibold text-white/88">素材库</div>
+                  <div className="mt-0.5 text-[11px] text-white/42">Logo、二维码和 IP 形象</div>
+                </div>
+                <span className="apple-pill px-2.5 py-1 text-[11px]">{mergedAssets.length} 张</span>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-1.5">
                   {CATEGORY_META.map((item) => {
                     const active = uploadCategory === item.key;
+                    const Icon = item.icon;
+                    const count = categoryMap.get(item.key)?.length || 0;
                     return (
                       <button
-                      className={`rounded-full px-3.5 py-2 text-[11px] transition ${active ? "bg-white text-[#07121f]" : "bg-white/[0.05] text-white/64 hover:bg-white/[0.08]"}`}
+                        className={`min-w-0 rounded-[16px] border px-2.5 py-2 text-left transition ${active ? "border-white/55 bg-white text-[#07121f] shadow-[0_14px_32px_rgba(255,255,255,0.14)]" : "border-white/9 bg-white/[0.045] text-white/62 hover:bg-white/[0.075]"}`}
                         key={item.key}
                         onClick={() => {
                           setUploadCategory(item.key);
@@ -618,20 +583,23 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
                         }}
                         type="button"
                       >
-                        {item.label}
+                        <span className="flex items-center justify-between gap-1.5">
+                          <Icon className="size-3.5 shrink-0" />
+                          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${active ? "bg-black/10 text-[#07121f]/65" : "bg-white/8 text-white/42"}`}>{count}</span>
+                        </span>
+                        <span className="mt-1.5 block truncate text-[11px] font-semibold">{item.label}</span>
                       </button>
                     );
                   })}
-                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button className="apple-button-primary flex-1 px-3 py-2.5 text-[11px] font-semibold disabled:opacity-45" disabled={Boolean(uploadingCategory || activePanelAction)} onClick={() => uploadRef.current?.click()} type="button">
+
+              <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                <button className="apple-button-primary min-w-0 px-3 py-2.5 text-[12px] font-semibold disabled:opacity-45" disabled={Boolean(uploadingCategory || activePanelAction)} onClick={() => uploadRef.current?.click()} type="button">
                   <Upload className="mr-1 inline size-3.5" />
                   {uploadingCategory === uploadCategory ? "上传中" : `上传${categoryLabel(uploadCategory)}`}
                 </button>
-                <button className="apple-button px-3 py-2.5 text-[11px] disabled:opacity-45" disabled={Boolean(activePanelAction)} onClick={() => void runPanelAction("刷新素材库", "libraries", onRefreshLibraries)} type="button">
+                <button aria-label="刷新素材库" className="apple-button flex size-10 items-center justify-center text-white/60 disabled:opacity-45" disabled={Boolean(activePanelAction)} onClick={() => void runPanelAction("刷新素材库", "libraries", onRefreshLibraries)} title="刷新素材库" type="button">
                   <RefreshCcw className={`mr-1 inline size-3.5 ${activePanelAction === "刷新素材库:libraries" ? "animate-spin" : ""}`} />
-                  {activePanelAction === "刷新素材库:libraries" ? "刷新中" : "刷新"}
                 </button>
               </div>
             </section>
@@ -646,32 +614,16 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
               </div>
             ) : null}
 
-            <section className="apple-panel p-4">
-              <div className="grid grid-cols-2 gap-2">
-                {CATEGORY_META.map((category) => {
-                  const Icon = category.icon;
-                  const count = categoryMap.get(category.key)?.length || 0;
-                  const active = activeCategory === category.key;
-                  return (
-                    <button
-                    className={`apple-interactive-card p-3.5 text-left ${active ? "is-selected" : ""}`}
-                      key={category.key}
-                      onClick={() => setActiveCategory(category.key)}
-                      type="button"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`flex size-8 items-center justify-center rounded-xl ${active ? "bg-white/14 text-white" : "bg-white/[0.05] text-white/54"}`}>
-                          <Icon className="size-4" />
-                        </span>
-                        <span className="apple-pill px-2 py-1 text-[11px]">{count}</span>
-                      </div>
-                      <div className="mt-2.5 text-[13px] font-semibold text-white/84">{category.label}</div>
-                    </button>
-                  );
-                })}
+            <section className="apple-panel p-3">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-[13px] font-semibold text-white/86">{categoryLabel(activeCategory)}</div>
+                  <div className="mt-0.5 text-[11px] text-white/40">当前分类素材</div>
+                </div>
+                <span className="apple-pill px-2 py-1 text-[11px]">{categoryMap.get(activeCategory)?.length || 0}</span>
               </div>
 
-              <div className="mt-4">
+              <div>
                 {categoryMap.get(activeCategory)?.length ? (
                   <div className="grid grid-cols-2 gap-2">
                     {categoryMap.get(activeCategory)?.map((asset) => (
@@ -695,68 +647,13 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
                     ))}
                   </div>
                 ) : (
-                  <div className="apple-empty-state px-4 py-8 text-center">
-                    <div className="text-[13px] font-semibold text-white/76">这个分类还没有素材</div>
+                  <div className="rounded-[20px] border border-dashed border-white/12 bg-white/[0.03] px-4 py-8 text-center">
+                    <div className="text-[13px] font-semibold text-white/72">这个分类还没有素材</div>
+                    <div className="mt-1 text-[11px] text-white/38">点击上方上传{categoryLabel(activeCategory)}</div>
                   </div>
                 )}
               </div>
             </section>
-          </div>
-        ) : null}
-
-        {tab === "styles" ? (
-          <div className="space-y-4">
-            <section className="apple-panel p-4">
-              <div className="text-[15px] font-semibold text-white/88">本次生成偏好</div>
-              <div className="mt-1 text-[12px] leading-5 text-white/42">风格、构图、尺寸</div>
-
-              <PreferenceGroup items={STYLE_OPTIONS} label="设计风格" selected={selectedStyles} onToggle={toggleStylePreference} />
-              <PreferenceGroup items={COMPOSITION_OPTIONS} label="画面倾向" selected={selectedStyles} onToggle={toggleStylePreference} />
-              <PreferenceGroup items={SIZE_OPTIONS} label="常用尺寸" selected={selectedSizes} onToggle={toggleSizePreference} />
-            </section>
-
-            <section className="apple-panel p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-[15px] font-semibold text-white/88">公共风格</div>
-                </div>
-                <span className="apple-pill px-2.5 py-1 text-[11px]">{activeStyleLibraries.size} 已引用</span>
-              </div>
-
-              {publicStyleLibraries.length ? (
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {publicStyleLibraries.map((library) => {
-                  const active = activeStyleLibraries.has(library.id);
-                  const keywords = library.tags.slice(0, 4).join(" / ") || styleLibraryRulePreview(library);
-                  return (
-                    <article
-                      className={`apple-interactive-card p-3 ${active ? "is-selected" : ""}`}
-                      key={library.id}
-                      title={[library.description, styleLibraryRulePreview(library), styleLibraryReferencePreview(library)].filter(Boolean).join("\n")}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`flex size-8 items-center justify-center rounded-xl ${active ? "bg-white/14 text-white" : "bg-white/[0.05] text-white/56"}`}>
-                          <SwatchBook className="size-4" />
-                        </span>
-                        <button
-                          className={active ? "apple-button-primary px-2.5 py-1.5 text-[11px] font-semibold" : "apple-button px-2.5 py-1.5 text-[11px]"}
-                          onClick={() => togglePublicStyleLibrary(library.id)}
-                          type="button"
-                        >
-                          {active ? "取消" : "引用"}
-                        </button>
-                      </div>
-                      <div className="mt-2.5 text-[12px] font-semibold text-white/84">{simplifyLibraryName(library.name)}</div>
-                      <div className="mt-1 line-clamp-2 text-[11px] leading-5 text-white/42">{keywords}</div>
-                    </article>
-                  );
-                  })}
-                </div>
-              ) : (
-                <div className="apple-empty-state mt-3 px-4 py-8 text-center text-[12px] text-white/46">暂无风格卡片</div>
-              )}
-            </section>
-
           </div>
         ) : null}
       </div>
@@ -877,67 +774,10 @@ function ColorSwatches({ colors, className = "" }: { colors: string[]; className
   );
 }
 
-function PreferenceGroup({
-  items,
-  label,
-  selected,
-  onToggle,
-}: {
-  items: readonly string[];
-  label: string;
-  selected: Set<string>;
-  onToggle: (value: string) => void;
-}) {
-  const isSizeGroup = /尺寸|比例/.test(label);
-  return (
-    <div className="mt-4">
-      <div className="mb-2.5 text-[11px] text-white/42">{label}</div>
-      <div className={isSizeGroup ? "grid grid-cols-3 gap-2" : "flex flex-wrap gap-2"}>
-        {items.map((item) => {
-          const active = selected.has(item);
-          return (
-            <button
-              className={isSizeGroup
-                ? `flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-[17px] border px-1.5 text-[14px] font-semibold transition ${
-                    active
-                      ? "border-white/75 bg-white text-[#07121f] shadow-[0_14px_34px_rgba(255,255,255,0.16)]"
-                      : "border-white/10 bg-white/[0.055] text-white/58 hover:bg-white/[0.09] hover:text-white/74"
-                  }`
-                : `rounded-full px-3.5 py-2 text-[11px] transition ${active ? "bg-[#74e3c5] text-[#07121f]" : "bg-white/[0.05] text-white/64 hover:bg-white/[0.08]"}`}
-              key={item}
-              onClick={() => onToggle(item)}
-              type="button"
-            >
-              {isSizeGroup ? <RatioPreferenceGlyph ratio={item} selected={active} /> : null}
-              <span className="whitespace-nowrap">{item}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function RatioPreferenceGlyph({ ratio, selected }: { ratio: string; selected: boolean }) {
-  const normalized = ratio === "自定义" ? "custom" : ratio;
-  const [rawWidth, rawHeight] = normalized === "custom" ? [5, 4] : normalized.split(":").map((item) => Number(item) || 1);
-  const width = Math.max(9, Math.min(22, rawWidth >= rawHeight ? 22 : Math.round((rawWidth / rawHeight) * 22)));
-  const height = Math.max(9, Math.min(22, rawHeight > rawWidth ? 22 : Math.round((rawHeight / rawWidth) * 22)));
-  return (
-    <span aria-hidden="true" className={`flex h-[22px] w-6 shrink-0 items-center justify-center ${selected ? "text-[#07121f]" : "text-white/58"}`}>
-      <span
-        className={`block rounded-[4px] border ${selected ? "border-[#07121f]/70 bg-[#07121f]/7" : "border-current bg-white/[0.035]"}`}
-        style={{ height, width }}
-      />
-    </span>
-  );
-}
-
 function assetImageTypeLabel(asset: AssetPanelImage) {
   if (asset.materialType) return asset.materialType;
   if (includesAny([asset.fileName, asset.mode], ["logo"])) return "Logo";
   if (includesAny([asset.fileName, asset.mode], ["二维码", "qr"])) return "二维码";
-  if (includesAny([asset.fileName, asset.mode], ["背景", "background"])) return "背景图";
   if (includesAny([asset.fileName, asset.mode], ["ip", "吉祥物", "卡通", "角色", "icon"])) return "IP形象";
   return "素材";
 }
@@ -970,10 +810,6 @@ function extractColorValues(value: string) {
     if (color) colors.add(color);
   }
   return Array.from(colors);
-}
-
-function simplifyLibraryName(value: string) {
-  return value.replace(/设计风格库|风格库|排版库/g, "").trim();
 }
 
 function includesAny(values: Array<string | undefined>, needles: string[]) {

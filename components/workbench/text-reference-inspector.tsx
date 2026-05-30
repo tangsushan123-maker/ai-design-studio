@@ -20,7 +20,7 @@ export function TextReferenceInspector({
     return (
       <InspectorSection title="图片参考">
         <div className="rounded-[16px] border border-white/10 bg-white/[0.035] px-3 py-2 text-[11px] leading-5 text-white/44">
-          可把画布图片连到“图片参考”，最多 5 张；用于结构、风格、主体、产品或 Logo。
+          最多 5 张。需要人物、产品、Logo、二维码真实进入画面时选“引用原图”；只借鉴配色、版式、字体时选“参考风格/构图/色调”。
         </div>
       </InspectorSection>
     );
@@ -29,7 +29,7 @@ export function TextReferenceInspector({
   return (
     <InspectorSection title={`图片参考 ${items.length}/${maxTextReferenceImages}`}>
       <div className="rounded-[16px] border border-[#74e3c5]/18 bg-[#74e3c5]/10 px-3 py-2 text-[11px] leading-5 text-[#adf8e5]">
-        第 1 张可做主参考；想 1:1 复刻就在需求里写“保持版式/配色/轻微修改”。
+        引用图会尽量进入画面；参考图只影响风格、构图或色调。避免靠提示词猜，逐张设置更稳定。
       </div>
       <div className="space-y-2">
         {items.map((item, index) => (

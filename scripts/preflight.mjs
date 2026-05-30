@@ -16,19 +16,38 @@ const requiredIgnores = [
   ".env.local",
   ".DS_Store",
   "config.local.json",
+  "auth-users.local.json",
+  "auth-users.local.json.bak",
+  "workflow-templates.local.json",
   "projects.local.json",
   "task-runs.local.json",
   "style-libraries.local.json",
+  "strategies.local.json",
+  "data/users/",
+  "data/backups/",
+  "backups/",
   "public/generated/*",
   "*.tsbuildinfo",
+  "*.bak",
+  "*.patch",
+  "*.tgz",
 ];
 const forbiddenTrackedPatterns = [
   /^\.env(?:\.|$)(?!example$)/,
   /(^|\/)config\.local\.json(?:\.bak)?$/,
+  /(^|\/)auth-users\.local\.json(?:\.bak)?$/,
+  /(^|\/)workflow-templates\.local\.json(?:\.bak)?$/,
   /(^|\/)project\.local\.json(?:\.bak)?$/,
   /(^|\/)projects\.local\.json(?:\.bak)?$/,
   /(^|\/)task-runs\.local\.json(?:\.bak)?$/,
   /(^|\/)style-libraries\.local\.json$/,
+  /(^|\/)strategies\.local\.json(?:\.bak)?$/,
+  /(^|\/)data\/users\//,
+  /(^|\/)data\/backups\//,
+  /(^|\/)backups\//,
+  /\.bak$/,
+  /\.patch$/,
+  /\.tgz$/,
   /^public\/generated\//,
   /\.tsbuildinfo$/,
 ];
@@ -63,17 +82,30 @@ await check("Git is not tracking secrets, local data, generated images, or build
   if (forbidden.length) throw new Error(`tracked forbidden files: ${forbidden.slice(0, 8).join(", ")}`);
 });
 
-await check(".env.local exists and OPENAI_API_KEY is set", async () => {
+await check("API Key is configured through .env.local or local account settings", async () => {
+  let hasKey = false;
+  let envMissing = false;
   const envPath = join(root, ".env.local");
   try {
-    await access(envPath, constants.R_OK);
+    const env = await readFile(envPath, "utf8");
+    const keyLine = env.split(/\r?\n/).find((line) => line.trim().startsWith("OPENAI_API_KEY="));
+    hasKey = Boolean(keyLine?.split("=").slice(1).join("=").trim());
   } catch {
-    throw new Error("missing .env.local; run cp .env.example .env.local and fill OPENAI_API_KEY");
+    envMissing = true;
   }
-  const env = await readFile(envPath, "utf8");
-  const keyLine = env.split(/\r?\n/).find((line) => line.trim().startsWith("OPENAI_API_KEY="));
-  if (!keyLine) throw new Error("OPENAI_API_KEY is not set");
-  if (!keyLine.split("=").slice(1).join("=").trim()) throw new Error("OPENAI_API_KEY is empty");
+  if (!hasKey) {
+    try {
+      const localConfig = JSON.parse(await readFile(join(root, "config.local.json"), "utf8"));
+      hasKey = Boolean(String(localConfig.openaiApiKey || localConfig.apiKey || "").trim());
+    } catch {
+      // Account-level config may not exist yet on a fresh server.
+    }
+  }
+  if (!hasKey) {
+    throw new Error(envMissing
+      ? "missing .env.local and no local account API Key found; configure one before real image generation"
+      : "OPENAI_API_KEY is empty and no local account API Key found");
+  }
 }, "warn");
 
 await check("public/generated is writable", async () => {

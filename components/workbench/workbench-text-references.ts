@@ -51,12 +51,14 @@ export function normalizeTextReferenceWeight(value: unknown, fallback: TextRefer
 }
 
 export function shouldUseStrongTextReferenceMode(prompt: string) {
-  return /1\s*[:：比]\s*1|一比一|复刻|仿照|照着|照抄|同款|参考图|参考画面|画面参考|参考.*内容|参考.*文案|参考.*活动|活动信息|活动内容不变|其他不变|内容不变|主体不变|只改|只替换|稍微修改|轻微修改|小改|保持版式|版式不变|保持配色|配色不变|板式配色|版式配色|按这个版式|用这个版式|沿用版式|沿用配色|把.+改成|换成/.test(prompt);
+  void prompt;
+  return false;
 }
 
 export function textReferenceRoleDescription(value: unknown) {
   const role = normalizeTextReferenceRole(value);
   const descriptions: Record<TextReferenceRole, string> = {
+    direct_use: "引用原图",
     person: "锁人物",
     product: "锁产品",
     subject: "锁主体",

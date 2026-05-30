@@ -1,7 +1,19 @@
 import type { FlowNode, NodeKind } from "@/components/workbench/workbench-types";
+import type { AspectRatioValue } from "@/lib/design-options";
+import { ratioParam } from "@/components/workbench/workbench-utils";
 
 export function isComposerDrivenNode(kind: NodeKind) {
   return kind === "text_to_image" || kind === "image_to_image" || kind === "fuse_images" || kind === "resize" || kind === "outpaint" || kind === "replace_product" || kind === "hd_redraw" || kind === "mask_edit" || kind === "reference_remake" || kind === "design_optimize" || kind === "png_layers" || kind === "output";
+}
+
+export function composerRatioForNode(node: FlowNode, fallback: AspectRatioValue) {
+  if (node.data.kind === "text_to_image" || node.data.kind === "image_to_image" || node.data.kind === "fuse_images") {
+    return ratioParam(node.data.params.aspectRatio);
+  }
+  if (node.data.kind === "resize" || node.data.kind === "outpaint") {
+    return ratioParam(node.data.params.targetRatio);
+  }
+  return fallback;
 }
 
 export function composerTitleForNode(node: FlowNode) {
@@ -41,9 +53,9 @@ export function composerHelperTextForNode(node: FlowNode) {
       ? `已连接 ${textReferenceCount} 张图片参考，可在右侧设为使用人物/产品/Logo。`
       : "可直接写“加入人物/医生/模特/IP”，或上传人物图后在右侧选使用人物。";
   }
-  if (node.data.kind === "image_to_image") return "默认快速生成 1 个创意改版方案；需要多方案可写“两张/多方案”。";
+  if (node.data.kind === "image_to_image") return "模型先分析原图版面、文案层级和主体，再按当前比例生成 2 个重新设计方案。";
   if (node.data.kind === "fuse_images") return "图1主体放入图2场景，生成自然版和广告版。";
-  if (node.data.kind === "resize") return "尺寸在右侧，底部写保留重点。";
+  if (node.data.kind === "resize") return "模型先分析原图版面，再按右侧目标比例重新构图，不拉伸不裁切。";
   if (node.data.kind === "outpaint") return "说明补哪里、补什么。";
   if (node.data.kind === "hd_redraw") return "选择 Standard / Plus / Creative，按原比例输出 2K/4K/8K。";
   if (node.data.kind === "mask_edit") return "涂哪里，改哪里。";
@@ -55,7 +67,7 @@ export function composerHelperTextForNode(node: FlowNode) {
 }
 
 export function canSubmitComposerForNode(node: FlowNode, prompt: string) {
-  if (node.data.kind === "text_to_image") return Boolean(prompt.trim());
+  if (node.data.kind === "text_to_image" || node.data.kind === "fuse_images" || node.data.kind === "mask_edit") return Boolean(prompt.trim());
   return true;
 }
 
@@ -74,7 +86,7 @@ export function requiresConnectedImageForComposer(kind: NodeKind) {
 export function composerSubmitStatus(node: FlowNode, prompt: string) {
   if (node.data.kind === "text_to_image") return "已更新文生图提示词并开始运行。";
   if (node.data.kind === "image_to_image") return prompt.trim() ? "已更新图生图想法并开始运行。" : "已按图生图默认要求开始运行。";
-  if (node.data.kind === "fuse_images") return prompt.trim() ? "已更新合成要求并开始运行。" : "已按当前 AI 合成设置开始运行。";
+  if (node.data.kind === "fuse_images") return "已更新合成要求并开始运行。";
   if (node.data.kind === "resize") return prompt.trim() ? "已更新改比例要求并开始运行。" : "已按当前比例、尺寸和清晰度设置开始运行。";
   if (node.data.kind === "outpaint") return prompt.trim() ? "已更新扩图要求并开始运行。" : "已按当前扩图设置开始运行。";
   if (node.data.kind === "hd_redraw") return prompt.trim() ? "已更新画质增强要求并开始运行。" : "已按当前画质增强设置开始运行。";
@@ -88,7 +100,7 @@ export function composerSubmitStatus(node: FlowNode, prompt: string) {
 
 export function nodeCreationHint(type: NodeKind, fromImage: boolean) {
   if (type === "text_to_image") return fromImage ? "已创建文生图节点，并连接当前图片作为参考。" : "已创建文生图节点。直接在底部输入需求即可生成。";
-  if (type === "image_to_image") return fromImage ? "已创建图生图创意改版节点。默认快速出 1 个方案，需要多方案可在要求里说明。" : "已创建图生图创意改版节点。先连接图片，再写改版方向。";
+  if (type === "image_to_image") return fromImage ? "已创建图生图创意改版节点。会先分析原图版面，再生成 2 个重新设计方案。" : "已创建图生图创意改版节点。先连接图片，再写改版方向。";
   if (type === "fuse_images") return fromImage ? "已创建 AI 合成节点。当前图片是图1主体，再连接图2场景。" : "已创建 AI 合成节点。请连接图1主体和图2场景。";
   if (type === "resize") return fromImage ? "已创建改比例节点。先在右侧选目标比例、尺寸和清晰度，再运行。" : "已创建改比例节点。请先连接图片，再选择目标比例、尺寸和清晰度。";
   if (type === "outpaint") return fromImage ? "已创建扩图补画节点。下面可补充扩图想法，右侧可改方向和比例。" : "已创建扩图补画节点。请先连接图片，再决定扩到什么比例。";

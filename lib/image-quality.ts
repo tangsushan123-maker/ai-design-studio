@@ -86,6 +86,8 @@ type QualityInput = {
   };
 };
 
+const enableImageQualityInspection = false;
+
 export async function inspectImageQuality(input: Buffer | string, options: QualityInput = {}): Promise<ImageQualityCheck> {
   const metadata = await sharp(input).metadata();
   const width = metadata.width || 0;
@@ -118,6 +120,31 @@ export async function inspectImageQuality(input: Buffer | string, options: Quali
   const ratioMatched = targetRatio ? Math.abs(ratio - targetRatio) / targetRatio <= 0.018 : true;
   const reachedTargetSize = target ? width >= Math.round(target.width * 0.98) && height >= Math.round(target.height * 0.98) : true;
   const is4kTarget = options.quality === "4k" || Boolean(target && Math.max(target.width, target.height) >= 3840);
+  if (!enableImageQualityInspection) {
+    return {
+      status: "passed",
+      label: `${width}×${height}｜已生成`,
+      issues: [],
+      actions: ["下载原图"],
+      width,
+      height,
+      ratio,
+      targetWidth: target?.width,
+      targetHeight: target?.height,
+      format: metadata.format,
+      fileSizeBytes,
+      is4kTarget,
+      reachedTargetSize,
+      ratioMatched,
+      suspectedStretch: false,
+      hasWhiteBorder: false,
+      compositionRisk: false,
+      suspectedBlurredPadding: false,
+      deliverability: "ready",
+      deliverabilityLabel: "已生成",
+      checkedAt: new Date().toISOString(),
+    };
+  }
   const [
     border,
     composition,

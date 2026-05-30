@@ -39,7 +39,7 @@ type HistoryPanelImage = {
   materialCopy?: string;
 };
 
-const resultFilterTabs = ["今日", "收藏", "项目", "全部"] as const;
+const resultFilterTabs = ["全部", "收藏"] as const;
 const resultPageSize = 16;
 
 export function HistoryPanel({
@@ -82,7 +82,7 @@ export function HistoryPanel({
   qualityBadgeLabel: (image: HistoryPanelImage) => string;
   qualityTone: (image: HistoryPanelImage) => string;
 }) {
-  const [filter, setFilter] = useState<(typeof resultFilterTabs)[number]>("项目");
+  const [filter, setFilter] = useState<(typeof resultFilterTabs)[number]>("全部");
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(resultPageSize);
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -175,10 +175,10 @@ export function HistoryPanel({
   return (
     <div className="space-y-2.5">
       <div className="apple-panel sticky top-0 z-10 rounded-[18px] p-2">
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-2 gap-1">
           {resultFilterTabs.map((item) => (
             <button
-              className={`apple-segment flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] transition ${filter === item ? "apple-segment-active" : ""}`}
+              className={`apple-segment flex min-w-0 items-center justify-center gap-1 px-2 py-1.5 text-[11px] transition ${filter === item ? "apple-segment-active" : ""}`}
               key={item}
               onClick={() => {
                 setFilter(item);
@@ -187,7 +187,7 @@ export function HistoryPanel({
               }}
               type="button"
             >
-              <span>{item}</span>
+              <span className="whitespace-nowrap">{item}</span>
               <span className={`rounded-full px-1.5 py-0.5 text-[11px] leading-none ${filter === item ? "bg-black/10 text-[#07121f]/62" : "bg-white/10 text-white/46"}`}>
                 {filterCounts[item]}
               </span>
@@ -208,7 +208,7 @@ export function HistoryPanel({
               setConfirmDeleteKey("");
               setVisibleCount(resultPageSize);
             }}
-            placeholder="搜索模型、来源、质检、Prompt"
+            placeholder="搜索图片"
             value={query}
           />
           {query ? (

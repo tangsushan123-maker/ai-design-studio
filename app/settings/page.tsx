@@ -32,6 +32,7 @@ import {
 } from "@/components/settings/settings-status-ui";
 import { DetectionSummary, SetupChecklist, type DetectionResult } from "@/components/settings/settings-diagnostics";
 import { ModelGroup } from "@/components/settings/settings-model-group";
+import { AccountSwitcher } from "@/components/account-switcher";
 import {
   formatServerTime,
   healthKeyLabel,
@@ -730,6 +731,16 @@ export default function SettingsPage() {
           </div>
 
           <aside className="space-y-4">
+            <SettingsPanel title="账号">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-white/84">账号操作</div>
+                  <div className="apple-caption mt-1">切换账号；管理员可进入子账号管理。</div>
+                </div>
+                <AccountSwitcher compact expanded />
+              </div>
+            </SettingsPanel>
+
             <SetupChecklist
               hasKey={Boolean(maskedApiKey || apiKey.trim())}
               hasProvider={Boolean(displayedApiBaseUrl)}

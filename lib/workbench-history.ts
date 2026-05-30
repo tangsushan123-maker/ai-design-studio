@@ -18,12 +18,9 @@ export type HistorySearchImage = DeliveryReviewImage & {
   targetSize?: string;
 };
 
-export function historyMatchesFilter(image: HistorySearchImage, filter: string, projectId: string, now = new Date()) {
+export function historyMatchesFilter(image: HistorySearchImage, filter: string, projectId: string) {
   if (!imageBelongsToProject(image, projectId)) return false;
   if (filter === "全部") return true;
-  const date = image.generatedAt ? new Date(image.generatedAt) : null;
-  if (filter === "今日") return Boolean(date && Number.isFinite(date.getTime()) && date.toDateString() === now.toDateString());
-  if (filter === "项目") return true;
   if (filter === "收藏") return Boolean(image.favorite);
   return true;
 }

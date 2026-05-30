@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { toFile } from "openai/uploads";
 import sharp from "sharp";
 import { toApiError } from "@/lib/api-errors";
-import { shouldUseStrongTextReferenceMode } from "@/lib/prompt";
 import {
   assertExactPixelSize,
   getOpenAIImageSize,
@@ -21,24 +20,22 @@ import {
 } from "@/lib/image-utils";
 import { getOpenAI } from "@/lib/openai";
 import { getAnalysisModel, resolveImageModel, supportsConfigurableImageInputFidelity } from "@/lib/model-config";
-import { imageRequestOptions, runQueuedImageModelRequestWithRetry } from "@/lib/image-request-queue";
+import { imageRequestOptions, isTransientImageRequestError, runQueuedImageModelRequestWithRetry } from "@/lib/image-request-queue";
 import type { DesignRequest, TextReferenceImage } from "@/lib/design-options";
 import {
-  buildDesignPlanPrompt,
   buildFallbackDesignPlan,
-  designPlanToImagePrompt,
-  normalizeDesignPlan,
-  parseDesignPlanJson,
   type DesignPlan,
 } from "@/lib/design-plan";
 import { normalizeProtectionContext } from "@/lib/design-production";
 import { inspectImageQuality } from "@/lib/image-quality";
-import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, taskTraceFromJson, type TaskRunTrace } from "@/lib/task-run-ledger";
+import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, startTaskRunHeartbeat, taskRunResponseMeta, taskTraceFromFormData, taskTraceFromJson, type TaskRunTrace } from "@/lib/task-run-ledger";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
 import { mapWithConcurrency } from "@/lib/async-utils";
 
 export const runtime = "nodejs";
 const textReferenceInputReadConcurrency = 4;
+const textReferenceModelMaxEdge = 1600;
+const textReferenceModelMaxBytes = 3 * 1024 * 1024;
 type UploadedReferenceImage = { buffer: Buffer; fileName: string; mimeType: string };
 type ReferenceImageInput = { fileKey: string; urlKey: string; fallbackFileName: string };
 
@@ -46,6 +43,7 @@ export async function POST(request: Request) {
   return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
+  let stopTaskHeartbeat = () => {};
   try {
     const contentType = request.headers.get("content-type") || "";
     const multipart = contentType.includes("multipart/form-data");
@@ -55,6 +53,7 @@ export async function POST(request: Request) {
       ? taskTraceFromFormData(formData, "text_to_image", "/api/generate-image")
       : taskTraceFromJson(rawBody as Record<string, unknown>, "text_to_image", "/api/generate-image");
     await recordTaskRunStarted(taskTrace);
+    stopTaskHeartbeat = startTaskRunHeartbeat(taskTrace, "文生图仍在处理：正在策划提示词或生成图片。");
     const body = normalizeTextToImageRequest(rawBody);
     if (!body.prompt?.trim()) {
       await recordTaskRunFailed(taskTrace, "请输入文字需求。");
@@ -75,51 +74,67 @@ export async function POST(request: Request) {
     const referenceImages = formData ? await readReferenceImages(formData) : [];
     const referenceFiles = await Promise.all(referenceImages.map((item, index) => toFile(item.buffer, item.fileName || `text-reference-${index + 1}.png`, { type: item.mimeType })));
     const hasReferenceFiles = referenceFiles.length > 0;
-    const strongReferenceMode = hasReferenceFiles && shouldUseStrongTextReferenceMode(body.prompt);
+    const strongReferenceMode = hasReferenceFiles && hasDirectUseReference(body.referenceImages);
     const generationProfile = textToImageGenerationProfile(body, hasReferenceFiles);
     let referenceFallbackSummary: Promise<string> | null = null;
     const getReferenceFallbackSummary = () => {
       referenceFallbackSummary ||= summarizeTextReferenceImages(openai, body, referenceImages);
       return referenceFallbackSummary;
     };
-    const referenceSummaryForBrief = hasReferenceFiles ? await getReferenceFallbackSummary() : "";
-    const bodyWithReferenceAnalysis = referenceSummaryForBrief
-      ? {
-          ...body,
-          sourceAnalysis: [body.sourceAnalysis, referenceSummaryForBrief].filter(Boolean).join("\n"),
-        }
-      : body;
-    const designPlan = await createTextToImageDesignPlan(openai, bodyWithReferenceAnalysis, {
-      outputSize,
-      outputRatioLabel,
-      referenceSummary: referenceSummaryForBrief,
+    const designPlan = buildFallbackDesignPlan({
+      userPrompt: body.prompt,
+      industry: body.adType && body.adType !== "通用设计" ? body.adType : undefined,
+      referenceImages: body.referenceImages as unknown as Array<Record<string, unknown>>,
+      referenceAnalysis: body.sourceAnalysis || "",
+      options: {
+        aspectRatio: body.aspectRatio,
+        customWidth: body.customWidth || outputSize.width,
+        customHeight: body.customHeight || outputSize.height,
+        mode: "fast",
+        textMode: body.textMode || "ai_text_preview",
+      },
     });
     const targetCanvasFirst = shouldUseTextToImageTargetCanvasFirst(size, outputSize);
 
     const targetCount = generationProfile.targetCount;
-    const prompts = buildPromptsFromDesignPlan(designPlan, body, targetCount);
+    const prompts = buildPromptsFromDesignPlan(designPlan, body, targetCount, { outputRatioLabel, outputSize });
     const createImageRequestWithSize = async (requestPrompt: string, requestSize: string, requestCount = 1) => {
       if (referenceFiles.length) {
-        const summary = await getReferenceFallbackSummary();
-        const referencePrompt = buildTextReferenceSummaryGenerationPrompt(requestPrompt, body.referenceImages || [], summary, outputRatioLabel, outputSize, strongReferenceMode);
-        return runQueuedImageModelRequestWithRetry(
-          { label: `文生图/图片参考编辑/${imageModel}` },
-          () => openai.images.edit({
-            model: imageModel,
-            image: referenceFiles.length > 1 ? (referenceFiles as never) : referenceFiles[0],
-            prompt: referencePrompt,
-            size: requestSize as "1024x1024",
-            ...(supportsConfigurableImageInputFidelity(imageModel) ? { input_fidelity: strongReferenceMode ? "high" : "low" } : {}),
-            output_format: "png",
-            background: "opaque",
-            quality: body.quality === "standard" ? "medium" : "high",
-            n: requestCount,
-          }, imageRequestOptions()),
-        );
+        const referencePrompt = buildDirectTextReferencePrompt(requestPrompt, body.referenceImages || [], outputRatioLabel, outputSize, strongReferenceMode);
+        try {
+          return await runQueuedImageModelRequestWithRetry(
+            { label: `文生图/图片参考编辑/${imageModel}`, maxAttempts: 2, retryDelayMs: 2500 },
+            () => openai.images.edit({
+              model: imageModel,
+              image: referenceFiles.length > 1 ? (referenceFiles as never) : referenceFiles[0],
+              prompt: referencePrompt,
+              size: requestSize as "1024x1024",
+              ...(supportsConfigurableImageInputFidelity(imageModel) ? { input_fidelity: strongReferenceMode ? "high" : "low" } : {}),
+              output_format: "png",
+              background: "opaque",
+              quality: body.quality === "standard" ? "medium" : "high",
+              n: requestCount,
+            }, imageRequestOptions()),
+          );
+        } catch (error) {
+          if (!isTransientImageRequestError(error)) throw error;
+          const summary = await getReferenceFallbackSummary();
+          const fallbackPrompt = buildReferenceUploadFallbackPrompt(referencePrompt, summary, outputRatioLabel, outputSize, strongReferenceMode);
+          return runQueuedImageModelRequestWithRetry(
+            { label: `文生图/参考图摘要兜底/${imageModel}`, maxAttempts: 1 },
+            () => openai.images.generate({
+              model: imageModel,
+              prompt: fallbackPrompt,
+              size: requestSize as "1024x1024",
+              quality: body.quality === "standard" ? "medium" : "high",
+              n: requestCount,
+            }, imageRequestOptions()),
+          );
+        }
       }
 
       return runQueuedImageModelRequestWithRetry(
-        { label: `文生图/纯文字/${imageModel}` },
+        { label: `文生图/纯文字/${imageModel}`, maxAttempts: 2, retryDelayMs: 2500 },
         () => openai.images.generate({
           model: imageModel,
           prompt: requestPrompt,
@@ -151,10 +166,10 @@ export async function POST(request: Request) {
     const createTargetCanvasRequest = async (requestPrompt: string, requestCount = 1) => {
       const canvasFile = await getTargetCanvasFile();
       const promptForCanvas = referenceFiles.length
-        ? buildTextReferenceSummaryGenerationPrompt(requestPrompt, body.referenceImages || [], await getReferenceFallbackSummary(), outputRatioLabel, outputSize, strongReferenceMode)
+        ? buildDirectTextReferencePrompt(requestPrompt, body.referenceImages || [], outputRatioLabel, outputSize, strongReferenceMode)
         : requestPrompt;
       return runQueuedImageModelRequestWithRetry(
-        { label: `文生图/目标画布兜底/${imageModel}` },
+        { label: `文生图/目标画布兜底/${imageModel}`, maxAttempts: 2, retryDelayMs: 2500 },
         () => openai.images.edit({
           model: imageModel,
           image: referenceFiles.length ? ([canvasFile, ...referenceFiles] as never) : canvasFile,
@@ -168,24 +183,15 @@ export async function POST(request: Request) {
         }, imageRequestOptions()),
       );
     };
-    let resultItems: Array<{ b64_json?: string | null; url?: string | null; prompt: string }> = [];
+    const resultItems: Array<{ b64_json?: string | null; url?: string | null; prompt: string }> = [];
     let firstRequestError: unknown = null;
-    const batchPrompt = buildTextToImageBatchPrompt(prompts, targetCount);
-    if (targetCount > 1 && supportsImageRequestBatchCount(imageModel, hasReferenceFiles)) {
-      const batchResult = await (targetCanvasFirst ? createTargetCanvasRequest(batchPrompt, targetCount) : createImageRequest(batchPrompt, targetCount)).catch((error) => {
-        firstRequestError ||= error;
-        return null;
-      });
-      resultItems = (batchResult?.data ?? []).slice(0, targetCount).map((item) => ({ ...item, prompt: batchPrompt }));
-    }
-    if (resultItems.length < targetCount) {
-      const remainingPrompts = prompts.slice(resultItems.length);
-      const requests = remainingPrompts.map((requestPrompt) => targetCanvasFirst ? createTargetCanvasRequest(requestPrompt) : createImageRequest(requestPrompt));
-      const settledResults = await Promise.allSettled(requests);
-      const failed = settledResults.find((result) => result.status === "rejected");
-      if (failed?.status === "rejected") firstRequestError ||= failed.reason;
-      appendGeneratedResultItems(resultItems, settledResults, remainingPrompts, prompts[0], targetCount);
-    }
+    const requests = prompts.slice(0, targetCount).map((requestPrompt) =>
+      targetCanvasFirst ? createTargetCanvasRequest(requestPrompt) : createImageRequest(requestPrompt),
+    );
+    const settledResults = await Promise.allSettled(requests);
+    const failed = settledResults.find((result) => result.status === "rejected");
+    if (failed?.status === "rejected") firstRequestError ||= failed.reason;
+    appendGeneratedResultItems(resultItems, settledResults, prompts, prompts[0], targetCount);
 
     if (!resultItems.length) {
       if (firstRequestError) throw firstRequestError;
@@ -250,7 +256,7 @@ export async function POST(request: Request) {
         }
         if (!final && lastRatioMismatchItem) {
           final = await processTextToImageResult(lastRatioMismatchItem, lastRatioMismatchItem.prompt || imagePrompt, processContext, {
-            allowSafeRatioFallback: true,
+            allowQualityFailedOriginal: true,
           });
         }
         if (!final) {
@@ -311,6 +317,7 @@ export async function POST(request: Request) {
           sourceNodeName: taskTrace?.nodeName,
           sourceNodeKind: taskTrace?.nodeKind,
           designPlan,
+          designDirection: designPlan.designDirections[index] || null,
           generationProfile: {
             ...generationProfile,
             canvasFallbackUsed,
@@ -341,7 +348,7 @@ export async function POST(request: Request) {
         outputRatioLabel,
         protectionContext,
       };
-      const final = await processTextToImageResult(fillItem, fillPrompt, processContext).catch((error) => {
+      const final = await processTextToImageResult(fillItem, fillPrompt, processContext, { allowQualityFailedOriginal: true }).catch((error) => {
         fillErrors.push(error);
         return null;
       });
@@ -401,6 +408,7 @@ export async function POST(request: Request) {
         sourceNodeName: taskTrace?.nodeName,
         sourceNodeKind: taskTrace?.nodeKind,
         designPlan,
+        designDirection: designPlan.designDirections[variant - 1] || null,
         generationProfile: {
           ...generationProfile,
           canvasFallbackUsed: targetCanvasFirst,
@@ -445,6 +453,8 @@ export async function POST(request: Request) {
     const apiError = toApiError(error, "生成失败。");
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
+  } finally {
+    stopTaskHeartbeat();
   }
   });
 }
@@ -473,73 +483,43 @@ type TextToImageProcessContext = {
   protectionContext: ReturnType<typeof normalizeProtectionContext>;
 };
 
-async function createTextToImageDesignPlan(
-  openai: ReturnType<typeof getOpenAI>,
-  body: DesignRequest,
-  context: {
-    outputSize: { width: number; height: number };
-    outputRatioLabel: string;
-    referenceSummary?: string;
-  },
-): Promise<DesignPlan> {
-  const fallback = buildFallbackDesignPlan({
-    userPrompt: body.prompt,
-    industry: body.adType && body.adType !== "通用设计" ? body.adType : undefined,
-    referenceImages: body.referenceImages as unknown as Array<Record<string, unknown>>,
-    referenceAnalysis: body.sourceAnalysis || context.referenceSummary || "",
-    options: {
-      aspectRatio: body.aspectRatio,
-      customWidth: body.customWidth || context.outputSize.width,
-      customHeight: body.customHeight || context.outputSize.height,
-      mode: "commercial",
-      textMode: body.textMode || "ai_text_preview",
-    },
-  });
-  try {
-    const response = await openai.responses.create({
-      model: getAnalysisModel(),
-      input: buildDesignPlanPrompt({
-        userPrompt: body.prompt,
-        industry: body.adType && body.adType !== "通用设计" ? body.adType : undefined,
-        referenceImages: body.referenceImages as unknown as Array<Record<string, unknown>>,
-        referenceAnalysis: [body.sourceAnalysis, context.referenceSummary].filter(Boolean).join("\n"),
-        options: {
-          size: `${context.outputSize.width}x${context.outputSize.height}`,
-          aspectRatio: body.aspectRatio,
-          customWidth: body.customWidth || context.outputSize.width,
-          customHeight: body.customHeight || context.outputSize.height,
-          mode: "commercial",
-          textMode: body.textMode || "ai_text_preview",
-        },
-      }),
-      max_output_tokens: 2200,
-    }, { timeout: 15_000 });
-    return normalizeDesignPlan(parseDesignPlanJson(response.output_text || ""), fallback);
-  } catch {
-    return fallback;
-  }
+function buildPromptsFromDesignPlan(plan: DesignPlan, body: DesignRequest, targetCount: number, context: { outputRatioLabel: string; outputSize: { width: number; height: number } }) {
+  void plan;
+  return Array.from({ length: targetCount }, (_, index) => [
+    "任务：根据用户要求和输入图片自行分析，直接生成最终图片。",
+    `用户原始要求：${body.prompt}`,
+    `目标比例/尺寸：${context.outputRatioLabel}，${context.outputSize.width}×${context.outputSize.height}。`,
+    body.aspectRatio === "auto" ? "用户选择自适应：请根据内容自行判断画面比例，但最终按上面的系统目标输出。" : "用户已选择固定比例/尺寸：最终画面必须服从这个尺寸。",
+    body.textMode === "background_only" ? "用户要求无文字/底图：输出无文字背景图。" : "如果用户明确给了标题、文案、人名、电话、地址等内容，请按用户原文理解和使用；不要擅自编造用户没给的真实信息。",
+    buildPromptAssetPolicyFromProtection(body),
+    index === 0
+      ? "方案A：偏清晰直接、好理解、适合投放。"
+      : "方案B：偏高级、有创意、有品牌感；不要只是和方案A换颜色。",
+  ].filter(Boolean).join("\n"));
 }
 
-function buildPromptsFromDesignPlan(plan: DesignPlan, body: DesignRequest, targetCount: number) {
-  const primary = [
-    designPlanToImagePrompt(plan),
-    `Negative prompt: ${plan.negativePrompt}`,
-    "This image request comes from an internal structured design plan. Never use the raw user sentence as visible poster copy.",
-    body.textMode === "background_only"
-      ? "Generate a clean text-free base image only."
-      : "Generate the final complete poster directly, including the planned visible copy as designed typography. Do not rely on any later text overlay.",
+function buildPromptAssetPolicyFromProtection(body: DesignRequest) {
+  const context = normalizeProtectionContext(body.protectionContext);
+  const texts = context.protectedTexts || [];
+  const assets = context.protectedAssets || [];
+  const brandRules = context.brandProfile?.rules || [];
+  const realInfo = [
+    ...texts.map((item) => `${item.kind}：${item.text}`),
+    ...assets.map((item) => `${item.type}：${item.label}`),
+  ].slice(0, 12);
+  return [
+    realInfo.length
+      ? `素材库真实信息：${realInfo.join("；")}。需要使用时必须逐字/按图使用这些资料。`
+      : "",
+    brandRules.length
+      ? `素材库规则：${brandRules.slice(0, 10).join("；")}`
+      : "",
+    "禁止编造：不要自己生成不存在的电话、地址、二维码、Logo、医院/机构代码、预约热线或联系卡片。二维码不要重绘成假码；Logo不要画成乱码。",
   ].filter(Boolean).join("\n");
-  if (targetCount <= 1) return [primary];
-  return Array.from({ length: targetCount }, (_, index) => index === 0
-    ? primary
-    : [
-        primary,
-        `Variant ${index + 1}: keep the same approved plan, size, copy safety, reference style and hierarchy; adjust only visual rhythm, lighting, decoration density and main visual angle. Do not add new text or assets.`,
-      ].join("\n"));
 }
 
 function textToImageGenerationProfile(body: DesignRequest, hasReferenceFiles = false) {
-  const targetCount = wantsMultipleDesignOutputs(body.prompt) ? 2 : 1;
+  const targetCount = 2;
   if (hasReferenceFiles) {
     return { label: "参考精修", targetCount, maxRetries: 0, briefMode: "ai_cached", modelCallPolicy: targetCount > 1 ? "dual_variants_fast_reference" : "single_fast_reference" };
   }
@@ -550,29 +530,6 @@ function textToImageGenerationProfile(body: DesignRequest, hasReferenceFiles = f
     return { label: "标准出图", targetCount, maxRetries: 1, briefMode: "ai_cached", modelCallPolicy: targetCount > 1 ? "dual_variants_retry_if_needed" : "single_retry_if_needed" };
   }
   return { label: "快速预览", targetCount, maxRetries: 0, briefMode: "rules_cached", modelCallPolicy: targetCount > 1 ? "fast_dual_variants" : "fast_single_variant" };
-}
-
-function wantsMultipleDesignOutputs(text: string) {
-  return /(?:两张|2张|两个|2个|三张|3张|多方案|多版|多个方向|三种方向|方案一|方案二|A\/B|AB|variants?)/i.test(text);
-}
-
-function supportsImageRequestBatchCount(model: string, hasReferenceFiles = false) {
-  if (hasReferenceFiles) return false;
-  return !/dall-e-3/i.test(model);
-}
-
-function buildTextToImageBatchPrompt(prompts: string[], targetCount: number) {
-  const primary = limitPromptText(prompts[0] || "", 2200);
-  if (targetCount <= 1) return primary;
-  return [
-    primary,
-    "",
-    `【多候选输出】本次请求需要返回 ${targetCount} 张候选图。`,
-    "方案 1：稳定商业、信息清晰、落地性强。",
-    "方案 2：同一需求下更有创意记忆点，但仍克制、完整、相关；不要重复方案 1。",
-    "两张都必须符合目标比例、安全区、无裁切、无磨砂补边和少文字策略。",
-    prompts[1] ? `方案 2 只参考以下差异方向，不要重复整段规则：\n${limitPromptText(prompts[1], 760)}` : "",
-  ].filter(Boolean).join("\n");
 }
 
 async function summarizeTextReferenceImages(
@@ -631,44 +588,44 @@ function referenceManifestFallbackSummary(manifest: TextReferenceImage[], refere
     .join("\n") || "没有可用参考图说明。";
 }
 
-function buildTextReferenceSummaryGenerationPrompt(
+function buildDirectTextReferencePrompt(
   prompt: string,
   manifest: TextReferenceImage[],
-  referenceSummary: string,
   ratioText: string,
   target: { width: number; height: number },
   strongReferenceMode = false,
 ) {
-  const wantsBrandOrContact = /logo|Logo|LOGO|品牌|标志|电话|地址|联系方式|二维码|QR|qr|机构|公司|医院|门店|客户|项目|素材|真实信息/i.test(prompt);
   return [
-    strongReferenceMode
-      ? "带参考图的文生图强参考模式：参考图会作为真实图片输入给图片模型，必须以第 1 张参考图为主参考生成。"
-      : "带参考图的文生图稳定模式：参考图会作为真实图片输入给图片模型，并结合结构化说明生成成品图。",
-    strongReferenceMode
-      ? "第 1 张参考图的活动主题、核心文案、人物/产品/服务、版式骨架、色彩关系和信息层级必须明显进入结果；只替换用户明确要求修改的部分。"
-      : "不要当成无参考图；必须按参考图角色使用人物、产品、IP、背景、风格、构图或色彩。",
-    `目标画布：${ratioText} / ${target.width}×${target.height}。按目标比例原生构图，不裁切，不加磨砂补边。`,
-    "",
-    "【用户需求与设计约束】",
-    compactReferenceImagePrompt(prompt, 2400),
-    "",
-    "【文字上屏边界】",
-    "用户需求里的操作词、审美词和改版方向只作为设计指令，不能作为海报可见文字。",
-    "不要把“修改一下设计、优化设计、品牌感、设计感、科技感、专业、高级、参考图、图1、改版方向”等原始提示词写到画面上。",
-    "只有明确写成“标题：...”“主标题：...”“副标题：...”“写上...”“把文字改成...”的内容，才允许作为可见文案。",
-    "",
-    "【参考图角色】",
+    "任务：根据用户要求和所有输入图片自行分析，直接生成最终图片。",
+    `用户原始要求：${compactReferenceImagePrompt(prompt, 2400)}`,
+    `目标比例/尺寸：${ratioText} / ${target.width}×${target.height}。`,
+    strongReferenceMode ? "参数里标记为引用/人物/产品/主体/背景/Logo/IP 的图片，需要作为可见素材或核心依据进入结果。" : "参数里标记为参考的图片，只作为风格、构图、色彩、字体或氛围参考。",
     manifest.length
       ? manifest.map((item, index) => `参考图${index + 1}：${item.label || item.fileName || item.id}，用途：${textReferenceRoleText(item.role)}，权重：${textReferenceWeightText(item.weight)}`).join("\n")
       : "未提供结构化角色。",
+    "如果用户给了明确文案，按用户原文理解和使用；不要擅自编造用户没给的电话、地址、二维码、Logo、人名或机构信息。",
+  ].join("\n");
+}
+
+function buildReferenceUploadFallbackPrompt(
+  prompt: string,
+  referenceSummary: string,
+  ratioText: string,
+  target: { width: number; height: number },
+  strongReferenceMode: boolean,
+) {
+  return [
+    "参考图上传到图片编辑模型时出现临时上游错误，本次改用参考图分析摘要生成，不能直接照搬原图像素。",
+    strongReferenceMode
+      ? "用户选择了引用原图：请最大程度保留参考图摘要里的真实场景、主体、透视、人物/产品关系和画面氛围；如果无法精准复现，不要编造电话、地址、二维码或Logo。"
+      : "用户选择了参考图：只参考摘要里的风格、构图、色调、信息层级和主视觉方向。",
+    `目标画布必须是 ${ratioText} / ${target.width}×${target.height}。`,
     "",
-    "【参考图分析】",
-    limitPromptText(referenceSummary, 1800),
+    "【参考图摘要】",
+    limitPromptText(referenceSummary, 1600),
     "",
-    "【禁止项】",
-    wantsBrandOrContact
-      ? "不要编造电话、地址、Logo、二维码、真实机构信息或医疗承诺；不要生成乱码小字；不要复制低清参考图噪点；不要输出边框、白边、黑边、模糊补边或居中小图。"
-      : "不要添加用户未要求的品牌、电话、地址、二维码或活动信息；不要生成乱码小字；不要复制低清参考图噪点；不要输出边框、白边、黑边、模糊补边或居中小图。",
+    "【原始设计提示词】",
+    limitPromptText(prompt, 2600),
   ].join("\n");
 }
 
@@ -695,6 +652,7 @@ function limitPromptText(text: string, maxLength: number) {
 
 function textReferenceRoleText(role?: TextReferenceImage["role"]) {
   const labels: Record<TextReferenceImage["role"], string> = {
+    direct_use: "引用原图",
     person: "使用人物",
     product: "使用产品",
     subject: "使用主体",
@@ -709,6 +667,10 @@ function textReferenceRoleText(role?: TextReferenceImage["role"]) {
     reference_only: "只做参考",
   };
   return role ? labels[role] || "只做参考" : "只做参考";
+}
+
+function hasDirectUseReference(references?: TextReferenceImage[]) {
+  return Boolean(references?.some((item) => ["direct_use", "person", "product", "subject", "background", "logo", "ip"].includes(item.role)));
 }
 
 function textReferenceWeightText(weight?: TextReferenceImage["weight"]) {
@@ -729,21 +691,28 @@ async function processTextToImageResult(
   item: { b64_json?: string | null; url?: string | null },
   prompt: string,
   context: TextToImageProcessContext,
-  options: { allowSafeRatioFallback?: boolean } = {},
+  options: { allowSafeRatioFallback?: boolean; allowQualityFailedOriginal?: boolean } = {},
 ) {
   const raw = await imageResultToBuffer(item.b64_json, item.url);
   const textToImageFitMode = "strict_full_bleed";
   const processWithMode = (fitMode: "strict_full_bleed") => context.exactSize && context.body.customWidth && context.body.customHeight
     ? processToExactSize(raw, { width: context.body.customWidth, height: context.body.customHeight }, "png", fitMode)
     : processToTarget(raw, context.ratio, context.body.quality, "png", fitMode);
-  const processed = await processWithMode(textToImageFitMode).catch((error) => {
+  let qualityFailedOriginalReason = "";
+  const processed = await processWithMode(textToImageFitMode).catch(async (error) => {
+    if (options.allowQualityFailedOriginal && isNativeAspectRatioMismatchError(error)) {
+      qualityFailedOriginalReason = `模型原始比例不符合 ${context.outputRatioLabel}，已作为质检未过结果展示。`;
+      return sharp(raw).rotate().png({ compressionLevel: 6, palette: false }).toBuffer();
+    }
     if (options.allowSafeRatioFallback && isNativeAspectRatioMismatchError(error)) {
       throw new Error(`模型返回比例不符合 ${context.outputRatioLabel}，系统已阻止裁切、拉伸、留白和磨砂补边兜底。`);
     }
     throw error;
   });
   const actual = await readImageMetadata(processed);
-  assertExactPixelSize({ width: actual.width, height: actual.height }, context.outputSize);
+  if (!qualityFailedOriginalReason) {
+    assertExactPixelSize({ width: actual.width, height: actual.height }, context.outputSize);
+  }
   const qualityCheck = await inspectImageQuality(processed, {
     quality: context.body.quality,
     ratio: context.ratio,
@@ -753,7 +722,13 @@ async function processTextToImageResult(
     operation: "text_to_image",
     safeMarginPercent: textToImageSafeMarginPercent(context),
   });
-  const checked = tightenTextToImageCompositionRisk(qualityCheck, context);
+  const checked = qualityFailedOriginalReason
+    ? {
+        ...tightenTextToImageCompositionRisk(qualityCheck, context),
+        issues: [qualityFailedOriginalReason, ...(qualityCheck.issues || [])],
+        actions: ["已展示未通过质检的模型原图，可按原比例重新生成", ...(qualityCheck.actions || [])],
+      }
+    : tightenTextToImageCompositionRisk(qualityCheck, context);
   return { actual, processed, prompt, qualityCheck: checked };
 }
 
@@ -1082,20 +1057,63 @@ async function readImageInput(formData: FormData, fileKey: string, urlKey: strin
   const file = formData.get(fileKey);
   const sourceUrl = String(formData.get(urlKey) ?? "");
   if (file instanceof File) {
-    return {
+    return prepareReferenceImageForModel({
       buffer: Buffer.from(await file.arrayBuffer()),
       fileName: file.name || fallbackFileName,
       mimeType: file.type || "image/png",
-    };
+    });
   }
   if (sourceUrl) {
-    return {
+    return prepareReferenceImageForModel({
       buffer: await readPublicImageUrl(sourceUrl),
       fileName: fallbackFileName,
       mimeType: "image/png",
-    };
+    });
   }
   return null;
+}
+
+async function prepareReferenceImageForModel(image: UploadedReferenceImage): Promise<UploadedReferenceImage> {
+  try {
+    const meta = await sharp(image.buffer).metadata();
+    const width = meta.width || 0;
+    const height = meta.height || 0;
+    const needsResize = Math.max(width, height) > textReferenceModelMaxEdge;
+    const needsCompress = image.buffer.byteLength > textReferenceModelMaxBytes;
+    if (!needsResize && !needsCompress) return image;
+
+    const base = sharp(image.buffer, { limitInputPixels: false })
+      .rotate()
+      .resize({
+        width: textReferenceModelMaxEdge,
+        height: textReferenceModelMaxEdge,
+        fit: "inside",
+        withoutEnlargement: true,
+      });
+
+    if (meta.hasAlpha) {
+      return {
+        buffer: await base.png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer(),
+        fileName: withImageExtension(image.fileName, "png"),
+        mimeType: "image/png",
+      };
+    }
+
+    return {
+      buffer: await base.jpeg({ quality: 84, mozjpeg: true }).toBuffer(),
+      fileName: withImageExtension(image.fileName, "jpg"),
+      mimeType: "image/jpeg",
+    };
+  } catch {
+    return image;
+  }
+}
+
+function withImageExtension(fileName: string, extension: "jpg" | "png") {
+  const cleanName = fileName.trim() || `text-reference.${extension}`;
+  return /\.[a-z0-9]+$/i.test(cleanName)
+    ? cleanName.replace(/\.[a-z0-9]+$/i, `.${extension}`)
+    : `${cleanName}.${extension}`;
 }
 
 async function imageResultToBuffer(base64?: string | null, url?: string | null) {

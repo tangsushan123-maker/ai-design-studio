@@ -1,5 +1,6 @@
 "use client";
 
+import type { WheelEvent } from "react";
 import { ImageFrame } from "@/components/workbench/image-frame";
 import { LightboxPreviewToolbar } from "@/components/workbench/lightbox-preview-toolbar";
 import { ImageComparisonSlider, type ImageComparisonAsset, type PngLayerExportLayer } from "@/components/workbench/result-preview-tools";
@@ -17,6 +18,10 @@ type LightboxPreviewPanelProps = {
   onPreviewZoomChange: (value: number) => void;
 };
 
+function clampPreviewZoom(value: number) {
+  return Math.max(0.5, Math.min(3, Number(value.toFixed(2))));
+}
+
 export function LightboxPreviewPanel({
   activePngLayer,
   compareBefore,
@@ -31,11 +36,28 @@ export function LightboxPreviewPanel({
     ? zoomedPreviewFrameStyle(image, previewZoom)
     : largePreviewFrameStyle(image);
 
+  function handlePreviewWheel(event: WheelEvent<HTMLDivElement>) {
+    if (!event.metaKey && !event.ctrlKey) return;
+    event.preventDefault();
+    const baseZoom = previewZoom || 1;
+    const direction = event.deltaY > 0 ? -1 : 1;
+    onPreviewZoomChange(clampPreviewZoom(baseZoom + direction * 0.15));
+  }
+
+  function togglePreviewZoom() {
+    onPreviewZoomChange(previewZoom ? 0 : 1);
+  }
+
   return (
-    <div className="min-h-0 p-2 sm:p-3">
+    <div className="flex h-full min-h-0 flex-col p-2 sm:p-3">
       <LightboxPreviewToolbar previewZoom={previewZoom} onPreviewZoomChange={onPreviewZoomChange} />
-      <div className={`relative h-[calc(100%-46px)] min-h-[320px] overflow-auto bg-transparent p-2 ${previewZoom ? "flex items-start justify-start" : "flex items-center justify-center"}`}>
-        <div className="relative mx-auto overflow-hidden rounded-[18px] border border-white/10 bg-transparent shadow-[0_20px_70px_rgba(0,0,0,0.32)]" style={previewFrameStyle}>
+      <div
+        className={`relative min-h-[320px] flex-1 overflow-auto bg-transparent p-2 ${previewZoom ? "flex items-start justify-start" : "flex items-center justify-center"}`}
+        onDoubleClick={togglePreviewZoom}
+        onWheel={handlePreviewWheel}
+        title="双击切换适应/原尺寸，按住 Ctrl 或 Command 滚轮缩放"
+      >
+        <div className="relative mx-auto overflow-hidden rounded-[18px] border border-white/10 bg-transparent shadow-[0_20px_70px_rgba(0,0,0,0.32)]" data-preview-zoom={previewZoom || "fit"} style={previewFrameStyle}>
           {activePngLayer ? (
             <div className="relative h-full w-full">
               <ImageFrame

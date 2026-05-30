@@ -33,8 +33,7 @@ export function resolveProjectAssetMaterialType(item: ProjectAssetRecord) {
 export function projectAssetUploadLabel(kind: ProjectAssetUploadKind) {
   if (kind === "logo") return "Logo";
   if (kind === "qrcode") return "二维码";
-  if (kind === "ip") return "IP形象";
-  return "背景图";
+  return "IP形象";
 }
 
 export function stripProjectRuntimeState<T extends ProjectPayload & { setActive?: boolean }>(project: T): T {

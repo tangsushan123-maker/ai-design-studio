@@ -1,5 +1,6 @@
 import { type TextReferenceRole, type TextReferenceWeight } from "@/lib/design-options";
 import { formatFileSize } from "@/lib/workbench-format";
+import { ImageFrame } from "@/components/workbench/image-frame";
 import { compactImageMeta, imageNodeTitle } from "@/components/workbench/workbench-labels";
 import { imageRatio } from "@/components/workbench/workbench-image-metrics";
 import {
@@ -15,6 +16,11 @@ import {
 } from "@/components/workbench/workbench-operation-params";
 import { SummaryLine } from "@/components/workbench/workbench-small-ui";
 import { resizePresets } from "@/components/workbench/workbench-config";
+import {
+  defaultTextReferenceConfig,
+  normalizeTextReferenceConfigs,
+  textReferenceRoleDescription,
+} from "@/components/workbench/workbench-text-references";
 import { defaultTargetSizeForRatio } from "@/components/workbench/workbench-node-prompts";
 import { numericParam, qualityParam, ratioOptionLabel, ratioParam, stringParam } from "@/components/workbench/workbench-utils";
 import { upscaleTargetDisplayLabel } from "@/components/workbench/workbench-upscale";
@@ -60,7 +66,7 @@ export function CompactOutputSummary({ images }: { images: ImageAsset[] }) {
     const layerBytes = firstImage.pngLayerExport.layers.reduce((sum, layer) => sum + (layer.fileSizeBytes || 0), 0);
     return (
       <div className="flex min-w-0 items-baseline gap-1.5 px-0.5 py-0.5">
-        <div className="shrink-0 truncate text-[11px] font-semibold text-white/78">PNG三层</div>
+        <div className="shrink-0 truncate text-[11px] font-semibold text-white/86">PNG三层</div>
         <div className="apple-caption min-w-0 truncate text-[11px]">
           {firstImage.pngLayerExport.layerCount} 层 · {formatFileSize(layerBytes)}
         </div>
@@ -69,7 +75,7 @@ export function CompactOutputSummary({ images }: { images: ImageAsset[] }) {
   }
   return (
     <div className="flex min-w-0 items-baseline gap-1.5 px-0.5 py-0.5">
-      <div className="shrink-0 truncate text-[11px] font-semibold text-white/78">
+      <div className="shrink-0 truncate text-[11px] font-semibold text-white/86">
         {images.length > 1 ? `${images.length} 个方案` : imageNodeTitle(firstImage, "方案一")}
       </div>
       {firstImage ? <div className="apple-caption min-w-0 truncate text-[11px]">{compactImageMeta(firstImage)}</div> : null}
@@ -79,7 +85,7 @@ export function CompactOutputSummary({ images }: { images: ImageAsset[] }) {
 
 export function operationNodeWidth(data: WorkflowNodeData, outputs: ImageAsset[]) {
   if (data.kind === "output") return 206;
-  if (outputs.length > 1) return 236;
+  if (outputs.length > 1) return 224;
   if (outputs.length === 1 && outputs[0]) {
     const ratio = imageRatio(outputs[0]);
     if (ratio < 0.78) return 208;
@@ -88,14 +94,113 @@ export function operationNodeWidth(data: WorkflowNodeData, outputs: ImageAsset[]
   }
   if (data.kind === "resize" || data.kind === "upscale_4k" || data.kind === "hd_redraw") return 218;
   if (data.kind === "png_layers") return 222;
-  if (data.kind === "text_to_image" || data.kind === "image_to_image") return 224;
-  return 224;
+  if (data.kind === "text_to_image" || data.kind === "image_to_image") return 216;
+  return 216;
 }
 
 export function textReferenceNodeItems(data: WorkflowNodeData) {
   const refs = data.textReferencePreviews;
   if (!Array.isArray(refs)) return [];
   return refs.filter((item): item is { handle: string; label: string; role: TextReferenceRole; weight: TextReferenceWeight; image: ImageAsset } => Boolean(item && typeof item === "object" && (item as { image?: ImageAsset }).image));
+}
+
+function isVisibleTextReferenceRole(role: TextReferenceRole) {
+  return role === "direct_use" ||
+    role === "person" ||
+    role === "product" ||
+    role === "subject" ||
+    role === "background" ||
+    role === "logo" ||
+    role === "ip" ||
+    role === "decoration";
+}
+
+function updateTextReferenceMode(data: WorkflowNodeData, nodeId: string, index: number, role: TextReferenceRole) {
+  const refs = textReferenceNodeItems(data);
+  const current = normalizeTextReferenceConfigs(data.params.referenceConfigs);
+  const next = refs.map((item, itemIndex) => {
+    const existing = current[itemIndex] || current.find((config) => config.handle === item.handle) || defaultTextReferenceConfig(item.handle, itemIndex, item.image);
+    return {
+      handle: item.handle,
+      role: itemIndex === index ? role : existing.role,
+      weight: existing.weight,
+    };
+  });
+  data.onParamChange?.(nodeId, "referenceConfigs", next);
+}
+
+export function TextReferenceQuickControls({
+  data,
+  nodeId,
+  references,
+}: {
+  data: WorkflowNodeData;
+  nodeId: string;
+  references: ReturnType<typeof textReferenceNodeItems>;
+}) {
+  if (!references.length) {
+    return (
+      <div className="mt-1.5 rounded-[13px] border border-white/10 bg-white/[0.035] p-1.5">
+        <div className="mb-1.5 flex items-center justify-between px-0.5 text-[11px]">
+          <span className="font-medium text-white/58">图片用途</span>
+          <span className="text-white/32">最近图片</span>
+        </div>
+        <div className="nodrag grid grid-cols-2 gap-1">
+          <button
+            className="h-8 rounded-[11px] border border-white/10 bg-white/[0.06] px-2 text-[11px] font-medium text-white/66 transition hover:bg-white/[0.1]"
+            onClick={() => data.onUseCanvasImageAsTextReference?.(nodeId, "direct_use")}
+            type="button"
+          >
+            引用
+          </button>
+          <button
+            className="h-8 rounded-[11px] border border-white/10 bg-white/[0.06] px-2 text-[11px] font-medium text-white/66 transition hover:bg-white/[0.1]"
+            onClick={() => data.onUseCanvasImageAsTextReference?.(nodeId, "style")}
+            type="button"
+          >
+            参考
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-1.5 space-y-1.5 rounded-[13px] border border-white/10 bg-white/[0.035] p-1.5">
+      <div className="flex items-center justify-between px-0.5 text-[11px]">
+        <span className="font-medium text-white/58">图片用途</span>
+        <span className="text-white/36">{references.length}/5</span>
+      </div>
+      {references.slice(0, 3).map((item, index) => {
+        const visible = isVisibleTextReferenceRole(item.role);
+        return (
+          <div className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-1.5" key={`${item.handle}-${index}`}>
+            <ImageFrame alt={item.label} className="rounded-[8px]" fit="cover" image={item.image} preserveRatio={false} variant="thumbnail" style={{ height: 28, width: 28 }} />
+            <div className="min-w-0">
+              <div className="truncate text-[11px] font-medium text-white/68">图 {index + 1}</div>
+              <div className="truncate text-[11px] text-white/34">{textReferenceRoleDescription(item.role)}</div>
+            </div>
+            <div className="nodrag grid grid-cols-2 overflow-hidden rounded-[10px] border border-white/10 bg-black/18 text-[11px]">
+              <button
+                className={`h-7 px-2 transition ${visible ? "bg-white text-[#08111d]" : "text-white/48 hover:bg-white/[0.08]"}`}
+                onClick={() => updateTextReferenceMode(data, nodeId, index, "direct_use")}
+                type="button"
+              >
+                引用
+              </button>
+              <button
+                className={`h-7 px-2 transition ${!visible ? "bg-white text-[#08111d]" : "text-white/48 hover:bg-white/[0.08]"}`}
+                onClick={() => updateTextReferenceMode(data, nodeId, index, "style")}
+                type="button"
+              >
+                参考
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      {references.length > 3 ? <div className="px-0.5 text-[11px] text-white/34">还有 {references.length - 3} 张在右侧参数里设置</div> : null}
+    </div>
+  );
 }
 
 export function maskEditorInitialMaskUrl(node: FlowNode) {

@@ -78,11 +78,13 @@ strategies.local.json
 style-libraries.local.json
 data/users/
 data/backups/
+backups/
 
 # Local generated artifacts and backups
 .DS_Store
 .cleanup-reports/
 .codex-backups/
+*.patch
 docs_副本/
 *.codex-backup-*
 public/generated/*

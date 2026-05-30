@@ -1,14 +1,56 @@
 import { aspectRatios, type AspectRatioValue, type DesignRequest } from "./design-options";
 
+export type DesignPlanSize = {
+  width: number;
+  height: number;
+  ratio: string;
+};
+
+export type DesignPlanCopywriting = {
+  mainTitle: string;
+  subtitle: string;
+  thirdText: string;
+  bodyText: string[];
+  people: Array<Record<string, string>>;
+  brand: string;
+};
+
+export type DesignPlanLayout = {
+  topArea: string;
+  titleArea: string;
+  mainVisualArea: string;
+  peopleArea: string;
+  bottomArea: string;
+  textArea: string;
+};
+
+export type DesignPlanVisual = {
+  background: string;
+  mainVisual: string;
+  decorations: string[];
+  lighting: string;
+  color: string;
+};
+
+export type DesignPlanDirection = {
+  id: "A" | "B";
+  name: string;
+  goal: string;
+  strategy: string;
+  copywriting: DesignPlanCopywriting;
+  layoutPlan: DesignPlanLayout;
+  visualPlan: DesignPlanVisual;
+  imagePrompt: string;
+  negativePrompt: string;
+  qualityRules: string[];
+  warnings: string[];
+};
+
 export type DesignPlan = {
   taskType: "poster_design";
   industry: string;
   scene: string;
-  size: {
-    width: number;
-    height: number;
-    ratio: string;
-  };
+  size: DesignPlanSize;
   copywriting: {
     mainTitle: string;
     subtitle: string;
@@ -44,6 +86,7 @@ export type DesignPlan = {
   negativePrompt: string;
   qualityRules: string[];
   warnings: string[];
+  designDirections: DesignPlanDirection[];
 };
 
 export type DesignPlanInput = {
@@ -77,21 +120,26 @@ export function buildDesignPlanPrompt(input: DesignPlanInput) {
   return [
     "你是 AI 设计总监。你的任务是在后台静默策划，不是直接生图，也不是把用户原话改写成提示词。",
     "只输出合法 JSON，不要 Markdown，不要解释。",
-    "必须严格输出这些顶层字段：taskType,industry,scene,size,copywriting,referenceAnalysis,layoutPlan,visualPlan,textMode,imagePrompt,negativePrompt,qualityRules,warnings。",
+    "必须严格输出这些顶层字段：taskType,industry,scene,size,copywriting,referenceAnalysis,layoutPlan,visualPlan,textMode,imagePrompt,negativePrompt,qualityRules,warnings,designDirections。",
+    "designDirections 必须固定输出两个方向：A=转化广告版，B=品牌创意版。每个方向必须包含 id,name,goal,strategy,copywriting,layoutPlan,visualPlan,imagePrompt,negativePrompt,qualityRules,warnings。",
     "后台静默规则：designPlan 只供系统内部保存和调试，默认不展示给用户；最终用户只看到生成成品图。",
-    "核心规则：用户给得少时自动补全文案、行业、用途、风格、色彩、版式、主视觉和负面提示词；用户给得详细时严格遵守用户明确给出的标题、尺寸、行业、人物数量、参考风格和禁止事项，不得乱改。",
+    "核心规则：用户给得少时只能补全行业、用途、风格、色彩、版式、主视觉和负面提示词等执行信息；不得自动补任何画面可见文案。用户给得详细时严格遵守用户明确给出的标题、尺寸、行业、人物数量、参考风格和禁止事项，不得乱改。",
     "用户原始需求是设计指令，不是海报文案。除非用户用“标题、主标题、副标题、正文、文案、写上、文字为、活动信息、医生信息、电话、地址”等明确标注，否则不要把用户输入整句放进 copywriting。",
     "copywriting 只能放最终海报上应该真实显示的文字。禁止出现：帮我、请、生成、设计、参考图、附件、根据内容、连接到图片参考、提示词、尺寸、比例、模型、用户需求、不要、必须。",
-    "文案规则：如果用户提供了正式文案，必须提取到 copywriting 里并用于最终真实叠加；不要把“下面是文案”“请生成”“参考这张图”这类说明句当成画面文字。",
+    "文案规则：如果用户提供了正式文案，必须提取到 copywriting 里并用于一次性完整出图；不要把“下面是文案”“请生成”“参考这张图”这类说明句当成画面文字。",
+    "用户输入里的标题、副标题、正文、卖点、品牌名、人名、电话、地址、活动时间、价格、说明文案都必须参与分析和分层；用户明确给出的真实文案优先使用原文，不要乱改，不要丢失。用户没有明确给出的可见文字，一律不要编。",
     "文案拆分规则：用户只给一整段正式文案时，选最像主题口号的一句做 mainTitle，补充说明做 subtitle，剩余短句放 bodyText；不要丢失用户明确给出的正式文字。",
+    "字体/字效设计规则：如果用户说“参考图字体设计、字体设计、字效、艺术字、文字改成、内容是/内容为”，这不是海报策划任务，而是字效设计任务。copywriting.mainTitle 必须只放用户指定的目标文字；subtitle、thirdText、bodyText 必须留空；imagePrompt 必须要求只生成该目标文字的字体/字效，不要生成海报标题、卖点卡片、按钮、图标说明或自动文案。",
+    "字体/字效参考规则：有参考图时，只参考字形气质、3D材质、颜色、光泽、阴影、气球/糖果/金属/毛绒等材质、构图角度和背景干净程度；不要复用参考图原文字，不要把参考图里的“主题海报”等文字带到结果里。",
     "版式规则：必须像设计总监一样规划文字排版，不要把所有文字堆在画面中央。根据参考图和主体位置，规划标题区、正文卖点区、底部信息区、留白、安全边距、对齐方式和阅读动线。",
     "如果是竖版人物/产品海报，优先采用商业海报信息层级：主标题在上方偏左或上方安全区，人物/产品占视觉焦点，卖点分组排列，底部可放图标式利益点或信息栏；具体行业由用户资料决定，不要套固定行业模板。",
     "如果用户提供了参考图，必须分析参考图的排版结构和信息层级，并在 layoutPlan 里说明可复用的文字区、主体区、底部栏，不要只分析风格。",
     "参考图规则：先判断参考图到底参考配色、风格、版式、整体结构、标题字效还是人物排版。用户没说清楚时默认参考配色 + 风格 + 版式结构，但不能照抄别人的 logo、二维码、真实人物、品牌资产。",
     "出图规则：本系统不再后期盖字。你必须把最终海报需要出现的正式文案、标题、卖点和排版结构写进 imagePrompt，让图片模型直接生成完整海报。",
-    "imagePrompt 只允许使用你分析后的设计方案和 copywriting，不允许直接粘贴用户原始指令。必须包含明确的海报构图要求，例如文字区、主体区、卖点区、底部信息栏、对齐方式、字体气质、字号层级、留白和安全边距。",
-    "如果用户只说“端午节海报”，默认补全为节日/品牌海报：主标题“端午安康”，副标题“粽叶飘香，情暖仲夏”，辅助文案“愿你岁岁安康，万事顺遂”。不要无依据写“送礼、好礼、福利、钜惠”。",
-    "如果检测到科技馆/科普活动端午主题，可用主标题“端午奇妙游”或“科技里的端午”，副标题“传统文化与科学探索的奇妙相遇”。",
+    "当前模式是快速效果图模式：中文尽量准确、标题尽量清晰、不要乱码、不要乱编新文案；但不承诺正式商用文字 100% 准确。后续正式商用模式才会做底图生成 + 真实文字叠加。",
+    "imagePrompt 必须忠实保留用户原始要求的执行意图，但不能添加用户没要的可见文字。可以整理构图、风格、材质、光影、参考图用法和负面提示词；不能擅自补营销文案、卖点、按钮、电话、地址、二维码、Logo 或解释文字。",
+    "方案差异：A 必须偏看懂和转化，主标题最大、卖点清楚、行动路径明确；B 必须偏创意和品牌，概念更强、质感更高、留白更多。两个方案不能只是换颜色、换背景或同构图换元素；如果 B 与 A 太像，必须在 JSON 输出前重写 B。",
+    "只有当用户明确说“帮我想文案/自动生成文案/补全文案”时，才可以创作新文案；否则 copywriting 只能来自用户原文或用户指定的目标文字。",
     `硬尺寸：${size.width}x${size.height}，比例 ${size.ratio}。如果用户指定尺寸，必须以这个尺寸和比例策划。`,
     `用户原始需求：${input.userPrompt || ""}`,
     input.title ? `用户指定标题：${input.title}` : "",
@@ -119,58 +167,78 @@ export function buildFallbackDesignPlan(input: DesignPlanInput | DesignRequest):
   const isTechMuseum = /科技馆|科普|科学|探索/i.test(text);
   const isMedical = /医院|医疗|医生|科室|专家|诊疗|健康/i.test(text);
   const explicitCopy = inferCopyFromPrompt(userPrompt);
+  const typographyTargetText = extractTypographyTargetText(userPrompt);
+  const isTypographyDesign = isTypographyDesignRequest(text) || Boolean(typographyTargetText && /参考|字体|字效|艺术字|文字|内容/.test(text));
   const fallbackTheme = inferVisualTheme(userPrompt);
-  const industry = "industry" in input && input.industry ? input.industry : isMedical ? "医疗健康" : isTechMuseum ? "科技科普" : isDragonBoat ? "节日品牌" : "通用商业设计";
-  const scene = "scene" in input && input.scene ? input.scene : /轮播|banner|横幅/i.test(text) ? "广告轮播图" : "品牌海报";
-  const mainTitle = sanitizePosterCopy("title" in input && input.title ? input.title : explicitCopy.mainTitle || (isDragonBoat ? (isTechMuseum ? "端午奇妙游" : "端午安康") : inferShortTitle(userPrompt)), "主题海报", "title");
-  const subtitle = sanitizePosterCopy("subtitle" in input && input.subtitle ? input.subtitle : explicitCopy.subtitle || (isDragonBoat ? (isTechMuseum ? "传统文化与科学探索的奇妙相遇" : "粽叶飘香，情暖仲夏") : "清晰传达主题，建立专业信任"), "", "subtitle");
-  const thirdText = explicitCopy.thirdText || (isDragonBoat && !isTechMuseum ? "愿你岁岁安康，万事顺遂" : "");
+  const industry = "industry" in input && input.industry ? input.industry : isTypographyDesign ? "字体设计" : isMedical ? "医疗健康" : isTechMuseum ? "科技科普" : isDragonBoat ? "节日品牌" : "通用商业设计";
+  const scene = "scene" in input && input.scene ? input.scene : isTypographyDesign ? "字效设计" : /轮播|banner|横幅/i.test(text) ? "广告轮播图" : "品牌海报";
+  const mainTitle = sanitizePosterCopy(
+    "title" in input && input.title ? input.title : typographyTargetText || explicitCopy.mainTitle,
+    "",
+    "title",
+  );
+  const subtitle = sanitizePosterCopy(
+    isTypographyDesign ? "" : "subtitle" in input && input.subtitle ? input.subtitle : explicitCopy.subtitle,
+    "",
+    "subtitle",
+  );
+  const thirdText = isTypographyDesign ? "" : explicitCopy.thirdText || (isDragonBoat && !isTechMuseum ? "愿你岁岁安康，万事顺遂" : "");
   const textMode = resolvePlanTextMode(input);
-  return {
+  const baseCopywriting: DesignPlanCopywriting = {
+    mainTitle,
+    subtitle,
+    thirdText: sanitizePosterCopy(thirdText, "", "body"),
+    bodyText: isTypographyDesign ? [] : sanitizePosterCopyArray("bodyText" in input && Array.isArray(input.bodyText) ? input.bodyText : explicitCopy.bodyText, []),
+    people: "people" in input && Array.isArray(input.people) ? input.people : [],
+    brand: sanitizePosterCopy(explicitCopy.brand, "", "brand"),
+  };
+  const baseLayout: DesignPlanLayout = {
+    topArea: isTypographyDesign ? "不放品牌、不放标签、不放额外标题" : "品牌名或主题标签放在上方安全区，不强行添加未知 Logo",
+    titleArea: isTypographyDesign ? `画面中心只放目标字效“${mainTitle}”，字形大而完整，四周留干净边距` : "根据主体位置放置主标题和副标题，优先左对齐或上方安全区，避免压住人物/产品面部",
+    mainVisualArea: isTypographyDesign ? "目标文字本身就是唯一主视觉，参考图只用于字体材质、立体感、颜色和光影" : isDragonBoat ? "粽叶、龙舟、水纹、艾草等节日主视觉" : "围绕用户主题设计清晰主视觉",
+    peopleArea: isTypographyDesign ? "不添加人物、医生、模特或IP" : /人物|医生|模特|IP|ip/i.test(text) ? "按用户要求安排人物/主体位置，结合参考人物图生成完整海报" : "无人物时不强行添加人物",
+    bottomArea: isTypographyDesign ? "不添加底部卖点栏、按钮、图标说明或口号" : "按用户已给信息安排卖点、时间、价格、电话、地址等底部信息；用户没给就不要编造",
+    textArea: isTypographyDesign ? `只生成“${mainTitle}”四个字的字体设计，不出现任何其他中文、英文或数字` : "正式文案由图片模型直接作为海报文字生成，必须有清晰层级、对齐和分组",
+  };
+  const baseVisual: DesignPlanVisual = {
+    background: isTypographyDesign ? "干净白色或浅色背景，突出字体本体" : "干净、有空间层次的商业海报背景",
+    mainVisual: isTypographyDesign ? `参考图风格的 3D 气球/糖果质感中文艺术字“${mainTitle}”` : isDragonBoat ? "高质感粽叶与水纹节日组合主视觉" : "与用户需求强相关的核心视觉",
+    decorations: isTypographyDesign ? ["彩色气球管状笔画", "果冻高光", "柔和投影", "少量轻盈装饰"] : isDragonBoat ? ["粽叶", "水纹", "艾草", "轻微金色点缀"] : ["品牌辅助图形", "光效", "层次装饰"],
+    lighting: isTypographyDesign ? "明亮棚拍光，高光圆润，阴影柔和，3D 字体边缘清晰" : "柔和商业光，高级但不杂乱",
+    color: isTypographyDesign ? "参考图的粉色、蓝色、黄色、绿色糖果气球配色" : isDragonBoat ? "绿色、米白、暖金为主" : "符合行业和参考图的统一配色",
+  };
+  const basePlan = {
     taskType: "poster_design",
     industry,
     scene,
     size,
-    copywriting: {
-      mainTitle,
-      subtitle,
-      thirdText: sanitizePosterCopy(thirdText, "", "body"),
-      bodyText: sanitizePosterCopyArray("bodyText" in input && Array.isArray(input.bodyText) ? input.bodyText : explicitCopy.bodyText, []),
-      people: "people" in input && Array.isArray(input.people) ? input.people : [],
-      brand: "",
-    },
+    copywriting: baseCopywriting,
     referenceAnalysis: {
-      colorPalette: isDragonBoat ? ["艾草绿", "糯米白", "竹叶青", "暖金"] : ["主品牌色", "辅助浅色", "深色文字", "高光色"],
-      style: isDragonBoat ? "现代节日品牌海报，国风元素克制融入" : "商业化、清晰、专业、有层级",
-      layout: "上方标题区，主体视觉区，正文卖点分组区，底部信息区，所有文字由图片模型作为海报排版直接生成",
-      informationHierarchy: "主标题最大，副标题次之，辅助信息和底部信息栏用真实文字图层",
-      reusableElements: ["配色", "版式结构", "信息层级", "光效氛围"],
+      colorPalette: isTypographyDesign ? ["泡泡粉", "天空蓝", "柠檬黄", "嫩绿色", "高光白"] : isDragonBoat ? ["艾草绿", "糯米白", "竹叶青", "暖金"] : ["主品牌色", "辅助浅色", "深色文字", "高光色"],
+      style: isTypographyDesign ? "参考图同类 3D 气球糖果中文艺术字，圆润、饱满、亮面、可爱、干净" : isDragonBoat ? "现代节日品牌海报，国风元素克制融入" : "商业化、清晰、专业、有层级",
+      layout: isTypographyDesign ? "单一字效主视觉居中构图，只显示目标文字，不做海报信息层级" : "上方标题区，主体视觉区，正文卖点分组区，底部信息区，所有文字由图片模型作为海报排版直接生成",
+      informationHierarchy: isTypographyDesign ? "目标文字是唯一信息层级，不允许副标题、卖点、按钮、底部栏或自动说明文案" : "主标题最大，副标题次之，辅助信息和底部信息栏弱化分组",
+      reusableElements: isTypographyDesign ? ["圆润管状字形", "气球/糖果材质", "高光光泽", "柔和阴影", "明亮配色"] : ["配色", "版式结构", "信息层级", "光效氛围"],
     },
-    layoutPlan: {
-      topArea: "预留 logo / 品牌名真实图层位置",
-      titleArea: "根据主体位置放置主标题和副标题，优先左对齐或上方安全区，避免压住人物/产品面部",
-      mainVisualArea: isDragonBoat ? "粽叶、龙舟、水纹、艾草等节日主视觉" : "围绕用户主题设计清晰主视觉",
-      peopleArea: /人物|医生|模特|IP|ip/i.test(text) ? "按用户要求安排人物/主体位置，结合参考人物图生成完整海报" : "无人物时不强行添加人物",
-      bottomArea: "预留卖点、电话、地址、二维码、活动时间等真实图层信息栏",
-      textArea: "正式文案由图片模型直接作为海报文字生成，必须有清晰层级、对齐和分组",
-    },
-    visualPlan: {
-      background: "干净、有空间层次的商业海报背景",
-      mainVisual: isDragonBoat ? "高质感粽叶与水纹节日组合主视觉" : "与用户需求强相关的核心视觉",
-      decorations: isDragonBoat ? ["粽叶", "水纹", "艾草", "轻微金色点缀"] : ["品牌辅助图形", "光效", "层次装饰"],
-      lighting: "柔和商业光，高级但不杂乱",
-      color: isDragonBoat ? "绿色、米白、暖金为主" : "符合行业和参考图的统一配色",
-    },
+    layoutPlan: baseLayout,
+    visualPlan: baseVisual,
     textMode,
-    imagePrompt: buildImagePromptFromFallback({ visualTheme: fallbackTheme, size, textMode, industry, scene, isDragonBoat }),
-    negativePrompt: "不要正方形，禁止改变指定比例，不要把用户原始提示词写到画面上，不要乱码中文，不要假电话假地址，不要假二维码，不要假 logo，不要照抄参考图品牌资产，不要廉价模板感，不要主体裁切，不要边缘磨砂补边",
+    imagePrompt: buildImagePromptFromFallback({ visualTheme: fallbackTheme, size, textMode, industry, scene, isDragonBoat, isTypographyDesign, typographyText: mainTitle }),
+    negativePrompt: isTypographyDesign
+      ? `只允许出现“${mainTitle}”，不要出现主题海报、清晰传达主题、建立专业信任、核心卖点、信息一眼看懂、画面重点明确、按钮、图标卡片、底部栏、电话、地址、二维码、logo、英文、数字、乱码中文，不要改变文字内容`
+      : "不要正方形，禁止改变指定比例，不要把用户原始提示词写到画面上，不要乱码中文，不要假电话假地址，不要假二维码，不要假 logo，不要照抄参考图品牌资产，不要廉价模板感，不要主体裁切，不要边缘磨砂补边",
     qualityRules: [
       `必须是 ${size.width}x${size.height}，${size.ratio} 比例`,
-      "生图模型只生成底图、主视觉、光效、装饰和占位，不负责准确中文与正式资产",
-      "最终海报直接由图片模型生成完整文字和排版，不再后期叠加文字",
+      isTypographyDesign ? `只生成目标文字“${mainTitle}”的字效设计` : "最终海报直接由图片模型生成完整文字和排版，不再后期叠加文字",
       "不能把用户原始需求句子当成海报文案",
-    ],
+      isTypographyDesign ? "不能自动补副标题、卖点、按钮、底部信息或海报说明" : "",
+      isTypographyDesign ? "参考图只参考字体风格、材质、颜色、光影和构图，不复用原文字" : "",
+    ].filter(Boolean),
     warnings: ["图片模型会直接生成海报文字，请用质检关注中文准确性和排版完整度。"],
+  } satisfies Omit<DesignPlan, "designDirections">;
+  return {
+    ...basePlan,
+    designDirections: buildFallbackDesignDirections(basePlan, { visualTheme: fallbackTheme, isDragonBoat }),
   };
 }
 
@@ -181,7 +249,8 @@ export function normalizeDesignPlan(value: unknown, fallback: DesignPlan): Desig
   const layout = source.layoutPlan && typeof source.layoutPlan === "object" ? source.layoutPlan as Partial<DesignPlan["layoutPlan"]> : {};
   const visual = source.visualPlan && typeof source.visualPlan === "object" ? source.visualPlan as Partial<DesignPlan["visualPlan"]> : {};
   const people = normalizePeople(copy.people, fallback.copywriting.people);
-  return {
+  const textMode = source.textMode === "background_only" || source.textMode === "ai_text_preview" || source.textMode === "real_text_overlay" ? source.textMode : fallback.textMode;
+  const normalizedBase = {
     taskType: "poster_design",
     industry: clean(source.industry) || fallback.industry,
     scene: clean(source.scene) || fallback.scene,
@@ -216,11 +285,15 @@ export function normalizeDesignPlan(value: unknown, fallback: DesignPlan): Desig
       lighting: clean(visual.lighting) || fallback.visualPlan.lighting,
       color: clean(visual.color) || fallback.visualPlan.color,
     },
-    textMode: source.textMode === "background_only" || source.textMode === "ai_text_preview" || source.textMode === "real_text_overlay" ? source.textMode : fallback.textMode,
-    imagePrompt: enforceImageExecutionPolicy(sanitizeImagePrompt(clean(source.imagePrompt) || fallback.imagePrompt), source.textMode || fallback.textMode),
+    textMode,
+    imagePrompt: enforceImageExecutionPolicy(sanitizeImagePrompt(clean(source.imagePrompt) || fallback.imagePrompt), textMode),
     negativePrompt: clean(source.negativePrompt) || fallback.negativePrompt,
     qualityRules: normalizeStringArray(source.qualityRules, fallback.qualityRules).slice(0, 10),
     warnings: normalizeStringArray(source.warnings, fallback.warnings).slice(0, 8),
+  } satisfies Omit<DesignPlan, "designDirections">;
+  return {
+    ...normalizedBase,
+    designDirections: normalizeDesignDirections(source.designDirections, fallback.designDirections, normalizedBase),
   };
 }
 
@@ -246,6 +319,260 @@ export function designPlanToImagePrompt(plan: DesignPlan) {
     buildVisibleCopyPrompt(plan),
     plan.imagePrompt,
   ].filter(Boolean).join("\n"), plan.textMode);
+}
+
+export function designDirectionToImagePrompt(plan: DesignPlan, direction: DesignPlanDirection) {
+  const directionPlan: DesignPlan = {
+    ...plan,
+    copywriting: direction.copywriting,
+    layoutPlan: direction.layoutPlan,
+    visualPlan: direction.visualPlan,
+    imagePrompt: direction.imagePrompt,
+    negativePrompt: direction.negativePrompt,
+    qualityRules: direction.qualityRules,
+    warnings: direction.warnings,
+  };
+  return enforceImageExecutionPolicy([
+    `Complete commercial poster design. Direction ${direction.id}: ${direction.name}. Canvas ${plan.size.width}x${plan.size.height}, ${plan.size.ratio}.`,
+    `Industry: ${plan.industry}. Scene: ${plan.scene}.`,
+    `Direction goal: ${direction.goal}`,
+    `Direction strategy: ${direction.strategy}`,
+    `Reference style/color/layout: ${plan.referenceAnalysis.style}; ${plan.referenceAnalysis.layout}; palette ${plan.referenceAnalysis.colorPalette.join(", ")}.`,
+    `Layout zones: top ${direction.layoutPlan.topArea}; title safe area ${direction.layoutPlan.titleArea}; main visual ${direction.layoutPlan.mainVisualArea}; people ${direction.layoutPlan.peopleArea}; bottom ${direction.layoutPlan.bottomArea}.`,
+    `Visual plan: background ${direction.visualPlan.background}; main visual ${direction.visualPlan.mainVisual}; decorations ${direction.visualPlan.decorations.join(", ")}; lighting ${direction.visualPlan.lighting}; color ${direction.visualPlan.color}.`,
+    buildVisibleCopyPrompt(directionPlan),
+    direction.imagePrompt,
+    "This direction must be visually distinct from the other direction in composition, main visual strategy, copy hierarchy, and overall mood.",
+  ].filter(Boolean).join("\n"), plan.textMode);
+}
+
+function buildFallbackDesignDirections(
+  basePlan: Omit<DesignPlan, "designDirections">,
+  context: { visualTheme: string; isDragonBoat: boolean },
+): DesignPlanDirection[] {
+  const isTypographyDesign = basePlan.industry === "字体设计" || basePlan.scene === "字效设计";
+  if (isTypographyDesign) return buildFallbackTypographyDirections(basePlan, context);
+  const bodyText = basePlan.copywriting.bodyText;
+  const conversionCopy: DesignPlanCopywriting = {
+    ...basePlan.copywriting,
+    bodyText,
+  };
+  const brandCopy: DesignPlanCopywriting = {
+    ...basePlan.copywriting,
+    bodyText: bodyText.slice(0, 4),
+  };
+
+  return [
+    {
+      id: "A",
+      name: "转化广告版",
+      goal: "清晰、直接、好理解、适合投放，让用户第一眼看懂主题和利益点。",
+      strategy: "主标题最大，主视觉明确，卖点分组清楚，信息动线直接，强调咨询、报名、购买或预约转化。",
+      copywriting: conversionCopy,
+      layoutPlan: {
+        ...basePlan.layoutPlan,
+        titleArea: "上方或左上安全区放最大主标题，副标题紧跟其下，形成直接阅读动线",
+        mainVisualArea: `${basePlan.layoutPlan.mainVisualArea}，主体明确居中或偏右，占据主要注意力`,
+        bottomArea: "底部信息栏只放用户提供的卖点、电话、地址、时间、价格等，不编造不存在的信息",
+        textArea: "主标题最大，卖点做标签、胶囊或短条分组，辅助说明弱化，适合广告投放",
+      },
+      visualPlan: {
+        ...basePlan.visualPlan,
+        background: `${basePlan.visualPlan.background}，信息区干净，对比清楚`,
+        mainVisual: `${basePlan.visualPlan.mainVisual}，一眼明确主题与转化利益`,
+        decorations: [...basePlan.visualPlan.decorations, "清晰卖点标签", "行动感信息栏"].slice(0, 10),
+        lighting: "明亮、有冲击力的商业广告光效，避免过度艺术化",
+        color: `${basePlan.visualPlan.color}，提高标题和卖点可读性`,
+      },
+      imagePrompt: [
+        "Direction A conversion advertising poster.",
+        "Make the main title the largest visual anchor, show clear selling points, grouped readable Chinese typography, direct commercial hierarchy.",
+        "Use a practical ad layout with strong subject, clean information zones, and a bottom bar only when the user provided contact, time, price, or address details.",
+        `Theme concept: ${context.visualTheme}.`,
+      ].join("\n"),
+      negativePrompt: "不要艺术化到看不懂，不要信息堆满，不要平均字号，不要乱编电话地址二维码 logo，不要把用户原始指令写进画面，不要偏离指定比例",
+      qualityRules: [
+        "主标题必须最大且清楚",
+        "卖点必须分组，不要堆成一段",
+        "只能使用用户提供的真实电话、地址、二维码、Logo 信息",
+      ],
+      warnings: ["快速效果图模式下中文由图片模型直接生成，需要关注文字准确度。"],
+    },
+    {
+      id: "B",
+      name: "品牌创意版",
+      goal: "高级、有创意、有记忆点、有品牌感，让画面不像普通模板图。",
+      strategy: "使用更概念化的主视觉、更克制的文案层级和更多留白，构图、视觉隐喻、空间关系必须明显不同于方案A。",
+      copywriting: brandCopy,
+      layoutPlan: {
+        ...basePlan.layoutPlan,
+        topArea: "顶部保留克制品牌或主题位置，只使用用户提供的品牌文字，不编造 Logo",
+        titleArea: "主标题与主视觉形成概念化关系，可用错位、留白、纵向或环绕式排版，但必须可读",
+        mainVisualArea: `${basePlan.layoutPlan.mainVisualArea}，转化为更有记忆点的隐喻式主视觉和空间构图`,
+        bottomArea: "底部信息极简，只保留用户明确给出的必要信息，避免促销模板感",
+        textArea: "文案更克制，主标题有设计感，辅助文字少而精，留白更多",
+      },
+      visualPlan: {
+        ...basePlan.visualPlan,
+        background: `${basePlan.visualPlan.background}，更高级的空间层次与留白`,
+        mainVisual: `${basePlan.visualPlan.mainVisual}，转化为品牌主视觉或视觉隐喻`,
+        decorations: [...basePlan.visualPlan.decorations, "品牌符号化构图", "高级留白"].slice(0, 10),
+        lighting: "高级柔和光影，质感强，有传播感",
+        color: `${basePlan.visualPlan.color}，更克制统一，强调品牌气质`,
+      },
+      imagePrompt: [
+        "Direction B brand creative poster.",
+        "Do not reuse Direction A layout. Use a clearly different composition, more whitespace, stronger visual metaphor, and a premium brand key visual feeling.",
+        "Keep Chinese title readable but make the mood more refined, memorable, and non-template.",
+        `Theme concept: ${context.visualTheme}.`,
+      ].join("\n"),
+      negativePrompt: "不要和方案A同构图，不要只是换颜色，不要廉价模板感，不要促销堆字，不要乱编电话地址二维码 logo，不要把用户原始指令写进画面，不要偏离指定比例",
+      qualityRules: [
+        "构图必须明显不同于方案A",
+        "不能只是换颜色或换背景",
+        "必须保留用户明确给出的核心文案，但文字数量更克制",
+      ],
+      warnings: ["快速效果图模式下中文由图片模型直接生成，需要关注文字准确度。"],
+    },
+  ];
+}
+
+function buildFallbackTypographyDirections(
+  basePlan: Omit<DesignPlan, "designDirections">,
+  context: { visualTheme: string },
+): DesignPlanDirection[] {
+  const targetText = basePlan.copywriting.mainTitle;
+  const copywriting: DesignPlanCopywriting = {
+    mainTitle: targetText,
+    subtitle: "",
+    thirdText: "",
+    bodyText: [],
+    people: [],
+    brand: "",
+  };
+  return [
+    {
+      id: "A",
+      name: "参考字效还原版",
+      goal: `严格参考图1的字体设计风格，把文字替换成“${targetText}”。`,
+      strategy: "优先还原参考图的圆润3D气球糖果字体、粉色高光、彩色管状背景和干净棚拍质感；只改文字内容。",
+      copywriting,
+      layoutPlan: {
+        ...basePlan.layoutPlan,
+        titleArea: `画面中心大字只显示“${targetText}”，字形完整、清楚、边缘不裁切`,
+        textArea: `只出现“${targetText}”，不出现任何副标题、卖点、按钮、解释文字或海报模板文案`,
+      },
+      visualPlan: basePlan.visualPlan,
+      imagePrompt: [
+        `Create a standalone Chinese 3D balloon candy typography design with the exact visible text: "${targetText}".`,
+        "Use the reference image only for font style: rounded inflated strokes, glossy pink candy material, colorful balloon tubes, soft shadows, clean bright white background.",
+        "This is not a poster layout. No subtitle, no selling points, no icon cards, no bottom information bar, no extra slogan.",
+        `Do not render the reference image text. Replace it with exactly "${targetText}".`,
+        `Theme concept: ${context.visualTheme}.`,
+      ].join("\n"),
+      negativePrompt: `不要出现主题海报、清晰传达主题、建立专业信任、核心卖点、信息一眼看懂、画面重点明确、按钮、图标卡片、底部栏、电话、地址、二维码、logo、英文、数字、乱码中文；除了“${targetText}”不要出现其他文字`,
+      qualityRules: [
+        `唯一可见文字必须是“${targetText}”`,
+        "必须参考图1的字体设计风格和材质",
+        "不能做成海报模板或营销卡片",
+      ],
+      warnings: ["图片模型直接生成中文艺术字，仍需人工检查文字笔画是否准确。"],
+    },
+    {
+      id: "B",
+      name: "创意字效扩展版",
+      goal: `在参考图字体气质基础上，为“${targetText}”做更有动势的创意字效。`,
+      strategy: "保持圆润3D糖果气球材质，但让字形更有乘风破浪的流动感、弧线和速度感；仍然只生成目标文字。",
+      copywriting,
+      layoutPlan: {
+        ...basePlan.layoutPlan,
+        titleArea: `“${targetText}”作为唯一主视觉，可略带斜向动势和波浪节奏，但必须清晰可读`,
+        textArea: `只出现“${targetText}”，不出现任何其他文字或说明`,
+      },
+      visualPlan: {
+        ...basePlan.visualPlan,
+        mainVisual: `带流动弧线和浪花动势的 3D 气球糖果中文艺术字“${targetText}”`,
+        decorations: ["彩色气球管状笔画", "果冻高光", "柔和投影", "轻微流动弧线", "少量浪花感装饰"],
+      },
+      imagePrompt: [
+        `Create a creative Chinese 3D balloon candy word art with the exact visible text: "${targetText}".`,
+        "Keep the reference image's glossy inflated candy typography, but add subtle wave-like motion and flowing ribbon composition matching the meaning of the phrase.",
+        "No poster information hierarchy. No subtitle, no icon cards, no selling point text, no bottom bar.",
+        `Only the four Chinese characters "${targetText}" may be readable.`,
+      ].join("\n"),
+      negativePrompt: `不要出现主题海报、清晰传达主题、建立专业信任、核心卖点、信息一眼看懂、画面重点明确、按钮、图标卡片、底部栏、电话、地址、二维码、logo、英文、数字、乱码中文；除了“${targetText}”不要出现其他文字`,
+      qualityRules: [
+        `唯一可见文字必须是“${targetText}”`,
+        "方案B必须比方案A更有流动感和创意动势，但不能变成海报",
+        "不能只是复制参考图原字",
+      ],
+      warnings: ["图片模型直接生成中文艺术字，仍需人工检查文字笔画是否准确。"],
+    },
+  ];
+}
+
+function normalizeDesignDirections(
+  value: unknown,
+  fallback: DesignPlanDirection[] | undefined,
+  basePlan: Omit<DesignPlan, "designDirections">,
+) {
+  const fallbackDirections = fallback?.length
+    ? fallback
+    : buildFallbackDesignDirections(basePlan, {
+      visualTheme: basePlan.visualPlan.mainVisual || basePlan.imagePrompt,
+      isDragonBoat: /端午|粽|龙舟/i.test(`${basePlan.copywriting.mainTitle} ${basePlan.copywriting.subtitle} ${basePlan.visualPlan.mainVisual}`),
+    });
+  const items = Array.isArray(value) ? value : [];
+  const normalized = items
+    .map((item, index) => normalizeDesignDirection(item, fallbackDirections[index] || fallbackDirections[index % fallbackDirections.length], basePlan, index))
+    .slice(0, 2);
+  return normalized.length >= 2 ? normalized : fallbackDirections.slice(0, 2);
+}
+
+function normalizeDesignDirection(
+  value: unknown,
+  fallback: DesignPlanDirection,
+  basePlan: Omit<DesignPlan, "designDirections">,
+  index: number,
+): DesignPlanDirection {
+  const source = value && typeof value === "object" ? value as Partial<DesignPlanDirection> : {};
+  const copy = source.copywriting && typeof source.copywriting === "object" ? source.copywriting as Partial<DesignPlanCopywriting> : {};
+  const layout = source.layoutPlan && typeof source.layoutPlan === "object" ? source.layoutPlan as Partial<DesignPlanLayout> : {};
+  const visual = source.visualPlan && typeof source.visualPlan === "object" ? source.visualPlan as Partial<DesignPlanVisual> : {};
+  const directionId: "A" | "B" = clean(source.id) === "B" || index === 1 ? "B" : "A";
+  return {
+    id: directionId,
+    name: clean(source.name) || fallback.name || (directionId === "A" ? "转化广告版" : "品牌创意版"),
+    goal: clean(source.goal) || fallback.goal,
+    strategy: clean(source.strategy) || fallback.strategy,
+    copywriting: {
+      mainTitle: sanitizePosterCopy(copy.mainTitle, fallback.copywriting.mainTitle || basePlan.copywriting.mainTitle, "title"),
+      subtitle: sanitizePosterCopy(copy.subtitle, fallback.copywriting.subtitle || basePlan.copywriting.subtitle, "subtitle"),
+      thirdText: sanitizePosterCopy(copy.thirdText, fallback.copywriting.thirdText || basePlan.copywriting.thirdText, "body"),
+      bodyText: sanitizePosterCopyArray(copy.bodyText, fallback.copywriting.bodyText || basePlan.copywriting.bodyText).slice(0, 8),
+      people: normalizePeople(copy.people, fallback.copywriting.people || basePlan.copywriting.people),
+      brand: sanitizePosterCopy(copy.brand, fallback.copywriting.brand || basePlan.copywriting.brand, "brand"),
+    },
+    layoutPlan: {
+      topArea: clean(layout.topArea) || fallback.layoutPlan.topArea,
+      titleArea: clean(layout.titleArea) || fallback.layoutPlan.titleArea,
+      mainVisualArea: clean(layout.mainVisualArea) || fallback.layoutPlan.mainVisualArea,
+      peopleArea: clean(layout.peopleArea) || fallback.layoutPlan.peopleArea,
+      bottomArea: clean(layout.bottomArea) || fallback.layoutPlan.bottomArea,
+      textArea: clean(layout.textArea) || fallback.layoutPlan.textArea,
+    },
+    visualPlan: {
+      background: clean(visual.background) || fallback.visualPlan.background,
+      mainVisual: clean(visual.mainVisual) || fallback.visualPlan.mainVisual,
+      decorations: normalizeStringArray(visual.decorations, fallback.visualPlan.decorations).slice(0, 10),
+      lighting: clean(visual.lighting) || fallback.visualPlan.lighting,
+      color: clean(visual.color) || fallback.visualPlan.color,
+    },
+    imagePrompt: enforceImageExecutionPolicy(sanitizeImagePrompt(clean(source.imagePrompt) || fallback.imagePrompt), basePlan.textMode),
+    negativePrompt: clean(source.negativePrompt) || fallback.negativePrompt,
+    qualityRules: normalizeStringArray(source.qualityRules, fallback.qualityRules).slice(0, 10),
+    warnings: normalizeStringArray(source.warnings, fallback.warnings).slice(0, 8),
+  };
 }
 
 function buildVisibleCopyPrompt(plan: DesignPlan) {
@@ -303,7 +630,18 @@ function buildImagePromptFromFallback(input: {
   industry: string;
   scene: string;
   isDragonBoat: boolean;
+  isTypographyDesign?: boolean;
+  typographyText?: string;
 }) {
+  if (input.isTypographyDesign && input.typographyText) {
+    return enforceImageExecutionPolicy([
+      `Create a standalone Chinese 3D typography / word art design, exact visible text: "${input.typographyText}".`,
+      `Canvas ${input.size.width}x${input.size.height}, ${input.size.ratio}; keep the word art complete, centered, and not cropped.`,
+      "Use the reference image style if provided: glossy inflated balloon/candy Chinese characters, rounded tube strokes, soft highlights, colorful pastel balloon ribbons, clean bright background.",
+      `Only render "${input.typographyText}" as readable text. No subtitle, no slogan, no selling points, no icon cards, no bottom bar, no poster template.`,
+      "Do not copy the reference image's original characters; replace them with the target text exactly.",
+    ].join("\n"), input.textMode);
+  }
   return enforceImageExecutionPolicy([
     `Create a complete professional commercial poster for ${input.industry} / ${input.scene}.`,
     `Canvas ${input.size.width}x${input.size.height}, ${input.size.ratio}; keep full composition, no cropping, no blurred padding.`,
@@ -318,7 +656,7 @@ function buildImagePromptFromFallback(input: {
 function enforceImageExecutionPolicy(prompt: string, textMode: DesignPlan["textMode"]) {
   const realTextLine = textMode === "background_only"
     ? "No visible readable text, no Chinese characters, no English letters, no numbers, no fake slogan, no fake phone/address, no fake QR code, no fake logo."
-    : "Render a complete designed poster with the planned visible copy. Use real poster typography, clear hierarchy, clean alignment, grouped selling points, and an intentional commercial layout. Avoid garbled characters, random extra words, fake phone/address, fake QR code, and fake logo.";
+    : "Render only the planned visible copy supplied by the user. If no visible copy is planned, do not invent any text. Use clear hierarchy and clean alignment when text is required. Avoid garbled characters, random extra words, fake phone/address, fake QR code, and fake logo.";
   return [
     prompt,
     realTextLine,
@@ -374,14 +712,6 @@ function normalizeSize(value: unknown, fallback: DesignPlan["size"]) {
   return { width: Math.round(width), height: Math.round(height), ratio: clean(source.ratio) || simplifyRatio(width, height) };
 }
 
-function inferShortTitle(text: string) {
-  const explicitCopy = inferCopyFromPrompt(text);
-  if (explicitCopy.mainTitle) return explicitCopy.mainTitle;
-  if (/端午|粽|龙舟/i.test(text)) return "端午安康";
-  const theme = inferVisualTheme(text);
-  return sanitizePosterCopy(theme.replace(/海报|图片|设计|生成/g, "").trim(), "主题海报", "title");
-}
-
 function inferCopyFromPrompt(text: string) {
   const normalized = String(text || "").replace(/\r/g, "\n");
   const labeled = {
@@ -403,7 +733,26 @@ function inferCopyFromPrompt(text: string) {
     subtitle: subtitle || sanitizePosterCopy(parts[1], "", "subtitle"),
     thirdText: thirdText || sanitizePosterCopy(parts[2], "", "body"),
     bodyText: parts.slice(mainTitle ? 0 : 3),
+    brand: sanitizePosterCopy(labeled.brand, "", "brand"),
   };
+}
+
+function isTypographyDesignRequest(text: string) {
+  return /(参考图\s*\d*\s*字体|字体设计|字效|艺术字|立体字|3d\s*字|3D\s*字|文字改成|字体修改|改成.{0,12}(字|文字)|内容是|内容为)/i.test(text);
+}
+
+function extractTypographyTargetText(text: string) {
+  const normalized = clean(text);
+  const patterns = [
+    /(?:内容是|内容为|文字是|文字为|改成|修改成|换成)\s*[「“"']?([\u4e00-\u9fa5A-Za-z0-9]{2,12})[」”"']?/i,
+    /(?:字体修改成|字体改成|字效改成|艺术字改成)\s*[「“"']?([\u4e00-\u9fa5A-Za-z0-9]{2,12})[」”"']?/i,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(normalized);
+    const value = sanitizePosterCopy(match?.[1], "", "title");
+    if (value) return value;
+  }
+  return "";
 }
 
 function collectPosterCopyParts(body: string[], excluded: string[], limit: number) {
@@ -514,7 +863,7 @@ function sanitizeImagePrompt(prompt: string) {
     .map((line) => line.trim())
     .filter((line) => line && !isInstructionLikeCopy(line))
     .join("\n")
-    .trim() || "Professional commercial poster base image with clean visual hierarchy, premium lighting, clear main visual, and safe empty areas for real text overlay.";
+    .trim() || "Professional complete commercial poster with clean visual hierarchy, premium lighting, clear main visual, and readable planned typography.";
 }
 
 function normalizeStringArray(value: unknown, fallback: string[]) {

@@ -16,9 +16,6 @@ export default function AccountsPage() {
               <ArrowLeft className="size-4" />
               工作台
             </Link>
-            <Link className="apple-button inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white/78" href="/settings">
-              API 设置
-            </Link>
           </div>
         </header>
         <AdminAccountsManager />

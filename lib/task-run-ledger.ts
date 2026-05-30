@@ -71,7 +71,10 @@ export type TaskRunRecord = Required<Pick<TaskRunTrace, "requestId">> & {
   outputCount?: number;
   outputs?: TaskRunOutput[];
   error?: string;
+  errorCategory?: string;
+  retryable?: boolean;
   message?: string;
+  serverProcessId?: number;
 };
 
 type TaskRunStore = {
@@ -80,8 +83,12 @@ type TaskRunStore = {
 
 const taskRunStorePath = path.join(process.cwd(), "task-runs.local.json");
 const taskRunLimit = 300;
-const staleActiveTaskMs = 12 * 60 * 1000;
-const heavyStaleActiveTaskMs = 30 * 60 * 1000;
+const staleActiveTaskMs = 8 * 60 * 1000;
+const imageEditStaleActiveTaskMs = 6 * 60 * 1000;
+const designOptimizeStaleActiveTaskMs = 10 * 60 * 1000;
+const heavyStaleActiveTaskMs = 14 * 60 * 1000;
+const taskRunServerProcessId = process.pid;
+const taskRunHeartbeatIntervalMs = 15 * 1000;
 let taskRunStoreQueue: Promise<unknown> = Promise.resolve();
 
 function requestIdSetFromList(requestIds: string[] = []) {
@@ -146,6 +153,7 @@ export async function recordTaskRunStarted(trace: TaskRunTrace | null | undefine
       startedAt: existing?.startedAt || now,
       updatedAt: now,
       message: "服务端已收到请求，正在处理。",
+      serverProcessId: taskRunServerProcessId,
     };
     return { store: upsertTaskRun(store, record), record };
   });
@@ -188,6 +196,35 @@ export async function recordTaskRunFinished(trace: TaskRunTrace | null | undefin
   });
 }
 
+export async function recordTaskRunHeartbeat(trace: TaskRunTrace | null | undefined, message = "服务端仍在处理，任务心跳正常。") {
+  const normalized = normalizeTaskTrace(trace || {});
+  if (!normalized.requestId) return null;
+  const requestId = normalized.requestId;
+  return mutateTaskRunStore((store) => {
+    const now = new Date().toISOString();
+    const existing = store.runs.find((item) => item.requestId === requestId);
+    if (!existing || existing.state !== "active" || existing.status !== "running") {
+      return { store, record: existing || syntheticMutationRecord(requestId, "任务不存在或已结束，已忽略心跳。") };
+    }
+    const record: TaskRunRecord = {
+      ...existing,
+      updatedAt: now,
+      message,
+      serverProcessId: taskRunServerProcessId,
+    };
+    return { store: upsertTaskRun(store, record), record };
+  }).catch(() => null);
+}
+
+export function startTaskRunHeartbeat(trace: TaskRunTrace | null | undefined, message?: string) {
+  const normalized = normalizeTaskTrace(trace || {});
+  if (!normalized.requestId) return () => {};
+  const timer = setInterval(() => {
+    void recordTaskRunHeartbeat(normalized, message);
+  }, taskRunHeartbeatIntervalMs);
+  return () => clearInterval(timer);
+}
+
 export async function recordTaskRunFailed(trace: TaskRunTrace | null | undefined, error: unknown, status = "failed") {
   const normalized = normalizeTaskTrace(trace || {});
   if (!normalized.requestId) return null;
@@ -204,6 +241,7 @@ export async function recordTaskRunFailed(trace: TaskRunTrace | null | undefined
       };
       return { store: upsertTaskRun(store, record), record };
     }
+    const failure = classifyTaskRunFailure(error);
     const record: TaskRunRecord = {
       requestId,
       taskId: normalized.taskId || existing?.taskId,
@@ -221,8 +259,10 @@ export async function recordTaskRunFailed(trace: TaskRunTrace | null | undefined
       updatedAt: now,
       endedAt: now,
       durationMs: Math.max(0, Date.parse(now) - Date.parse(startedAt)),
-      error: error instanceof Error ? error.message : String(error || "任务失败"),
-      message: "服务端任务失败。",
+      error: failure.message,
+      errorCategory: failure.category,
+      retryable: failure.retryable,
+      message: failure.label,
     };
     return { store: upsertTaskRun(store, record), record };
   });
@@ -274,10 +314,14 @@ async function expireStaleActiveTaskRuns() {
       if (run.state !== "active" || run.status !== "running") return run;
       const referenceTime = Date.parse(run.updatedAt || run.startedAt);
       if (!Number.isFinite(referenceTime)) return run;
-      const timeoutMs = isHeavyTaskRun(run) ? heavyStaleActiveTaskMs : staleActiveTaskMs;
-      if (nowMs - referenceTime < timeoutMs) return run;
+      const timeoutMs = staleActiveTimeoutMsForTaskRun(run);
+      const abandonedByServerRestart = Boolean(run.serverProcessId && run.serverProcessId !== taskRunServerProcessId);
+      if (!abandonedByServerRestart && nowMs - referenceTime < timeoutMs) return run;
       changed = true;
       const startedAt = run.startedAt || now;
+      const error = abandonedByServerRestart
+        ? "任务所在后台进程已重启，原请求已中断。"
+        : `任务超过 ${Math.round(timeoutMs / 60000)} 分钟没有后台更新，可能已被开发服务器重启、网络中断或图片模型卡住。`;
       return {
         ...run,
         state: "failed" as const,
@@ -285,7 +329,9 @@ async function expireStaleActiveTaskRuns() {
         updatedAt: now,
         endedAt: now,
         durationMs: Math.max(0, nowMs - Date.parse(startedAt)),
-        error: `任务超过 ${Math.round(timeoutMs / 60000)} 分钟没有后台更新，可能已被开发服务器重启、网络中断或图片模型卡住。`,
+        error,
+        errorCategory: abandonedByServerRestart ? "server_restarted" : "stale_heartbeat",
+        retryable: true,
         message: "任务已自动标记为超时中断，可重新运行。",
       };
     });
@@ -296,8 +342,51 @@ async function expireStaleActiveTaskRuns() {
   }).catch(() => null);
 }
 
+function classifyTaskRunFailure(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error || "任务失败");
+  const message = raw.trim() || "任务失败";
+  if (/任务所在后台进程已重启|server.*restart|进程已重启/i.test(message)) {
+    return { category: "server_restarted", label: "后台重启中断。", message, retryable: true };
+  }
+  if (/timeout|timed out|超时|504|gateway timeout|bad gateway|fetch failed|network|socket|econnreset|etimedout|upstream/i.test(message)) {
+    return { category: "model_timeout", label: "模型超时或上游网络不稳定。", message, retryable: true };
+  }
+  if (/rate limit|429|too many requests|限流|quota|no available compatible accounts/i.test(message)) {
+    return { category: "rate_limited", label: "接口限流或账号额度不足。", message, retryable: true };
+  }
+  if (/size|尺寸|比例|原生比例|unsupported.*image|invalid.*image/i.test(message)) {
+    return { category: "invalid_size", label: "图片尺寸或比例不支持。", message, retryable: true };
+  }
+  if (/content policy|safety|blocked|拒绝|违规|unsafe/i.test(message)) {
+    return { category: "content_blocked", label: "内容安全策略拒绝。", message, retryable: false };
+  }
+  if (/key|401|403|permission|unauthorized|forbidden|密钥|权限|余额|balance/i.test(message)) {
+    return { category: "auth_or_billing", label: "Key、权限或余额异常。", message, retryable: false };
+  }
+  if (/upload|读取|下载|file|image input|图片.*失败/i.test(message)) {
+    return { category: "image_input_failed", label: "输入图片读取失败。", message, retryable: true };
+  }
+  if (/保存|save|write|metadata|json/i.test(message)) {
+    return { category: "save_failed", label: "结果保存失败。", message, retryable: true };
+  }
+  return { category: "unknown", label: "服务端任务失败。", message, retryable: false };
+}
+
+function staleActiveTimeoutMsForTaskRun(run: TaskRunRecord) {
+  const taskKey = taskRunKey(run);
+  if (/design_optimize/i.test(taskKey)) return designOptimizeStaleActiveTaskMs;
+  if (/edit_image|resize|mask_edit/i.test(taskKey)) return imageEditStaleActiveTaskMs;
+  if (isHeavyTaskRun(run)) return heavyStaleActiveTaskMs;
+  return staleActiveTaskMs;
+}
+
 function isHeavyTaskRun(run: TaskRunRecord) {
-  return /hd_redraw|upscale|reference_remake|design_optimize|png_layers/i.test(`${run.operation} ${run.nodeKind || ""}`);
+  const taskKey = taskRunKey(run);
+  return /hd_redraw|upscale|reference_remake|png_layers|text_to_image/i.test(taskKey);
+}
+
+function taskRunKey(run: TaskRunRecord) {
+  return `${run.operation} ${run.nodeKind || ""} ${run.route || ""}`;
 }
 
 export async function removeTaskRuns(requestIds: string[], options: { projectId?: string } = {}) {

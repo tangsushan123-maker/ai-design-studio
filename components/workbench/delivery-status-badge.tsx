@@ -27,12 +27,12 @@ export function deliveryStatusLabel(image: DeliveryStatusImage, fallbackLabel = 
   if (image.qualityCheck?.deliverabilityLabel) return compactDeliveryLabel(image.qualityCheck.deliverabilityLabel);
   if (image.qualityCheck?.label) return compactDeliveryLabel(image.qualityCheck.label);
   if (image.qualityCheck?.status === "passed") return "可交付";
-  if (image.qualityCheck?.status) return "需复查";
+  if (image.qualityCheck?.status) return "已生成";
   return compactDeliveryLabel(fallbackLabel);
 }
 
 function compactDeliveryLabel(label: string) {
-  return label.replace(/\s/g, "").replace("建议复查", "复查").replace("不可交付", "未达标");
+  return label.replace(/\s/g, "").replace(/(建议|需)复查/g, "已生成").replace("不可交付", "未达标");
 }
 
 function deliveryStatusClass(image: DeliveryStatusImage) {

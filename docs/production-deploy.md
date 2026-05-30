@@ -73,6 +73,20 @@ pm2 reload ecosystem.config.cjs --update-env
 
 If the process does not exist yet, run `pm2 start ecosystem.config.cjs` instead.
 
+## Smoke Testing AI Workflows
+
+Use a non-production test account when checking generation speed or server stability:
+
+```bash
+cd /var/www/ai-design-studio
+BENCHMARK_MODE=smoke \
+BENCHMARK_EMAIL=test@example.com \
+BENCHMARK_PASSWORD='replace-with-test-password' \
+node scripts/benchmark-ai-workflows.mjs
+```
+
+The benchmark logs into `/api/auth/login`, carries the session cookie, runs the current AI routes, and writes a JSON report under `.cleanup-reports/`.
+
 ## Safety Checks
 
 - Do not commit `.env.local`, `config.local.json`, `projects.local.json`, `task-runs.local.json`, or `public/generated/*`.

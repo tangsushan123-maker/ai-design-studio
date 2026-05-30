@@ -392,7 +392,7 @@ export function buildDesignDirectorImagePrompt(
   direction: DesignDirectorDirection,
 ) {
   const referenceImages = normalizeTextReferenceImages(request.referenceImages);
-  const strongReferenceMode = referenceImages.length > 0 && shouldUseStrongTextReferenceMode(request.prompt);
+  const strongReferenceMode = hasDirectUseTextReference(referenceImages);
   const noVisiblePolicy = resolveNoVisibleOutputPolicy(request.prompt);
   const autoProtectedTexts = noVisiblePolicy.noText ? [] : extractProtectionFromText(`${request.prompt}\n${request.sourceAnalysis || ""}`);
   const protectionContext = normalizeProtectionContext({
@@ -506,14 +506,14 @@ export function buildTextToImagePrompt(request: DesignRequest) {
   const lockedCanvas = textToImageCanvasLock(request);
   const compositionPrompt = buildTextToImageCompositionPrompt(request, `${request.prompt}\n${request.adType || ""}`);
   const negativePrompt = buildTextToImageNegativePrompt();
-  const strongReferenceMode = referenceImages.length > 0 && shouldUseStrongTextReferenceMode(request.prompt);
+  const strongReferenceMode = hasDirectUseTextReference(referenceImages);
   const sanitizedSourceAnalysis = sanitizedReferenceAnalysisForPrompt(request.sourceAnalysis, request.prompt);
 
   return [
     "任务：生成一张成熟、可提案的中文商业设计图。",
     referenceImages.length
       ? strongReferenceMode
-        ? "模式：主参考图强约束。第 1 张锁定版式、配色、构图和节奏；按用户需求轻微替换。"
+        ? "模式：参数已选择引用类图片。引用原图/人物/产品/主体/背景/Logo/IP 必须可见进入画面；参考类图片只按标注角色提供风格、构图、色调或排版。"
         : "模式：带参考图的文生图。文字需求为主，参考图只按标注角色提供素材或风格。"
       : "",
     "角色：资深中文商业广告设计师，输出像真实生产稿。",
@@ -880,10 +880,10 @@ function buildTextReferencePrompt(referenceImages: NonNullable<DesignRequest["re
     "",
     "【生成要求】",
     strongReferenceMode
-      ? "强参考：第 1 张参考图是主参考，优先保持它的版式骨架、色彩关系、信息层级、视觉重心、活动主题、核心文案和整体气质；只替换用户明确要求修改的内容。"
+      ? "引用模式：只有标记为引用原图、使用人物、使用产品、使用主体、使用背景、使用 Logo、使用 IP 的图片可以可见进入画面；参考风格、参考构图、参考色调、参考文字排版和只做参考的图片不能被直接照搬。"
       : "严格按上面的参考图角色使用素材：人物、产品、主体、背景、风格、构图、色调、文字排版、Logo、IP形象和装饰元素各用各的，不要把参考图身份混在一起。",
     strongReferenceMode
-      ? "第 2-5 张参考图只能补充人物、产品、Logo、IP、背景、装饰或局部质感，不能改变第 1 张的主体版式和配色方向。"
+      ? "多张图必须按各自角色分工：引用图负责可见主体/背景/素材，参考图只负责设计方向；不要把参考图里的人物、Logo、电话、地址、二维码或机构信息误当成引用内容。"
       : "输出一张完整新设计图，不是把参考图机械拼贴，也不是图生图复刻。",
     "参考图职责要分开：结构参考只控制版式，风格参考只控制色彩/质感，主体/产品/Logo 参考才可进入画面。",
     "不要把不同参考图的人物身份、品牌标识、包装文字和机构信息混合编造。",
@@ -891,11 +891,17 @@ function buildTextReferencePrompt(referenceImages: NonNullable<DesignRequest["re
 }
 
 export function shouldUseStrongTextReferenceMode(prompt: string) {
-  return /1\s*[:：比]\s*1|一比一|复刻|仿照|照着|照抄|同款|参考图|参考画面|画面参考|参考.*内容|参考.*文案|参考.*活动|活动信息|活动内容不变|其他不变|内容不变|主体不变|只改|只替换|稍微修改|轻微修改|小改|保持版式|版式不变|保持配色|配色不变|板式配色|版式配色|按这个版式|用这个版式|沿用版式|沿用配色|把.+改成|换成/.test(prompt);
+  void prompt;
+  return false;
+}
+
+function hasDirectUseTextReference(referenceImages: NonNullable<DesignRequest["referenceImages"]>) {
+  return referenceImages.some((item) => ["direct_use", "person", "product", "subject", "background", "logo", "ip"].includes(item.role));
 }
 
 function textReferenceRoleInstruction(role: string) {
   const labels: Record<string, string> = {
+    direct_use: "引用这张原图作为可见主视觉或背景素材，保留可识别场景、主体、透视和现场氛围",
     person: "使用其中的人物主体，保持人物识别度和自然融合",
     product: "使用其中的产品，保持产品识别度、透视和质感",
     subject: "使用其中的主体元素，作为本次画面的主要视觉来源",
@@ -944,165 +950,49 @@ function buildTextToImageVariantDirection(direction: DesignRequest["variantDirec
 
 export function buildImageEditPrompt(input: PromptRecipeInput) {
   const normalized = normalizePromptInput(input);
-  if (normalized.task === "image_to_image") {
-    return buildCreativeImageToImagePrompt(normalized);
-  }
-
-  const hasExplicitCopy = hasExplicitCopyInstruction(normalized.userPrompt);
-  const base = baseDesignLines(normalized, hasExplicitCopy);
-  const ratioLine = normalized.keepOriginalRatio
-    ? "比例：保持参考图原始比例和构图方向。"
-    : `比例/尺寸：按 ${normalized.aspectRatioLabel || "用户选择比例"} 重新组织画面${normalized.targetSize ? `，最终目标尺寸 ${normalized.targetSize}` : ""}。`;
-
-  const taskLines =
-    normalized.task === "outpaint"
-      ? [
-          "任务类型：AI 扩图 / outpainting。",
-          `扩展方向：${normalized.direction || "四周"}。`,
-          "保留原图核心内容，向外补全背景、光影、空间和版式延展。",
-          "不要白边、模糊边框或裁掉主体。",
-        ]
-      : normalized.task === "resize"
-        ? [
-            "任务类型：AI 改尺寸 / 比例重绘。",
-            resizeModeInstruction(normalized),
-            normalized.fitMode === "smart_outpaint"
-              ? "按目标画布扩展背景、光影和空间，保留原版式、原标题位置、主体比例和视觉重心；成图必须贴满目标画布。"
-              : "按新比例重排视觉重心、标题区、主体区和信息区；使用栅格、对齐轴和统一间距；成图必须贴满目标画布。",
-          ]
-        : [
-            "任务类型：图生图 / 参考图优化。",
-            "保留核心信息和可识别内容，优化版式、光影、背景质感和商业完成度。",
-          ];
-
-  return [...base, ratioLine, ...taskLines, outputQualityLines(normalized.quality), negativeLines()].filter(Boolean).join("\n");
+  const taskLabel =
+    normalized.task === "resize" ? "改比例/改尺寸"
+      : normalized.task === "outpaint" ? "AI 扩图"
+        : "图生图";
+  const lines = [
+    `任务：${taskLabel}。`,
+    `用户原始要求：${normalized.userPrompt || IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST}`,
+    normalized.keepOriginalRatio
+      ? "比例/尺寸：保持输入图原比例。"
+      : `比例/尺寸：${normalized.aspectRatioLabel || "按用户选择比例"}${normalized.targetSize ? `，目标 ${normalized.targetSize}` : ""}。`,
+    normalized.task === "outpaint" ? `扩展方向：${normalized.direction || "四周"}。` : "",
+    normalized.task === "image_to_image" ? "图生图必须先内部分析原图：设计类型、行业、核心文案、主体、信息层级、视觉重心、版式问题和当前目标尺寸；再重新规划版面并生成新图。" : "",
+    normalized.task === "image_to_image" ? "请根据目标比例重新安排标题、主体、卖点、背景、留白和安全边距；不是简单滤镜、高清修复、局部小改或照搬原图坐标。" : "",
+    normalized.task === "image_to_image" && normalized.creativeVariant === "subject"
+      ? "本次方案方向：方案B，主体/画面重心改版。重点重新设计主视觉、主体位置、背景空间和品牌质感，让画面明显不同于原图但主题一致。"
+      : "",
+    normalized.task === "image_to_image" && normalized.creativeVariant !== "subject"
+      ? "本次方案方向：方案A，信息层级改版。重点让标题、卖点、主体和行动信息更清晰，适合投放和快速理解。"
+      : "",
+    normalized.task === "resize" ? `处理方式：${normalized.fitMode || "smart_relayout"}。AI 改比例必须按目标画布原生重新构图和重绘，不是拉伸、压扁、裁切、简单缩放或把旧图贴在中间。` : "",
+    normalized.task === "resize" ? "改比例必须先内部分析原图：设计类型、行业、核心文案、主体、信息层级、视觉重心和版面结构；再重新安排标题、主体、人物/产品、卖点、背景空间和安全边距，让画面天然符合目标比例。" : "",
+    normalized.task === "resize" ? "字体、Logo、二维码、人物/IP、产品都要保持自然比例；标题可以重新做字形和排版，但不能横向拉宽、纵向压扁或让人物身体比例失真。" : "",
+    "请直接分析输入图片和用户要求，然后输出修改后的最终图片。",
+  ];
+  return lines.filter(Boolean).join("\n");
 }
 
 export const IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST =
-  "参考输入图片的主题、品牌色、核心文案、Logo、主体形象和重要卖点，重新设计一张明显不同的新广告画面。";
+  "用户没有额外要求，请先分析输入图片的设计类型、行业、核心文案、主体、版面结构和信息层级，再按当前目标比例重新设计成新的画面。";
 
 export const IMAGE_TO_IMAGE_CREATIVE_REDESIGN_PROMPT =
-  "请参考输入图片的主题、品牌色、核心文案、Logo、主体形象和重要卖点，重新设计一张新的广告画面。保留识别度和核心含义，但重排标题、主体、卖点、背景和视觉重心；不要只是高清重绘或轻微挪动。";
-
-function buildCreativeImageToImagePrompt(input: ReturnType<typeof normalizePromptInput>) {
-  const variantLines = input.creativeVariant === "subject"
-    ? [
-        "本次输出：方案 2，主体视觉主导方向。",
-        "Variant: subject-led design. Make the person/product/IP the first focal point; arrange title and selling points around it.",
-      ]
-    : [
-        "本次输出：方案 1，大标题主导方向。",
-        "Variant: headline-led design. Make the main headline area stronger; subject and selling points support the headline.",
-      ];
-  const ratioLine = input.keepOriginalRatio
-    ? "Canvas: keep the reference aspect ratio, but redesign layout, text area, subject area, and visual center."
-    : `Canvas: native ${input.aspectRatioLabel || "selected ratio"}${input.targetSize ? `, target ${input.targetSize}` : ""}; redesign for this canvas, no crop or padding.`;
-
-  return [
-    "Edit the input image into a new commercial design. This is creative redesign, not high-definition restoration.",
-    "高清重绘是让原图变清楚；图生图是参考原图重新设计。",
-    ratioLine,
-    `User direction: ${compactPromptText(input.userPrompt || IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST, 900)}`,
-    ...variantLines,
-    "Preserve from the input: theme, brand color direction, core copy meaning, logo identity, main person/product/IP recognizability, and important selling points.",
-    "差异化：两个方案至少在标题位置、主体位置、卖点排列、背景光效、画面重心中的 3 项不同。",
-    "Redesign: title position, subject position, selling point grouping, background lighting, and visual weight should feel intentionally new.",
-    "构图：full composition, complete text/subject visible, 12-16% safe margins, no edge clipping.",
-    "超宽横幅：标题和卖点放在垂直中心安全带，主标题高度不超过横幅高度 35%。",
-    compactPromptText(buildCreativeImageToImageProtectionPrompt(input.protectionContext), 900),
-    buildDomainLines(`${input.adType}\n${input.userPrompt}\n${input.sourceAnalysis}`),
-    "Avoid: copying the original layout, tiny changes only, fake text, fake logo, fake phone/address/QR code, missing core information, watermark, cropping, side blur padding.",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function buildCreativeImageToImageProtectionPrompt(context?: ProtectionContext) {
-  const normalized = normalizeProtectionContext(context);
-  const brand = normalized.brandProfile;
-  const protectedTexts = normalized.protectedTexts || [];
-  const protectedAssets = normalized.protectedAssets || [];
-  const creativeRules = (brand?.rules || []).filter((rule) => !isConservativeCreativeRule(rule));
-
-  return [
-    protectedTexts.length
-      ? [
-          "创意改版文字约束：以下内容属于真实信息或核心文案，要延续含义和准确性，可以重新拆分、放大、弱化或重排。",
-          ...protectedTexts.map((item) => `- ${item.text}（${item.kind}，${importanceLabel(item.importance)}）`),
-        ].join("\n")
-      : "",
-    protectedAssets.length
-      ? [
-          "创意改版资产约束：以下资产要保持识别准确，但允许根据新构图安排到新的安全位置。",
-          ...protectedAssets.map((item) => `- ${item.label}：${creativeAssetInstruction(item.type)}`),
-        ].join("\n")
-      : "",
-    brand
-      ? [
-          "品牌风格约束：",
-          brand.name ? `- 品牌/机构：${brand.name}` : "",
-          brand.colors?.length ? `- 品牌色：${brand.colors.join("、")}` : "",
-          brand.fontStyle ? `- 字体气质：${brand.fontStyle}` : "",
-          brand.visualTone ? `- 视觉气质：${brand.visualTone}` : "",
-          brand.logoPlacement ? `- Logo/二维码：保持品牌识别准确，可按新画面重新安排安全位置。${brand.logoPlacement}` : "",
-          ...creativeRules.map((rule) => `- ${rule}`),
-        ]
-          .filter(Boolean)
-          .join("\n")
-      : "",
-    "创意改版保护边界：保护品牌、真实信息和主体识别度，不要求沿用原构图、原版式、原主体位置、原标题位置或原卖点排列方式。",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function creativeAssetInstruction(type: string) {
-  if (type === "logo") return "Logo 只能来自参考图或项目资产，保持品牌识别准确，可以按新构图调整位置和大小。";
-  if (type === "qr") return "二维码不要由 AI 重绘；需要出现时作为原始素材回贴到新构图的安全位置。";
-  if (type === "portrait") return "人物、医生照片或 IP 形象保持识别度，但可以重新安排画面位置、比例和视觉重心。";
-  if (type === "product") return "主体或产品保持可识别，不替换成无关对象，但可以重新安排位置和层级。";
-  return "保持资产识别度和真实来源，不虚构新资产。";
-}
-
-function isConservativeCreativeRule(rule: string) {
-  return /保持原图|原图比例|比例不变|内容不减|原样优化|只优化版式|不改变布局|不要改变版式|主体、产品、主视觉结构不要改变|核心构图不要随意替换|不要随意移动|只修改涂抹|蒙版区域|mask/i.test(rule);
-}
-
-function importanceLabel(value: "critical" | "high" | "normal") {
-  if (value === "critical") return "关键";
-  if (value === "high") return "重要";
-  return "普通";
-}
+  "请先分析输入图的设计类型、行业、尺寸比例、信息层级、标题/卖点/主体/背景/留白关系，再参考输入图的主题、配色、核心文案、主体形象和重要卖点，按目标画布重新设计一张新的广告画面。保留识别度和核心含义，但必须重排标题、主体、卖点、背景和视觉重心；不要只是高清重绘、轻微挪动或机械套旧版式。缺失的电话、地址、Logo、二维码不要编造。";
 
 export function buildFuseImagesPrompt(input: PromptRecipeInput) {
   const normalized = normalizePromptInput({ ...input, task: "fuse" });
-  const hasExplicitCopy = hasExplicitCopyInstruction(normalized.userPrompt);
-  const variantLines = normalized.compositeVariant === "advertising"
-    ? [
-        "本次输出：方案B，广告设计合成。",
-        "Variant B: advertising composite. Make it more polished, layered, and commercial while keeping the placement believable.",
-      ]
-    : [
-        "本次输出：方案A，真实自然合成。",
-        "Variant A: natural realistic composite. It should look like one real shot, not a pasted object.",
-      ];
   return [
-    "任务类型：AI合成。不是简单融合两张图，而是把图1的主体自然合成到图2的场景里。",
-    "Edit image 2 by adding the main subject from image 1 into the scene.",
-    `Composite goal: ${compactPromptText(normalized.fusionMode || "主体入景", 500)}.`,
-    "图1 = 主体来源；图2 = 场景来源",
-    "Image 1 = subject source. Image 2 = scene/background source.",
-    "合成要点：大小、位置、透视、接触、遮挡、光向、投影、反射、色温、颗粒、清晰度、边缘和景深一致。",
-    "Match scale, placement, perspective, contact, occlusion, light direction, shadow, reflection, color temperature, grain, sharpness, edge softness, and depth of field.",
-    ...variantLines,
-    "Preserve subject identity from image 1 and any user-specified brand/text/logo/phone/address/QR assets.",
-    "Composition: subject, hair/hands/feet/product edges/logo/title/QR/bottom info complete inside the safe area.",
-    ...baseDesignLines(normalized, hasExplicitCopy),
+    "任务：AI 合成。",
+    "图1 = 主体来源；图2 = 场景/背景来源。",
+    `用户原始要求：${normalized.userPrompt || normalized.fusionMode || "未提供明确合成要求"}`,
     normalized.keepOriginalRatio
-      ? "Canvas: keep image 2 scene aspect ratio."
-      : `Canvas: native ${normalized.aspectRatioLabel || "selected ratio"}${normalized.targetSize ? `, target ${normalized.targetSize}` : ""}; no cropped important content.`,
-    outputQualityLines(normalized.quality),
-    "Avoid: side-by-side collage, transparent overlay, sticker edges, double border, pasted look, mismatched light, cropped subject, fake text/logo/QR.",
+      ? "比例/尺寸：保持图2场景原比例。"
+      : `比例/尺寸：${normalized.aspectRatioLabel || "按用户选择比例"}${normalized.targetSize ? `，目标 ${normalized.targetSize}` : ""}。`,
+    "请直接分析两张输入图和用户要求，然后输出最终合成图。",
   ]
     .filter(Boolean)
     .join("\n");
@@ -1278,46 +1168,6 @@ function hasExplicitCopyInstruction(prompt: string) {
   if (/(电话|地址|联系方式|二维码|QR|qr)/i.test(text) && /(写上|加上|加入|显示|展示|放上|要有|包含|使用)/i.test(text)) return true;
   if (/内容不(少|减|变)|保留全部|全部保留/i.test(text)) return true;
   return false;
-}
-
-function resizeModeInstruction(input: ReturnType<typeof normalizePromptInput>) {
-  if (input.fitMode === "smart_relayout") {
-    return [
-      "处理模式：智能改版重排 / 新尺寸新排版。",
-      "原图只作为主题、品牌色、主体素材和核心信息参考，不把原图坐标、原标题位置、原主体位置当成锁定布局。",
-      "根据目标比例重排标题、Logo、主体、卖点和背景，像原生目标尺寸设计稿；内容保留含义和识别度，但位置必须服从新画布。",
-      "先识别原图元素和信息层级，再按横/竖阅读逻辑重新布局；必须有栅格、对齐轴、分区和统一间距。",
-      resizeOrientationInstruction(input.aspectRatioLabel, input.targetSize),
-      "构图：full poster visible, no cropping, no cut off；重要元素放中心 76% 安全区，四周 18% 只放背景和出血装饰。",
-      "禁止：照搬原横版/竖版坐标、简单缩放、机械裁切、拉伸、中间原图 + 两侧模糊/磨砂/玻璃补边。",
-    ].join("\n");
-  }
-  if (input.fitMode === "crop") return "处理模式：安全裁切。主体、标题、Logo、二维码必须留在安全区。";
-  if (input.fitMode === "pad") return "处理模式：补背景保完整，允许背景填充但不能白边或空边。";
-  if (input.fitMode === "keep_ratio") return "处理模式：保持比例放大，不改比例、不加边、不裁切。";
-  return "处理模式：扩图补画。保持原版式、原标题位置、主体比例和视觉重心，只向四周或指定方向补全真实背景、空间、光影和必要延展内容；禁止留白、模糊边框和磨砂补边。";
-}
-
-function resizeOrientationInstruction(aspectRatioLabel: string, targetSize: string) {
-  const size = parseTargetSizeForPrompt(targetSize);
-  const vertical = Boolean(size && size.height > size.width) || /9:16|3:4|4:5|竖/.test(aspectRatioLabel);
-  const horizontal = Boolean(size && size.width > size.height) || /16:9|4:3|3:2|横/.test(aspectRatioLabel);
-  if (vertical) {
-    return "竖版重排：这是竖版新设计，不是横版海报放进竖版画布。标题放上方或中上方居中安全区，主体放中部或中下部，卖点/电话/地址进入底部或标题下方信息区；原图右侧标题位置不能照搬。";
-  }
-  if (horizontal) {
-    return "横版重排：这是横版新设计，不是竖版图片裁成横版。标题、主体和卖点按横向阅读动线重新分区，主体完整，左右留出安全边距，不能把原竖版中心构图机械放大裁切。";
-  }
-  return "方图重排：标题、主体和卖点围绕中心视觉焦点重新平衡，不能照搬原横版或竖版的边缘位置。";
-}
-
-function parseTargetSizeForPrompt(targetSize: string) {
-  const match = targetSize.match(/(\d+)\s*[×xX]\s*(\d+)/);
-  if (!match) return null;
-  return {
-    width: Number(match[1]) || 0,
-    height: Number(match[2]) || 0,
-  };
 }
 
 function outputQualityLines(quality?: string) {

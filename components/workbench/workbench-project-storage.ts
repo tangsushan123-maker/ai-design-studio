@@ -27,12 +27,27 @@ import type {
 
 export function getStoredProject(serverProject: ProjectPayload | null): ProjectPayload | null {
   const localProject = readLegacyProjectLocalCache();
-  if (!serverProject) return localProject;
+  const recoveryProject = readProjectRecoveryCache(serverProject?.id || localProject?.id);
+  if (!serverProject) return recoveryProject || localProject;
 
   const stableServerProject = stripProjectRuntimeState(serverProject);
   const sameProjectLocal = localProject?.id && localProject.id === serverProject.id ? localProject : null;
+  const sameProjectRecovery = recoveryProject?.id && recoveryProject.id === serverProject.id ? recoveryProject : null;
   const serverHasCanvas = Boolean(stableServerProject.nodes?.length || stableServerProject.edges?.length);
   const serverHasProjectData = Boolean(stableServerProject.assets?.length || stableServerProject.assetText || stableServerProject.profile);
+  if (sameProjectRecovery) {
+    const recoveryHasCanvas = Boolean(sameProjectRecovery.nodes?.length || sameProjectRecovery.edges?.length || sameProjectRecovery.runs?.length);
+    const recoveryNewer = projectPayloadTime(sameProjectRecovery) > projectPayloadTime(stableServerProject);
+    if (recoveryNewer || (!serverHasCanvas && recoveryHasCanvas)) {
+      return {
+        ...stableServerProject,
+        ...stripProjectRuntimeState(sameProjectRecovery),
+        ownerUserId: sameProjectRecovery.ownerUserId || stableServerProject.ownerUserId,
+        ownerEmail: sameProjectRecovery.ownerEmail || stableServerProject.ownerEmail,
+        ownerName: sameProjectRecovery.ownerName || stableServerProject.ownerName,
+      };
+    }
+  }
   if (!sameProjectLocal || serverHasCanvas || serverHasProjectData) {
     return {
       ...sameProjectLocal,
@@ -49,6 +64,28 @@ export function getStoredProject(serverProject: ProjectPayload | null): ProjectP
     };
   }
   return localProject ? stripProjectRuntimeState(localProject) : null;
+}
+
+function readProjectRecoveryCache(preferredProjectId?: string): ProjectPayload | null {
+  try {
+    const activeId = window.localStorage.getItem(projectRecoveryActiveKey());
+    const candidates = Array.from(new Set([preferredProjectId, activeId, "local-project"].filter(Boolean) as string[]));
+    for (const projectId of candidates) {
+      const raw = window.localStorage.getItem(projectRecoveryStorageKey(projectId));
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object") continue;
+      const candidate = stripProjectRuntimeState(parsed as ProjectPayload);
+      const hasProjectShape = Boolean(candidate.id || candidate.name || candidate.nodes?.length || candidate.edges?.length || candidate.runs?.length);
+      if (hasProjectShape) return candidate;
+    }
+  } catch {}
+  return null;
+}
+
+function projectPayloadTime(project: Partial<ProjectPayload> | null | undefined) {
+  const parsed = Date.parse(String(project?.updatedAt || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function readLegacyProjectLocalCache(): ProjectPayload | null {
@@ -296,9 +333,11 @@ export function clearDeletedProjectBrowserCache(projectId: string) {
     window.localStorage.removeItem(dismissedTaskStorageKey(projectId));
     window.localStorage.removeItem(dismissedImageStorageKey(projectId));
     window.localStorage.removeItem(projectSnapshotStorageKey(projectId));
+    window.localStorage.removeItem(projectRecoveryStorageKey(projectId));
     const raw = window.localStorage.getItem(projectStorageKey);
     const parsed = raw ? JSON.parse(raw) as Partial<ProjectLocalCachePointer> : null;
     if (parsed?.activeProjectId === projectId) window.localStorage.removeItem(projectStorageKey);
+    if (window.localStorage.getItem(projectRecoveryActiveKey()) === projectId) window.localStorage.removeItem(projectRecoveryActiveKey());
   } catch {}
 }
 
@@ -318,6 +357,7 @@ function writeProjectLocalCachePointer(payloadText: string) {
       imageCount: Array.isArray(payload.assets) ? payload.assets.length : 0,
       message: "完整项目已保存到项目文件；浏览器缓存只保留轻量指针。",
     };
+    writeProjectRecoveryCache(payload.id || "local-project", payloadText);
   } catch {
     pointer = {
       version: 2,
@@ -341,6 +381,24 @@ function writeProjectLocalCachePointer(payloadText: string) {
   } catch (error) {
     return localStorageErrorMessage(error, pointerText.length);
   }
+}
+
+function writeProjectRecoveryCache(projectId: string, payloadText: string) {
+  try {
+    const parsed = JSON.parse(payloadText) as Partial<ProjectPayload>;
+    const stablePayload = stripProjectRuntimeState(parsed as ProjectPayload);
+    const recoveryText = JSON.stringify(stablePayload);
+    window.localStorage.setItem(projectRecoveryStorageKey(projectId), recoveryText);
+    window.localStorage.setItem(projectRecoveryActiveKey(), projectId || "local-project");
+  } catch {}
+}
+
+function projectRecoveryActiveKey() {
+  return `${projectStorageKey}:recovery-active`;
+}
+
+function projectRecoveryStorageKey(projectId: string | undefined) {
+  return `${projectStorageKey}:recovery:${projectId || "local-project"}`;
 }
 
 export function localStorageErrorMessage(error: unknown, payloadLength: number) {
@@ -370,6 +428,6 @@ export function isFiniteViewport(viewport?: ProjectPayload["viewport"]): viewpor
     Number.isFinite(viewport.y) &&
     Number.isFinite(viewport.zoom) &&
     viewport.zoom >= 0.08 &&
-    viewport.zoom <= 3,
+    viewport.zoom <= 4,
   );
 }

@@ -90,6 +90,10 @@ export function AccountSwitcher({ compact = false, expanded = false }: AccountSw
       </button>
       {open ? (
         <div className={panelClassName} role="menu">
+          <div className="account-menu__identity">
+            <span>{user?.name || user?.email || "当前账号"}</span>
+            <small>{isAdmin ? "管理员" : "普通账号"}</small>
+          </div>
           {isAdmin ? (
             <Link className="account-menu__item" href="/accounts" role="menuitem" onClick={() => setOpen(false)}>
               <Users size={14} aria-hidden="true" />

@@ -26,9 +26,15 @@ export function largePreviewFrameStyle(image: Pick<ImageAsset, "outputSize" | "w
 export function zoomedPreviewFrameStyle(image: Pick<ImageAsset, "outputSize" | "width" | "height"> | null | undefined, zoom: number) {
   const width = Math.max(1, image?.outputSize?.width || image?.width || 1);
   const height = Math.max(1, image?.outputSize?.height || image?.height || 1);
+  const scaledWidth = Math.round(width * zoom);
+  const scaledHeight = Math.round(height * zoom);
   return {
     aspectRatio: `${width} / ${height}`,
-    width: `${Math.round(width * zoom)}px`,
+    width: `${scaledWidth}px`,
+    height: `${scaledHeight}px`,
+    minWidth: `${scaledWidth}px`,
+    minHeight: `${scaledHeight}px`,
+    flexShrink: 0,
     maxWidth: "none",
     maxHeight: "none",
   };

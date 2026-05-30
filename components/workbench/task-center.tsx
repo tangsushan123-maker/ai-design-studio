@@ -51,7 +51,7 @@ export type TaskCenterTask = {
   targetSize?: string;
 };
 
-type TaskMachinePhase = "queued" | "model" | "saving" | "verifying" | "completed" | "needs_review" | "failed" | "cancelled" | "stuck";
+type TaskMachinePhase = "queued" | "model" | "saving" | "verifying" | "completed" | "failed" | "cancelled" | "stuck";
 
 export function TaskCenter({
   onCancel,
@@ -87,11 +87,13 @@ export function TaskCenter({
   const [confirmActionKey, setConfirmActionKey] = useState("");
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const normalizedQuery = query.trim();
+  const hasLiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running" || task.status === "saving");
 
   useEffect(() => {
+    if (!hasLiveTasks) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [hasLiveTasks]);
 
   if (!tasks.length) {
     return emptyState || null;
@@ -99,8 +101,6 @@ export function TaskCenter({
 
   const matchedTasks = tasks.filter((task) => taskMatchesSearch(task, normalizedQuery));
   const {
-    attentionCount,
-    attentionTasks,
     cancelledCount,
     completedTasks,
     deferredTasks,
@@ -112,7 +112,7 @@ export function TaskCenter({
     successCount,
     timelineTasks,
     visibleTimelineTasks,
-  } = buildTaskCenterGroups(matchedTasks, visibleCount, isDeferredQueuedTask, isTaskPossiblyStuck);
+  } = buildTaskCenterGroups(matchedTasks, visibleCount, isDeferredQueuedTask);
 
   async function runTaskAction(label: string, key: string, action: () => void | Promise<unknown>) {
     const actionKey = `${label}:${key}`;
@@ -163,6 +163,7 @@ export function TaskCenter({
     const progressText = taskProgressText(task, stuck, outputsCount, stageLabel, visibleResult, machinePhase);
     const recoveryHint = taskRecoveryHint(task, stuck, visibleResult);
     const showDetailedTiming = task.status === "running" || task.status === "saving" || stuck;
+    const timingChips = taskTimingChips(task, now, formatDuration);
 
     return (
       <article key={task.id} className={`rounded-[20px] border p-3 ${taskCardClass(task, stuck)}`}>
@@ -224,6 +225,15 @@ export function TaskCenter({
               {task.requestId ? <span className="truncate">请求 {shortTaskRequestId(task.requestId)}</span> : null}
               {task.backendRunState ? <span className="text-right">进程 {taskRunStateLabel(task.backendRunState)}</span> : null}
             </div>
+            {timingChips.length ? (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {timingChips.map((chip) => (
+                  <span className="rounded-full border border-white/10 bg-white/[0.045] px-2 py-1 text-[11px] leading-none text-white/42" key={chip}>
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             {task.error ? <div className="apple-caption mt-1 truncate text-[#ffb4a8]">{task.error}</div> : null}
             {recoveryHint ? (
               <div className={`mt-2 rounded-[12px] border px-2.5 py-2 text-[11px] leading-5 ${recoveryHint.tone === "danger" ? "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]" : "border-[#ffd166]/18 bg-[#ffd166]/10 text-[#ffe1a3]"}`}>
@@ -268,7 +278,6 @@ export function TaskCenter({
             {failedCount ? ` · 失败 ${failedCount}` : ""}
             {cancelledCount ? ` · 已停 ${cancelledCount}` : ""}
             {deferredTasks.length ? ` · ${deferredTasks.length} 个待执行` : ""}
-            {attentionCount ? ` · ${attentionCount} 个需处理` : ""}
             {normalizedQuery ? ` · 匹配 ${matchedTasks.length}/${tasks.length}` : ""}
           </div>
         </div>
@@ -284,6 +293,13 @@ export function TaskCenter({
           </button>
         ) : null}
       </div>
+      {runningCount ? (
+        <div className="grid grid-cols-3 gap-1.5 rounded-[16px] border border-white/10 bg-white/[0.035] p-1.5 text-center text-[11px] text-white/50">
+          <div className="rounded-[12px] bg-white/[0.045] px-1.5 py-1.5">1 排队/准备</div>
+          <div className="rounded-[12px] bg-white/[0.045] px-1.5 py-1.5">2 模型生成</div>
+          <div className="rounded-[12px] bg-white/[0.045] px-1.5 py-1.5">3 保存展示</div>
+        </div>
+      ) : null}
       {actionMessage ? (
         <div className={`rounded-[14px] border px-3 py-2 text-[11px] leading-5 ${
           actionMessage.tone === "success"
@@ -302,7 +318,7 @@ export function TaskCenter({
             setConfirmActionKey("");
             setVisibleCount(12);
           }}
-          placeholder="搜索节点、模型、质检、请求、错误、状态"
+          placeholder="搜索节点、模型、请求、错误、状态"
           value={query}
         />
         {query ? (
@@ -356,15 +372,6 @@ export function TaskCenter({
           {runningTasks.map(renderTask)}
         </section>
       ) : null}
-      {attentionTasks.length ? (
-        <section className="space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <div className="apple-section-title">需要处理</div>
-            <div className="apple-caption">{attentionCount} 个</div>
-          </div>
-          {attentionTasks.map(renderTask)}
-        </section>
-      ) : null}
       {completedTasks.length ? (
         <section className="space-y-2">
           <div className="flex items-center justify-between px-1">
@@ -395,7 +402,6 @@ function buildTaskCenterGroups(
   tasks: TaskCenterTask[],
   visibleCount: number,
   isDeferredQueuedTask: (task: TaskCenterTask) => boolean,
-  isTaskPossiblyStuck: (task: TaskCenterTask) => boolean,
 ) {
   const deferredTasks: TaskCenterTask[] = [];
   const timelineTasks: TaskCenterTask[] = [];
@@ -404,7 +410,6 @@ function buildTaskCenterGroups(
   let successCount = 0;
   let failedCount = 0;
   let cancelledCount = 0;
-  let attentionCount = 0;
 
   for (const task of tasks) {
     const deferred = isDeferredQueuedTask(task);
@@ -416,22 +421,17 @@ function buildTaskCenterGroups(
     if (taskIsSuccessful(task)) successCount += 1;
     if (task.status === "failed" && !taskHasAnyResult(task)) failedCount += 1;
     if (task.status === "cancelled") cancelledCount += 1;
-    if (!deferred && taskNeedsAttention(task, isTaskPossiblyStuck)) attentionCount += 1;
   }
 
   const visibleTimelineTasks = timelineTasks.slice(0, visibleCount);
-  const attentionTasks: TaskCenterTask[] = [];
   const runningTasks: TaskCenterTask[] = [];
   const completedTasks: TaskCenterTask[] = [];
   for (const task of visibleTimelineTasks) {
-    if (taskNeedsAttention(task, isTaskPossiblyStuck)) attentionTasks.push(task);
-    else if (taskIsRunningStatus(task)) runningTasks.push(task);
-    else if (taskIsSuccessful(task)) completedTasks.push(task);
+    if (taskIsRunningStatus(task)) runningTasks.push(task);
+    else if (taskIsSuccessful(task) || taskHasAnyResult(task) || task.status === "completed") completedTasks.push(task);
   }
 
   return {
-    attentionCount,
-    attentionTasks,
     cancelledCount,
     completedTasks,
     deferredTasks,
@@ -451,16 +451,7 @@ function taskIsRunningStatus(task: TaskCenterTask) {
 }
 
 function taskIsSuccessful(task: TaskCenterTask) {
-  return !taskIsPartialSuccess(task) && !taskHasQualityConcern(task) && ((task.status === "completed" && task.resultOnCanvas) || taskHasVisibleResult(task));
-}
-
-function taskNeedsAttention(task: TaskCenterTask, isTaskPossiblyStuck: (task: TaskCenterTask) => boolean) {
-  return (task.status === "failed" && !taskHasAnyResult(task)) ||
-    taskIsPartialSuccess(task) ||
-    taskHasQualityConcern(task) ||
-    task.status === "cancelled" ||
-    isTaskPossiblyStuck(task) ||
-    (task.status === "completed" && !task.resultOnCanvas);
+  return taskHasVisibleResult(task) || task.status === "completed" || (task.status === "failed" && taskHasAnyResult(task));
 }
 
 function taskImageLabel(image: TaskCenterImage) {
@@ -499,9 +490,32 @@ function taskRunStateLabel(state: NonNullable<TaskCenterTask["backendRunState"]>
   return labels[state] || state;
 }
 
+function taskTimingChips(task: TaskCenterTask, now: number, formatDuration: (milliseconds: number) => string) {
+  const chips: string[] = [];
+  if (task.requestStartedAt) {
+    const queuedMs = Math.max(0, task.requestStartedAt - task.startedAt);
+    chips.push(`排队 ${formatDuration(queuedMs)}`);
+  }
+  if (task.modelDurationMs) {
+    chips.push(`模型 ${formatDuration(task.modelDurationMs)}`);
+  } else if (task.requestStartedAt && (task.status === "running" || task.status === "saving")) {
+    chips.push(`模型 ${formatDuration(Math.max(0, now - task.requestStartedAt))}`);
+  }
+  if (task.saveDurationMs) {
+    chips.push(`保存 ${formatDuration(task.saveDurationMs)}`);
+  } else if (task.saveStartedAt && task.status === "saving") {
+    chips.push(`保存 ${formatDuration(Math.max(0, now - task.saveStartedAt))}`);
+  }
+  if (task.endedAt) {
+    chips.push(`总计 ${formatDuration(Math.max(0, task.endedAt - task.startedAt))}`);
+  }
+  return chips.slice(0, 4);
+}
+
 function taskCardClass(task: TaskCenterTask, stuck: boolean) {
-  if (taskHasQualityConcern(task)) return "border-[#ffd166]/22 bg-[#ffd166]/[0.045]";
   if (taskHasVisibleResult(task)) return "border-[#74e3c5]/18 bg-[#74e3c5]/[0.035]";
+  if (taskHasAnyResult(task)) return "border-[#74e3c5]/18 bg-[#74e3c5]/[0.035]";
+  if (taskHasQualityConcern(task)) return "border-[#ffd166]/22 bg-[#ffd166]/[0.045]";
   if (taskIsPartialSuccess(task)) return "border-[#ffd166]/22 bg-[#ffd166]/[0.045]";
   if (task.status === "failed") return "border-[#ff6b5f]/20 bg-[#ff6b5f]/[0.045]";
   if (stuck) return "border-[#ffd166]/22 bg-[#ffd166]/[0.045]";
@@ -511,8 +525,9 @@ function taskCardClass(task: TaskCenterTask, stuck: boolean) {
 }
 
 function taskStatusClass(task: TaskCenterTask, stuck: boolean) {
-  if (taskHasQualityConcern(task)) return "bg-[#ffd166]/14 text-[#ffe1a0]";
   if (taskHasVisibleResult(task)) return "bg-[#74e3c5]/12 text-[#adf8e5]";
+  if (taskHasAnyResult(task)) return "bg-[#74e3c5]/12 text-[#adf8e5]";
+  if (taskHasQualityConcern(task)) return "bg-[#ffd166]/14 text-[#ffe1a0]";
   if (taskIsPartialSuccess(task)) return "bg-[#ffd166]/14 text-[#ffe1a0]";
   if (task.status === "failed") return "bg-[#ff6b5f]/14 text-[#ffb4a8]";
   if (stuck) return "bg-[#ffd166]/14 text-[#ffe1a0]";
@@ -522,8 +537,9 @@ function taskStatusClass(task: TaskCenterTask, stuck: boolean) {
 }
 
 function taskProgressClass(task: TaskCenterTask, stuck: boolean) {
-  if (taskHasQualityConcern(task)) return "bg-[#ffd166]";
   if (taskHasVisibleResult(task)) return "bg-[#74e3c5]";
+  if (taskHasAnyResult(task)) return "bg-[#74e3c5]";
+  if (taskHasQualityConcern(task)) return "bg-[#ffd166]";
   if (taskIsPartialSuccess(task)) return "bg-[#ffd166]";
   if (task.status === "failed") return "bg-[#ff6b5f]";
   if (stuck) return "bg-[#ffd166]";
@@ -535,10 +551,10 @@ function taskProgressClass(task: TaskCenterTask, stuck: boolean) {
 function taskStatusText(task: TaskCenterTask, stuck: boolean, stageLabel: string, visibleResult = false, phase = taskMachinePhase(task, stuck, visibleResult)) {
   const phaseLabel = taskPhaseLabel(phase);
   if (phaseLabel) return phaseLabel;
-  if (taskHasQualityConcern(task)) return "需复查";
   if (visibleResult) return "成功";
   if (taskIsPartialSuccess(task)) return "部分成功";
-  if (task.status === "completed" && taskHasAnyResult(task) && !task.resultOnCanvas) return "待展示";
+  if (taskHasQualityConcern(task) && taskHasAnyResult(task)) return "已生成";
+  if (task.status === "completed" && taskHasAnyResult(task) && !task.resultOnCanvas) return "已生成";
   if (task.status === "completed") return "成功";
   if (task.status === "failed") return "失败";
   if (task.status === "cancelled") return "已停止";
@@ -548,7 +564,7 @@ function taskStatusText(task: TaskCenterTask, stuck: boolean, stageLabel: string
 }
 
 function taskProgressText(task: TaskCenterTask, stuck: boolean, outputsCount: number, stageLabel: string, visibleResult = false, phase = taskMachinePhase(task, stuck, visibleResult)) {
-  if (taskHasQualityConcern(task)) return "结果已生成，但质检提示需要复查；可先预览，再决定是否重试";
+  if (taskHasQualityConcern(task) && taskHasAnyResult(task)) return "结果已生成，可预览或继续重试";
   if (visibleResult) return "结果已显示在画布，任务记录已自动修正";
   if (taskIsPartialSuccess(task)) {
     return "已有可用输出，但结果未完整通过；请预览后决定是否重试";
@@ -559,15 +575,12 @@ function taskProgressText(task: TaskCenterTask, stuck: boolean, outputsCount: nu
   }
   if (task.status === "failed") return task.progressLabel || "任务失败，可重试或删除记录";
   if (task.status === "cancelled") return "已停止，可重试或删除记录";
-  if (stuck) return "运行较久，仍在等服务端结果；可继续等待、停止或稍后核验";
+  if (stuck) return "运行时间偏长，但后台仍在核验；可继续等待，也可以停止后重试";
   if (phase === "verifying") return task.progressLabel || "正在核验任务记录、结果库和画布节点";
   return task.progressLabel || stageLabel;
 }
 
 function taskRecoveryHint(task: TaskCenterTask, stuck: boolean, visibleResult = taskHasVisibleResult(task)): { text: string; tone: "warning" | "danger" } | null {
-  if (taskHasQualityConcern(task)) {
-    return { text: "结果已在画布，但质检提示未完全通过。先预览细节；如文字、Logo、白边或尺寸不稳，直接重试或降低复杂度。", tone: "warning" };
-  }
   if (visibleResult) return null;
   if (taskIsPartialSuccess(task)) {
     return { text: "已有部分图片结果。先预览可用图；如果缺图或质量不稳，再点“重试”补生成。", tone: "warning" };
@@ -583,7 +596,7 @@ function taskRecoveryHint(task: TaskCenterTask, stuck: boolean, visibleResult = 
     return { text: "任务失败。建议先重试一次；仍失败时，缩短提示词、降低质量或换一个图片模型。", tone: "danger" };
   }
   if (stuck) {
-    return { text: "任务运行时间偏长。可继续等后台返回；如果超过预期，停止后用相同节点重试。", tone: "warning" };
+    return { text: "任务运行时间偏长。常见原因是参考图多、尺寸大、模型排队或网络慢；如果超过预期，可停止后减少参考图或降低质量重试。", tone: "warning" };
   }
   if (task.status === "completed" && taskHasAnyResult(task) && !task.resultOnCanvas) {
     return { text: "结果已生成但没有落到画布。先在任务缩略图预览，必要时刷新项目或重新运行节点。", tone: "warning" };
@@ -596,11 +609,10 @@ function taskRecoveryHint(task: TaskCenterTask, stuck: boolean, visibleResult = 
 
 function taskMachinePhase(task: TaskCenterTask, stuck: boolean, visibleResult = taskHasVisibleResult(task)): TaskMachinePhase {
   if (task.status === "cancelled") return "cancelled";
-  if (taskHasQualityConcern(task)) return "needs_review";
   if (visibleResult) return "completed";
-  if (taskIsPartialSuccess(task)) return "needs_review";
-  if (task.status === "failed") return taskHasAnyResult(task) ? "needs_review" : "failed";
-  if (task.status === "completed") return taskHasAnyResult(task) && !task.resultOnCanvas ? "needs_review" : "completed";
+  if (taskIsPartialSuccess(task) || taskHasQualityConcern(task)) return taskHasAnyResult(task) ? "completed" : "failed";
+  if (task.status === "failed") return taskHasAnyResult(task) ? "completed" : "failed";
+  if (task.status === "completed") return "completed";
   if (stuck) return "stuck";
   if (task.status === "saving" || task.stage === "saving") return "saving";
   if (task.stage === "quality") return "verifying";
@@ -616,7 +628,6 @@ function taskPhaseLabel(phase: TaskMachinePhase) {
     saving: "保存中",
     verifying: "结果核验",
     completed: "成功",
-    needs_review: "需处理",
     failed: "失败",
     cancelled: "已停止",
     stuck: "运行较久",
@@ -651,14 +662,14 @@ function taskPhaseIndex(phase: TaskMachinePhase) {
   if (phase === "queued") return 0;
   if (phase === "model" || phase === "stuck") return 1;
   if (phase === "saving") return 2;
-  if (phase === "verifying" || phase === "needs_review") return 3;
+  if (phase === "verifying") return 3;
   return 4;
 }
 
 function taskPhaseStepClass(phase: TaskMachinePhase, index: number, activeIndex: number) {
   if (phase === "failed") return index <= activeIndex ? "bg-[#ff6b5f]" : "bg-white/[0.08]";
   if (phase === "cancelled") return index <= activeIndex ? "bg-white/32" : "bg-white/[0.08]";
-  if (phase === "needs_review" || phase === "stuck") return index <= activeIndex ? "bg-[#ffd166]" : "bg-white/[0.08]";
+  if (phase === "stuck") return index <= activeIndex ? "bg-[#ffd166]" : "bg-white/[0.08]";
   if (phase === "completed") return "bg-[#74e3c5]";
   if (index < activeIndex) return "bg-[#74e3c5]/75";
   if (index === activeIndex) return "bg-[#8fa7ff]";

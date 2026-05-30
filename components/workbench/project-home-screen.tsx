@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, Plus, RefreshCcw } from "lucide-react";
+import { FileImage, FolderOpen, ImagePlus, Plus, RefreshCcw, Wand2 } from "lucide-react";
 import { AccountSwitcher } from "@/components/account-switcher";
 
 export type ProjectHomeItem = {
@@ -45,15 +45,15 @@ export function ProjectHomeScreen({
 
   return (
     <main className="apple-shell flex h-screen items-center justify-center overflow-hidden p-5 text-[#f5f7fb]">
-      <section className="apple-panel-strong w-full max-w-[560px] rounded-[30px] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.34)] sm:p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
+      <section className="apple-panel-strong w-full max-w-[640px] rounded-[26px] p-3.5 shadow-[0_24px_74px_rgba(0,0,0,0.32)] sm:p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[20px] font-semibold text-white/92">AI 设计工作台</div>
-            <div className="apple-caption mt-1 truncate">先选择项目，再进入节点画布。</div>
+            <div className="text-[18px] font-semibold text-white/92">AI 设计工作台</div>
+            <div className="apple-caption mt-0.5 truncate">选择项目后进入节点画布。</div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <span className="apple-pill px-2.5 py-1 text-[11px]">{busy ? "准备中" : "就绪"}</span>
-            <div className="w-[116px]">
+            <div className="w-[104px]">
               <AccountSwitcher compact expanded />
             </div>
           </div>
@@ -61,27 +61,47 @@ export function ProjectHomeScreen({
 
         <div className="grid gap-2 sm:grid-cols-2">
           <button
-            className="apple-button-primary flex min-h-[96px] flex-col items-start justify-between rounded-[22px] px-4 py-3 text-left text-[#07121f] disabled:opacity-55"
+            className="apple-button-primary flex h-12 items-center gap-2.5 rounded-full px-3 text-left text-[#07121f] disabled:opacity-55"
             disabled={busy}
             onClick={onCreate}
             type="button"
           >
-            <Plus className="size-5" />
-            <span className="text-[17px] font-semibold">{busy ? "正在准备" : "新建项目"}</span>
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-black/[0.06]">
+              <Plus className="size-4" />
+            </span>
+            <span className="min-w-0 truncate text-[14px] font-semibold">{busy ? "正在准备" : "新建项目"}</span>
           </button>
           <button
-            className="apple-button flex min-h-[96px] flex-col items-start justify-between rounded-[22px] px-4 py-3 text-left text-white/82 disabled:opacity-55"
+            className="apple-button flex h-12 items-center gap-2.5 rounded-full px-3 text-left text-white/82 disabled:opacity-55"
             disabled={projectActionsDisabled}
             onClick={onShowProjects}
             type="button"
           >
-            <FolderOpen className="size-5" />
-            <span className="text-[17px] font-semibold">{projectListLoading ? "刷新中" : "打开项目"}</span>
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
+              <FolderOpen className="size-4" />
+            </span>
+            <span className="min-w-0 truncate text-[14px] font-semibold">{projectListLoading ? "刷新中" : "打开项目"}</span>
           </button>
         </div>
 
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          {[
+            { icon: <Wand2 className="size-4" />, title: "一句话生成", desc: "输入需求直接做海报" },
+            { icon: <ImagePlus className="size-4" />, title: "上传图优化", desc: "改版、排版、增强" },
+            { icon: <FileImage className="size-4" />, title: "管理作品", desc: "查看收藏和回收站" },
+          ].map((item) => (
+            <div className="rounded-[18px] border border-white/10 bg-white/[0.035] p-3" key={item.title}>
+              <div className="mb-2 flex size-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-white/66">
+                {item.icon}
+              </div>
+              <div className="truncate text-[12px] font-semibold text-white/78">{item.title}</div>
+              <div className="mt-0.5 truncate text-[11px] text-white/38">{item.desc}</div>
+            </div>
+          ))}
+        </div>
+
         {pickerOpen ? (
-          <div className="mt-4 max-h-[46vh] overflow-auto rounded-[22px] border border-white/10 bg-white/[0.035] p-2">
+          <div className="mt-3 max-h-[46vh] overflow-auto rounded-[20px] border border-white/10 bg-white/[0.035] p-2">
             <div className="mb-2 flex items-center justify-between gap-3 px-1">
               <div className="min-w-0 text-[11px] font-semibold text-white/56">
                 {projectListLoading ? "正在刷新项目列表" : `项目列表 · ${projects.length}`}

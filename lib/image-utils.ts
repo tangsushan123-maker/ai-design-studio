@@ -58,6 +58,21 @@ export function getImageVariantApiUrl(publicUrl: string, kind: ImageVariantKind)
   return `/api/image-preview?kind=${kind}&src=${encodeURIComponent(publicUrl)}`;
 }
 
+export function normalizePublicGeneratedImageUrl(url: string) {
+  if (url.startsWith("/generated/")) return url;
+  try {
+    const parsed = new URL(url, "http://local");
+    if (parsed.pathname.startsWith("/generated/")) return parsed.pathname;
+    if (parsed.pathname !== "/api/image-preview") return "";
+    const src = parsed.searchParams.get("src") || "";
+    if (src.startsWith("/generated/")) return src;
+    const source = new URL(src, "http://local");
+    return source.pathname.startsWith("/generated/") ? source.pathname : "";
+  } catch {
+    return "";
+  }
+}
+
 export function parseDataUrl(dataUrl: string) {
   const match = dataUrl.match(/^data:(.+);base64,(.*)$/);
   if (!match) {
@@ -950,12 +965,13 @@ export async function composeMaskedEdit(
 }
 
 export async function readPublicImageUrl(url: string) {
-  if (!url.startsWith("/generated/")) {
+  const publicUrl = normalizePublicGeneratedImageUrl(url);
+  if (!publicUrl) {
     throw new Error("只支持处理本地生成的图片 URL。");
   }
 
   try {
-    const relativePath = decodeURIComponent(url.replace(/^\/generated\//, ""));
+    const relativePath = decodeURIComponent(publicUrl.replace(/^\/generated\//, ""));
     if (relativePath.split(/[\\/]/).some((part) => part === "..")) {
       throw new Error("图片路径不合法。");
     }
@@ -963,10 +979,26 @@ export async function readPublicImageUrl(url: string) {
     if (!fullPath.startsWith(generatedDir + path.sep)) {
       throw new Error("图片路径不合法。");
     }
-    return await readFile(fullPath);
+    return await readFile(fullPath).catch(async () => {
+      const fallback = await readGeneratedPreviewFallback(relativePath);
+      if (fallback) return fallback;
+      throw new Error("图片文件不存在。");
+    });
   } catch {
     throw new Error("找不到这张结果图片，可能已经被删除。");
   }
+}
+
+async function readGeneratedPreviewFallback(relativePath: string) {
+  if (relativePath.startsWith("_variants/")) return null;
+  for (const kind of ["preview", "thumbnail"] as const) {
+    const variantPath = getGeneratedPath(getImageVariantFileName(relativePath, kind));
+    const safeVariantPath = path.resolve(variantPath);
+    if (!safeVariantPath.startsWith(generatedDir + path.sep)) continue;
+    const buffer = await readFile(safeVariantPath).catch(() => null);
+    if (buffer) return buffer;
+  }
+  return null;
 }
 
 function sanitizeFilePart(value: string) {

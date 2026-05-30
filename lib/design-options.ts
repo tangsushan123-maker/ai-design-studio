@@ -43,6 +43,7 @@ export type AspectRatioValue = (typeof aspectRatios)[number]["value"];
 export type QualityValue = (typeof qualityOptions)[number]["value"];
 
 export type TextReferenceRole =
+  | "direct_use"
   | "person"
   | "product"
   | "subject"

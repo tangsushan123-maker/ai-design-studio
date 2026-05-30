@@ -1,6 +1,6 @@
 import { comparisonImageFromSourceUrl, stripComparisonImage } from "@/components/workbench/workbench-image-lifecycle";
 import { friendlyDisplayError } from "@/components/workbench/workbench-labels";
-import { dataUrlToFile, fileFromImageUrl, isLocalGeneratedUrl } from "@/components/workbench/workbench-utils";
+import { dataUrlToFile, fileFromImageUrl, localGeneratedSourceUrlForImage } from "@/components/workbench/workbench-utils";
 import type { ImageComparisonAsset } from "@/components/workbench/result-preview-tools";
 import type { GeneratedImage, ImageAsset } from "@/components/workbench/workbench-types";
 
@@ -20,17 +20,23 @@ export async function appendImageToForm(formData: FormData, image: ImageAsset, f
     formData.append(fileKey, image.file);
     return;
   }
-  if (isLocalGeneratedUrl(image.url)) {
-    formData.append(urlKey, image.url);
+  const sourceUrl = localGeneratedSourceUrlForImage(image);
+  if (sourceUrl) {
+    formData.append(urlKey, sourceUrl);
     return;
   }
-  formData.append(fileKey, await fileFromImageUrl(image.url, image.fileName || fallbackName));
+  const displayUrl = image.url || image.originalUrl || image.previewUrl || image.thumbnailUrl;
+  if (!displayUrl) throw new Error("这张图片缺少可读取的原图地址。");
+  formData.append(fileKey, await fileFromImageUrl(displayUrl, image.fileName || fallbackName));
 }
 
 export async function imageSourcePayloadForPngLayerExport(image: ImageAsset) {
-  if (isLocalGeneratedUrl(image.url)) return { imageUrl: image.url };
+  const sourceUrl = localGeneratedSourceUrlForImage(image);
+  if (sourceUrl) return { imageUrl: sourceUrl };
   if (image.url.startsWith("data:image/")) return { imageData: image.url };
-  const source = image.file || await fileFromImageUrl(image.url, image.fileName || "source.png");
+  const displayUrl = image.url || image.originalUrl || image.previewUrl || image.thumbnailUrl;
+  if (!displayUrl) throw new Error("这张图片缺少可读取的原图地址。");
+  const source = image.file || await fileFromImageUrl(displayUrl, image.fileName || "source.png");
   return { imageData: await blobToDataUrl(source) };
 }
 
@@ -117,6 +123,9 @@ function imageFromSavedResponse(data: GeneratedImage & { url: string }, modeLabe
     quality: data.quality,
     generatedAt: data.generatedAt || now,
     outputSize: data.outputSize,
+    originalUrl: data.originalUrl,
+    thumbnailUrl: data.thumbnailUrl,
+    previewUrl: data.previewUrl,
     expectedOutputSize: data.expectedOutputSize,
     qualityCheck: data.qualityCheck,
     qualityEnhance: data.qualityEnhance,

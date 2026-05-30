@@ -3,6 +3,8 @@ import { type AspectRatioValue, type QualityValue } from "@/lib/design-options";
 export const ratioOptions: AspectRatioValue[] = ["1:1", "4:5", "3:4", "4:3", "16:9", "9:16", "9.75:1", "custom"];
 export const adaptiveRatioOptions: AspectRatioValue[] = ["auto", "1:1", "4:5", "3:4", "4:3", "16:9", "9:16", "9.75:1", "custom"];
 const supportedImageTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+const browserCompressionMaxEdge = 2048;
+const browserCompressionMaxBytes = 3 * 1024 * 1024;
 
 export function sanitizeFileName(value: string) {
   return value
@@ -103,6 +105,65 @@ export function isSupportedImageFile(file: File) {
   return supportedImageTypes.has(file.type);
 }
 
+export async function compressImageFileForUpload(file: File) {
+  if (!isSupportedImageFile(file)) return file;
+  if (file.size <= browserCompressionMaxBytes) return file;
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) return file;
+  const scale = Math.min(1, browserCompressionMaxEdge / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  if (scale >= 1 && file.size <= browserCompressionMaxBytes * 1.2) {
+    bitmap.close?.();
+    return file;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    bitmap.close?.();
+    return file;
+  }
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close?.();
+  const keepPng = file.type === "image/png" && await imageFileLikelyHasAlpha(file).catch(() => true);
+  const type = keepPng ? "image/png" : "image/jpeg";
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, keepPng ? undefined : 0.86));
+  if (!blob || blob.size >= file.size) return file;
+  const fileName = uploadCompressedFileName(file.name || "image", type);
+  return new File([blob], fileName, { type, lastModified: Date.now() });
+}
+
+async function imageFileLikelyHasAlpha(file: File) {
+  if (file.type !== "image/png") return false;
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) return true;
+  const canvas = document.createElement("canvas");
+  const width = Math.min(64, bitmap.width);
+  const height = Math.min(64, bitmap.height);
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    bitmap.close?.();
+    return true;
+  }
+  context.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close?.();
+  const data = context.getImageData(0, 0, width, height).data;
+  for (let index = 3; index < data.length; index += 4) {
+    if (data[index] < 250) return true;
+  }
+  return false;
+}
+
+function uploadCompressedFileName(name: string, type: string) {
+  const extension = type === "image/jpeg" ? "jpg" : type.replace("image/", "") || "png";
+  const base = name.replace(/\.[^.]+$/, "") || "image";
+  return `${base}-compressed.${extension}`;
+}
+
 export function firstSupportedImageFile(files: FileList | File[]) {
   for (let index = 0; index < files.length; index += 1) {
     const file = files[index];
@@ -169,6 +230,31 @@ export async function fileFromImageUrl(url: string, fallbackName: string) {
 
 export function isLocalGeneratedUrl(url?: string) {
   return Boolean(url && url.startsWith("/generated/"));
+}
+
+export function localGeneratedSourceUrl(url?: string) {
+  if (!url) return "";
+  if (isLocalGeneratedUrl(url)) return url;
+  try {
+    const parsed = new URL(url, "http://local");
+    if (parsed.pathname.startsWith("/generated/")) return parsed.pathname;
+    if (parsed.pathname !== "/api/image-preview") return "";
+    const src = parsed.searchParams.get("src") || "";
+    if (isLocalGeneratedUrl(src)) return src;
+    const source = new URL(src, "http://local");
+    return source.pathname.startsWith("/generated/") ? source.pathname : "";
+  } catch {
+    return "";
+  }
+}
+
+export function localGeneratedSourceUrlForImage(image: { url?: string; originalUrl?: string; previewUrl?: string; thumbnailUrl?: string }) {
+  return [
+    image.originalUrl,
+    image.url,
+    image.previewUrl,
+    image.thumbnailUrl,
+  ].map(localGeneratedSourceUrl).find(Boolean) || "";
 }
 
 function extractImageSrc(html: string) {

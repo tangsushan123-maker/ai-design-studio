@@ -7,18 +7,21 @@ import sharp from "sharp";
 const cwd = process.cwd();
 const baseUrl = process.env.BENCHMARK_BASE_URL || "http://127.0.0.1:3000";
 const benchmarkMode = process.env.BENCHMARK_MODE || "full";
+const benchmarkEmail = process.env.BENCHMARK_EMAIL || "";
+const benchmarkPassword = process.env.BENCHMARK_PASSWORD || "";
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const projectId = `benchmark-ai-${runId}`;
 const reportDir = path.join(cwd, ".cleanup-reports");
 const reportPath = path.join(reportDir, `ai-task-benchmark-${runId}.json`);
 const defaultTimeoutMs = Number(process.env.BENCHMARK_TIMEOUT_MS || 15 * 60 * 1000);
+let authCookie = process.env.BENCHMARK_COOKIE || "";
 
 const sources = {
-  poster: "/generated/design-20260523-asset-standard-7d185a6f.png",
-  product: "/generated/design-20260523-asset-standard-ea1d312d.png",
-  ip: "/generated/design-20260523-ip-standard-0c461e7f.png",
-  wideLogo: "/generated/design-20260523-logo-standard-50a0bfaa.png",
-  landscape: "/generated/design-20260523-900x383-standard-53080279.png",
+  poster: "/generated/projects/project_1780024924527/results/design-20260529-1920x1080-standard-53f5df79.png",
+  product: "/generated/projects/project_1780024924527/uploads/design-20260529-asset-standard-19a46766.png",
+  ip: "/generated/projects/project_1780024924527/uploads/design-20260529-asset-standard-bdf71ffe.png",
+  wideLogo: "/generated/projects/project_1780024924527/uploads/design-20260529-asset-standard-95c79e24.png",
+  landscape: "/generated/projects/project_1780024924527/results/design-20260529-16x9-standard-eb0b6aad.png",
 };
 
 const protectionContext = {
@@ -70,8 +73,11 @@ function withTraceJson(body, meta) {
 }
 
 async function fetchJson(route, options = {}, timeoutMs = defaultTimeoutMs) {
+  const headers = new Headers(options.headers || {});
+  if (authCookie && !headers.has("cookie")) headers.set("cookie", authCookie);
   const response = await fetch(`${baseUrl}${route}`, {
     ...options,
+    headers,
     signal: AbortSignal.timeout(timeoutMs),
   });
   const text = await response.text();
@@ -82,6 +88,57 @@ async function fetchJson(route, options = {}, timeoutMs = defaultTimeoutMs) {
     data = { raw: text.slice(0, 2000) };
   }
   return { status: response.status, ok: response.ok, data };
+}
+
+function mergeSetCookie(headers) {
+  const rawCookies = typeof headers.getSetCookie === "function"
+    ? headers.getSetCookie()
+    : headers.get("set-cookie")
+      ? [headers.get("set-cookie")]
+      : [];
+  const cookiePairs = rawCookies
+    .map((cookie) => String(cookie).split(";")[0])
+    .filter(Boolean);
+  if (cookiePairs.length) authCookie = cookiePairs.join("; ");
+}
+
+async function benchmarkLogin() {
+  if (authCookie) {
+    log("auth: using BENCHMARK_COOKIE");
+    allResults.auth = { mode: "cookie", ok: true };
+    return;
+  }
+  if (!benchmarkEmail || !benchmarkPassword) {
+    log("auth: no benchmark credentials, checking whether the app requires login");
+    allResults.auth = { mode: "none", ok: false, message: "Set BENCHMARK_EMAIL and BENCHMARK_PASSWORD to run authenticated API benchmarks." };
+    return;
+  }
+  const response = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: benchmarkEmail, password: benchmarkPassword }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  mergeSetCookie(response.headers);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+  allResults.auth = {
+    mode: "password",
+    ok: response.ok && Boolean(authCookie),
+    httpStatus: response.status,
+    email: benchmarkEmail,
+    userRole: data?.user?.role || "",
+  };
+  if (!allResults.auth.ok) {
+    const error = data?.error || `HTTP ${response.status}`;
+    throw new Error(`Benchmark login failed: ${error}`);
+  }
+  log(`auth: logged in as ${benchmarkEmail}`);
 }
 
 async function taskRun(requestId) {
@@ -328,18 +385,6 @@ function qualityEnhanceTask({ name = "quality_enhance_plus_4k", mode = "plus", q
   }, 15 * 60_000);
 }
 
-function transparentTask({ name = "transparent_gpt_fast", mode = "gpt_fast", sourceUrl = sources.product, cutoutType = "product" } = {}) {
-  return jsonTask(name, "remove_background", "/api/transparent-png", {
-    imageUrl: sourceUrl,
-    mode,
-    cutoutType,
-    removeWhiteEdge: true,
-    removeBlackEdge: true,
-    edgeShrink: 1,
-    edgeFeather: 1,
-  }, 12 * 60_000);
-}
-
 function maskEditTask({ name = "mask_edit_cleanup_ai", sourceUrl = sources.poster } = {}) {
   return formTask(name, "mask_edit", "/api/mask-edit-image", async () => {
     const form = new FormData();
@@ -355,20 +400,38 @@ function maskEditTask({ name = "mask_edit_cleanup_ai", sourceUrl = sources.poste
   }, 15 * 60_000);
 }
 
-function layerOutputTask({ name = "layer_output_ai_rebuild" } = {}) {
-  return formTask(name, "layer_output", "/api/layer-output", async () => {
+function referenceRemakeTask({ name = "reference_remake_precise" } = {}) {
+  return formTask(name, "reference_remake", "/api/reference-remake", async () => {
     const form = new FormData();
     form.append("sourceUrl", sources.poster);
-    form.append("includeBackground", "true");
-    form.append("includeTextLayer", "true");
-    form.append("maskStrength", "strong");
-    form.append("keepGlow", "true");
-    form.append("outputCroppedText", "true");
-    form.append("backgroundMode", "reference_remake");
-    form.append("originalImageId", "benchmark-source-poster");
+    form.append("prompt", "按参考图比例、信息层级、商业海报质感重制一张干净高清设计，不照搬无关品牌信息。");
+    form.append("mode", "precise");
+    form.append("quality", "standard");
     return form;
-  }, 20 * 60_000);
+  }, 12 * 60_000);
 }
+
+function designOptimizeTask({ name = "design_optimize_professional" } = {}) {
+  return formTask(name, "design_optimize", "/api/design-optimize", async () => {
+    const form = new FormData();
+    form.append("sourceUrl", sources.poster);
+    form.append("prompt", "分析现有画面的问题，提升版式层级、标题阅读、主体聚焦、商业质感和投放效果。");
+    form.append("strength", "professional");
+    form.append("comparisonMode", "final_only");
+    form.append("quality", "standard");
+    form.append("designType", "海报");
+    return form;
+  }, 12 * 60_000);
+}
+
+function pngLayersTask({ name = "png_layers_fast_export" } = {}) {
+  return jsonTask(name, "png_layers", "/api/export-png-layers", {
+    imageUrl: sources.poster,
+    mode: "fast",
+    fileName: "benchmark-poster.png",
+  }, 4 * 60_000);
+}
+
 
 function fuseTask({ name = "fuse_images_ai" } = {}) {
   return formTask(name, "fuse_images", "/api/fuse-images", async () => {
@@ -381,16 +444,6 @@ function fuseTask({ name = "fuse_images_ai" } = {}) {
     form.append("keepOriginalRatio", "false");
     return form;
   }, 12 * 60_000);
-}
-
-function losslessUpscaleTask({ name = "lossless_4k_export_local" } = {}) {
-  return jsonTask(name, "upscale_4k", "/api/upscale-image", {
-    imageUrl: sources.poster,
-    aspectRatio: "custom",
-    quality: "4k",
-    format: "png",
-    keepOriginalRatio: true,
-  }, 4 * 60_000);
 }
 
 async function saveReport() {
@@ -448,26 +501,22 @@ async function runSequential() {
     () => textToImageTask({ name: "text_to_image_standard", quality: "standard" }),
     () => imageToImageTask(),
     () => aiResizeTask(),
-    () => transparentTask({ name: "transparent_gpt_fast_product", mode: "gpt_fast", sourceUrl: sources.product, cutoutType: "product" }),
-    () => transparentTask({ name: "transparent_gpt_retouch_cutout_product", mode: "gpt_retouch_cutout", sourceUrl: sources.product, cutoutType: "product" }),
-    () => transparentTask({ name: "transparent_product_refine_ai", mode: "product_refine", sourceUrl: sources.product, cutoutType: "product" }),
+    () => referenceRemakeTask(),
+    () => designOptimizeTask(),
     () => maskEditTask(),
-    () => qualityEnhanceTask({ name: "quality_enhance_standard_4k", mode: "standard", quality: "4k" }),
+    () => qualityEnhanceTask({ name: "quality_enhance_standard_2k", mode: "standard", quality: "2k" }),
     () => qualityEnhanceTask({ name: "quality_enhance_plus_4k", mode: "plus", quality: "4k" }),
-    () => qualityEnhanceTask({ name: "quality_enhance_creative_2k", mode: "creative", quality: "2k" }),
-    () => layerOutputTask(),
+    () => pngLayersTask(),
     () => fuseTask(),
-    () => losslessUpscaleTask(),
   ];
   const smokeTasks = [
     creativeBriefTask,
     () => textToImageTask({ name: "smoke_text_to_image_standard", quality: "standard" }),
     () => imageToImageTask({ name: "smoke_image_to_image_target_canvas" }),
     () => aiResizeTask({ name: "smoke_ai_resize_9x16" }),
-    () => transparentTask({ name: "smoke_transparent_gpt_fast", mode: "gpt_fast", sourceUrl: sources.product, cutoutType: "product" }),
-    () => maskEditTask({ name: "smoke_mask_edit_cleanup" }),
-    () => qualityEnhanceTask({ name: "smoke_quality_standard_2k", mode: "standard", quality: "2k" }),
-    () => fuseTask({ name: "smoke_fuse_images_ai" }),
+    () => referenceRemakeTask({ name: "smoke_reference_remake" }),
+    () => designOptimizeTask({ name: "smoke_design_optimize" }),
+    () => pngLayersTask({ name: "smoke_png_layers_fast" }),
   ];
   const tasks = benchmarkMode === "smoke" ? smokeTasks : fullTasks;
   for (const factory of tasks) {
@@ -476,6 +525,7 @@ async function runSequential() {
     await saveReport();
   }
 }
+
 
 async function runConcurrencyGroup(size, factories) {
   log(`parallel group start: ${size} tasks`);
@@ -499,7 +549,7 @@ async function runConcurrency() {
   if (benchmarkMode === "smoke") return;
   await runConcurrencyGroup(2, [
     () => textToImageTask({ name: "parallel2_text_to_image_standard", quality: "standard", promptSuffix: " 并发测试A。" }),
-    () => transparentTask({ name: "parallel2_transparent_gpt_fast", mode: "gpt_fast", sourceUrl: sources.product, cutoutType: "product" }),
+    () => pngLayersTask({ name: "parallel2_png_layers_fast" }),
   ]);
   await runConcurrencyGroup(3, [
     () => textToImageTask({ name: "parallel3_text_to_image_standard", quality: "standard", promptSuffix: " 并发测试B。" }),
@@ -508,22 +558,34 @@ async function runConcurrency() {
   ]);
   await runConcurrencyGroup(4, [
     () => textToImageTask({ name: "parallel4_text_to_image_standard", quality: "standard", promptSuffix: " 并发测试C。" }),
-    () => transparentTask({ name: "parallel4_transparent_gpt_fast", mode: "gpt_fast", sourceUrl: sources.product, cutoutType: "product" }),
+    () => referenceRemakeTask({ name: "parallel4_reference_remake" }),
     () => qualityEnhanceTask({ name: "parallel4_quality_standard_2k", mode: "standard", quality: "2k" }),
-    () => maskEditTask({ name: "parallel4_mask_edit_cleanup" }),
+    () => designOptimizeTask({ name: "parallel4_design_optimize" }),
   ]);
 }
 
+
 log(`AI workflow benchmark started: ${projectId}`);
-await fetchJson("/api/health-openai", { method: "POST" }, 60_000).then((result) => {
-  allResults.health = {
-    httpStatus: result.status,
-    ok: result.ok,
-    providerType: result.data?.providerType,
-    imageModel: result.data?.imageModel,
-    analysisModel: result.data?.analysisModel,
+await benchmarkLogin();
+await saveReport();
+const healthResult = await fetchJson("/api/health-openai", { method: "POST" }, 60_000);
+allResults.health = {
+  httpStatus: healthResult.status,
+  ok: healthResult.ok,
+  providerType: healthResult.data?.providerType,
+  imageModel: healthResult.data?.imageModel,
+  analysisModel: healthResult.data?.analysisModel,
+};
+if (healthResult.status === 401 && !allResults.auth?.ok) {
+  allResults.summary = {
+    total: 0,
+    completed: 0,
+    failed: 0,
+    failedNames: [{ name: "auth", error: "Login is required. Set BENCHMARK_EMAIL and BENCHMARK_PASSWORD, or provide BENCHMARK_COOKIE.", httpStatus: 401 }],
   };
-});
+  await saveReport();
+  throw new Error("Benchmark requires login. Set BENCHMARK_EMAIL and BENCHMARK_PASSWORD, or provide BENCHMARK_COOKIE.");
+}
 await saveReport();
 await runSequential();
 await runConcurrency();

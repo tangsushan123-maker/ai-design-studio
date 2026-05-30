@@ -286,7 +286,11 @@ export function MaskEditorModal({
       setStatus("请先涂抹要修改的区域。");
       return;
     }
-    const finalPrompt = prompt.trim() || "去掉这里并补全背景";
+    const finalPrompt = prompt.trim();
+    if (!finalPrompt) {
+      setStatus("请先写清楚局部要怎么修改。");
+      return;
+    }
     const intent = inferSimpleMaskEditIntent(finalPrompt, { taskMode, regionType, protectionStrength, edgeBlend });
     try {
       setIsSaving(true);

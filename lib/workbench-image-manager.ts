@@ -1,4 +1,4 @@
-import { appendQualitySearchFields, searchFieldsToText, type SearchableQualityCheck } from "./workbench-search.ts";
+import { searchFieldsToText, type SearchableQualityCheck } from "./workbench-search.ts";
 
 export type ImageManagerSearchImage = {
   branchLabel?: string;
@@ -65,10 +65,8 @@ export function imageManagerSearchText(
     image.sourceTaskId,
     image.url,
     operation,
-    ...protection.reasons,
     ...protection.usedByNodeNames,
   ];
-  appendQualitySearchFields(fields, image.qualityCheck, { includeCompositionAliases: true });
   appendImageManagerProtectionAliases(fields, protection);
   return searchFieldsToText(fields);
 }
@@ -77,10 +75,6 @@ function appendImageManagerProtectionAliases(fields: Array<string | null | undef
   fields.push(
     protection.isFavorite ? "收藏 已收藏" : "",
     protection.isTrashed ? "回收站 已删除" : "",
-    protection.isProjectAsset ? "项目素材 受保护" : "",
-    protection.usedByNodes ? "节点引用 受保护" : "",
-    protection.isLayerPack ? "png三层 分层包" : "",
-    protection.canDelete && !protection.isTrashed ? "可清理 可删除" : "",
     protection.protected ? "保护 受保护" : "",
   );
 }

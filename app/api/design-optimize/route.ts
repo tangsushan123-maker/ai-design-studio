@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { toFile } from "openai/uploads";
-import sharp from "sharp";
 import { toApiError } from "@/lib/api-errors";
 import type { QualityValue } from "@/lib/design-options";
 import type { ProtectionContext } from "@/lib/design-production";
@@ -20,7 +19,7 @@ import { inspectImageQuality } from "@/lib/image-quality";
 import { getAnalysisModel, resolveImageModel, supportsConfigurableImageInputFidelity } from "@/lib/model-config";
 import { getOpenAI } from "@/lib/openai";
 import { assertSupportedImage, getImageRatio } from "@/lib/request-guards";
-import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
+import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, startTaskRunHeartbeat, taskRunResponseMeta, taskTraceFromFormData, type TaskRunTrace } from "@/lib/task-run-ledger";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
 
 export const runtime = "nodejs";
@@ -49,6 +48,14 @@ type DesignOptimizationAnalysis = {
   strategy: string[];
 };
 
+type DesignOptimizationVariant = {
+  key: "professional" | "layout";
+  variant: number;
+  branchLabel: string;
+  mode: string;
+  focus: string;
+};
+
 type DesignOptimizeInput = {
   imageBuffer: Buffer;
   fileName: string;
@@ -70,10 +77,12 @@ export async function POST(request: Request) {
   return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
+  let stopTaskHeartbeat = () => {};
   try {
     const input = await parseMultipartInput(request);
     taskTrace = input.taskTrace || null;
     await recordTaskRunStarted(taskTrace);
+    stopTaskHeartbeat = startTaskRunHeartbeat(taskTrace, "设计优化仍在处理：正在分析版式或生成优化方案。");
 
     const openai = getOpenAI();
     const imageModel = resolveImageModel(input.imageModel, input.model);
@@ -84,144 +93,37 @@ export async function POST(request: Request) {
       await analyzeDesignDraft(openai, input, sourceRatio, outputSize),
       input,
     );
-    const prompt = buildDesignOptimizationPrompt({
-      analysis,
-      comparisonMode: input.comparisonMode,
-      outputSize,
-      quality: input.quality,
-      sourcePrompt: input.prompt,
-      strength: input.strength,
-    });
-    const item = await createDesignOptimizationImage({
-      imageBuffer: input.imageBuffer,
-      imageModel,
-      mimeType: input.mimeType,
-      outputSize,
-      prompt,
-      quality: input.quality,
-      sourceFileName: input.fileName,
-      sourceRatio,
-      strength: input.strength,
-    });
-    const raw = await imageResultToBuffer(item.b64_json, item.url);
-    const finalPng = await processToExactSize(raw, outputSize, "png", "safe_full_bleed");
-    const [actual, saved] = await Promise.all([
-      readImageMetadata(finalPng),
-      saveImageBuffer(finalPng, "png", {
-        ratioLabel: outputRatioLabel,
-        quality: input.quality,
-        projectId: taskTrace?.projectId,
-        storageKind: "results",
-      }),
-    ]);
-    const qualityCheck = await inspectImageQuality(saved.path, {
-      quality: input.quality,
-      ratio: sourceRatio,
-      expectedSize: outputSize,
-      fileSizeBytes: saved.fileSizeBytes,
-      aspectRatio: outputRatioLabel,
-      operation: "design_optimize",
-      protectionContext: buildDesignOptimizationProtectionContext(analysis),
-    });
-    const payload = {
-      id: saved.fileName,
-      url: saved.url,
-      originalUrl: saved.originalUrl,
-      thumbnailUrl: saved.thumbnailUrl,
-      previewUrl: saved.previewUrl,
-      prompt,
-      variant: 1,
-      ratio: sourceRatio,
-      mode: `设计优化 · ${designStrengthLabel(input.strength)}`,
-      model: imageModel,
-      aspectRatio: outputRatioLabel,
-      quality: input.quality,
-      generatedAt: new Date().toISOString(),
-      outputSize: { width: actual.width, height: actual.height },
-      expectedOutputSize: outputSize,
-      qualityCheck,
-      fileSizeBytes: saved.fileSizeBytes,
-      savedPath: saved.path,
-      durationMs: Date.now() - startedAt,
-      projectId: taskTrace?.projectId,
-      nodeOperation: "design_optimize",
-      sourceCompareUrl: input.sourceCompareUrl,
-      sourceTaskId: taskTrace?.taskId || taskTrace?.requestId?.replace(/^req_/, "task_"),
-      sourceRequestId: taskTrace?.requestId,
-      sourceNodeId: taskTrace?.nodeId,
-      sourceNodeName: taskTrace?.nodeName,
-      sourceNodeKind: taskTrace?.nodeKind,
-      designOptimization: {
-        strength: input.strength,
-        comparisonMode: input.comparisonMode,
+    const variants = designOptimizationVariants();
+    const settledOutputs = await Promise.allSettled(
+      variants.map((variant) => createDesignOptimizationOutput({
         analysis,
-        promptModules: {
-          basePrompt: buildBasePrompt(),
-          industryPrompt: industryPromptFor(analysis.industry),
-          designTypePrompt: designTypePromptFor(analysis.design_type),
-          scenePrompt: scenePromptFor(analysis.scene),
-          safetyRules: buildSafetyRules(),
-          comparisonPrompt: buildComparisonPrompt(input.comparisonMode),
-        },
-      },
-    };
-    await saveImageMetadata(saved.fileName, payload);
-    const outputs: Array<Record<string, unknown>> = [payload];
-    if (input.comparisonMode !== "final_only") {
-      const comparisonPng = await createComparisonPng({
-        after: finalPng,
-        before: input.imageBuffer,
-        mode: input.comparisonMode,
+        imageModel,
+        input,
+        outputRatioLabel,
+        outputSize,
         sourceRatio,
-      });
-      const [comparisonSaved, comparisonMeta] = await Promise.all([
-        saveImageBuffer(comparisonPng, "png", {
-          ratioLabel: input.comparisonMode === "stacked" ? "compare-stacked" : "compare-side",
-          quality: input.quality,
-          projectId: taskTrace?.projectId,
-          storageKind: "results",
-        }),
-        readImageMetadata(comparisonPng),
-      ]);
-      const comparisonPayload = {
-        id: comparisonSaved.fileName,
-        url: comparisonSaved.url,
-        originalUrl: comparisonSaved.originalUrl,
-        thumbnailUrl: comparisonSaved.thumbnailUrl,
-        previewUrl: comparisonSaved.previewUrl,
-        prompt: "设计优化修改前/修改后对比图",
-        variant: 2,
-        ratio: { width: comparisonMeta.width, height: comparisonMeta.height },
-        mode: "设计优化 · 修改前后对比",
-        model: imageModel,
-        aspectRatio: `${comparisonMeta.width}x${comparisonMeta.height}`,
-        quality: input.quality,
-        generatedAt: payload.generatedAt,
-        outputSize: { width: comparisonMeta.width, height: comparisonMeta.height },
-        expectedOutputSize: { width: comparisonMeta.width, height: comparisonMeta.height },
-        fileSizeBytes: comparisonSaved.fileSizeBytes,
-        savedPath: comparisonSaved.path,
-        durationMs: Date.now() - startedAt,
-        projectId: taskTrace?.projectId,
-        nodeOperation: "design_optimize",
-        materialType: "修改前后对比图",
-        sourceCompareUrl: input.sourceCompareUrl,
-        sourceTaskId: payload.sourceTaskId,
-        sourceRequestId: payload.sourceRequestId,
-        sourceNodeId: payload.sourceNodeId,
-        sourceNodeName: payload.sourceNodeName,
-        sourceNodeKind: payload.sourceNodeKind,
-        designOptimization: payload.designOptimization,
-      };
-      await saveImageMetadata(comparisonSaved.fileName, comparisonPayload);
-      outputs.push(comparisonPayload);
+        startedAt,
+        taskTrace,
+        variant,
+      })),
+    );
+    const outputs: Array<Record<string, unknown>> = [];
+    for (const result of settledOutputs) {
+      if (result.status === "fulfilled") outputs.push(result.value);
     }
-    await recordTaskRunFinished(taskTrace, { outputs, model: imageModel, message: `设计优化完成，服务端已保存 ${outputs.length} 个结果。` });
-    return NextResponse.json({ ...taskRunResponseMeta(taskTrace, startedAt, outputs), image: payload, images: outputs, analysis, prompt, model: imageModel, imageModel });
+    if (!outputs.length) {
+      const failed = settledOutputs.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+      throw new Error("设计优化没有返回可用方案。");
+    }
+    await recordTaskRunFinished(taskTrace, { outputs, model: imageModel, message: `设计优化完成，服务端已保存 ${outputs.length} 个正式方案。` });
+    return NextResponse.json({ ...taskRunResponseMeta(taskTrace, startedAt, outputs), image: outputs[0], images: outputs, analysis, model: imageModel, imageModel });
   } catch (error) {
     const apiError = toApiError(error, "设计优化失败。");
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
+  } finally {
+    stopTaskHeartbeat();
   }
 
   });
@@ -276,6 +178,8 @@ async function analyzeDesignDraft(
                 "请分析这张已经完成的设计稿，并只输出 JSON，不要输出解释。",
                 "任务是后续做专业设计优化，不是高清修复、不是参考图复刻。",
                 "必须识别：行业类型、设计类型、使用场景、目标人群、品牌调性、核心转化目标、主色、辅助色、版式结构、文字层级、主要元素、logo区域、人物/产品区域、可优化区域、合规风险。",
+                "必须像设计总监一样给出可执行优化建议：标题怎么变、人物/产品怎么摆、卖点怎么分组、背景怎么处理、颜色对比怎么加强、哪些元素要删减或弱化。",
+                "diagnosis 写原稿具体问题，strategy 写下一步出图必须执行的具体改法，不要写泛泛的“优化质感”。",
                 "JSON 字段必须包含：industry, design_type, scene, audience, brand_tone, conversion_goal, primary_color, secondary_color, layout_structure, text_hierarchy, main_elements, logo_area, subject_area, optimization_areas, compliance_risks, recommended_style, diagnosis, strategy。",
                 "不要编造看不见的电话、地址、价格、Logo 或二维码。看不清就写不确定。",
                 `原图比例约为 ${sourceRatio.width}:${sourceRatio.height}，计划输出 ${outputSize.width}x${outputSize.height}。`,
@@ -305,33 +209,147 @@ function buildDesignOptimizationPrompt(input: {
   quality: QualityValue;
   sourcePrompt: string;
   strength: DesignOptimizationStrength;
+  variant: DesignOptimizationVariant;
 }) {
   return [
-    buildBasePrompt(),
-    `Canvas: ${input.outputSize.width} x ${input.outputSize.height}. Keep the source aspect ratio. Design natively for this canvas. No crop, no padding, no blurred side extension.`,
-    `Optimization strength: ${designStrengthLabel(input.strength)}. ${strengthPromptFor(input.strength)}`,
-    `Detected industry: ${input.analysis.industry}.`,
-    `Detected design type: ${input.analysis.design_type}.`,
-    `Detected scene: ${input.analysis.scene}.`,
-    `Audience: ${input.analysis.audience}.`,
-    `Brand tone: ${input.analysis.brand_tone}.`,
-    `Conversion goal: ${input.analysis.conversion_goal}.`,
-    `Color system: primary ${input.analysis.primary_color}; secondary ${input.analysis.secondary_color}.`,
-    `Layout structure: ${input.analysis.layout_structure}.`,
-    `Text hierarchy to preserve: ${(input.analysis.text_hierarchy || []).join(" | ") || "preserve visible hierarchy"}.`,
-    `Main elements to preserve: ${(input.analysis.main_elements || []).join(" | ") || "preserve main visual elements"}.`,
-    `Logo area: ${input.analysis.logo_area}.`,
-    `Person/product area: ${input.analysis.subject_area}.`,
-    `Optimization focus: ${(input.analysis.optimization_areas || []).join(" | ") || "hierarchy, spacing, color, focal point, readability"}.`,
-    industryPromptFor(input.analysis.industry),
-    designTypePromptFor(input.analysis.design_type),
-    scenePromptFor(input.analysis.scene),
-    input.sourcePrompt ? `User instruction: ${input.sourcePrompt}` : "",
-    buildSafetyRules(),
-    buildComparisonPrompt(input.comparisonMode),
-    "Do not draw a design audit report, score card, before/after split screen, or explanatory text into the image.",
-    "Output only the optimized final design image.",
+    "任务：设计优化。请自行分析输入图并直接输出优化后的最终图片。",
+    input.sourcePrompt ? `用户原始要求：${input.sourcePrompt}` : "用户没有额外要求，请根据输入图片自行分析并优化。",
+    `目标画布：${input.outputSize.width}×${input.outputSize.height}，保持原图比例。`,
+    `优化强度：${designStrengthLabel(input.strength)}。`,
+    `当前方案：${input.variant.branchLabel}。${input.variant.focus}`,
+    "模型分析参考：",
+    `行业/类型/场景：${input.analysis.industry} / ${input.analysis.design_type} / ${input.analysis.scene}`,
+    `原稿问题：${(input.analysis.diagnosis || []).join(" | ") || "请根据图片自行判断"}`,
+    `优化方向：${(input.analysis.strategy || []).join(" | ") || "请根据图片自行优化版式、层级、质感和可读性"}`,
+    "只输出优化后的最终设计图，不要画出对比图、评分卡、分析文本或说明页。",
   ].filter(Boolean).join("\n\n");
+}
+
+function designOptimizationVariants(): DesignOptimizationVariant[] {
+  return [
+    {
+      key: "professional",
+      variant: 1,
+      branchLabel: "方案 1 · 专业设计优化",
+      mode: "设计优化 · 专业设计修改",
+      focus: [
+        "A direction: professional design modification.",
+        "Improve the design like a senior commercial designer: cleaner hierarchy, stronger title dominance, better color contrast, more premium lighting/material texture, better subject/product polish, more mature visual details.",
+        "Keep the original composition logic recognizable, but make the final artwork clearly more professional and commercially polished.",
+      ].join(" "),
+    },
+    {
+      key: "layout",
+      variant: 2,
+      branchLabel: "方案 2 · 画面排版设计",
+      mode: "设计优化 · 画面排版设计",
+      focus: [
+        "B direction: layout and composition redesign.",
+        "Prioritize picture structure, layout rhythm, text grouping, visual flow, margins, safe zones, subject placement, and information block arrangement.",
+        "This variant must not just change colors. Rebuild the page layout more visibly while preserving the same core information, subject, brand recognition, and industry.",
+      ].join(" "),
+    },
+  ];
+}
+
+async function createDesignOptimizationOutput(input: {
+  analysis: DesignOptimizationAnalysis;
+  imageModel: string;
+  input: DesignOptimizeInput;
+  outputRatioLabel: string;
+  outputSize: PixelSize;
+  sourceRatio: PixelSize;
+  startedAt: number;
+  taskTrace: TaskRunTrace | null;
+  variant: DesignOptimizationVariant;
+}) {
+  const prompt = buildDesignOptimizationPrompt({
+    analysis: input.analysis,
+    comparisonMode: "final_only",
+    outputSize: input.outputSize,
+    quality: input.input.quality,
+    sourcePrompt: input.input.prompt,
+    strength: input.input.strength,
+    variant: input.variant,
+  });
+  const item = await createDesignOptimizationImage({
+    imageBuffer: input.input.imageBuffer,
+    imageModel: input.imageModel,
+    mimeType: input.input.mimeType,
+    outputSize: input.outputSize,
+    prompt,
+    quality: input.input.quality,
+    sourceFileName: input.input.fileName,
+    sourceRatio: input.sourceRatio,
+    strength: input.input.strength,
+    variant: input.variant,
+  });
+  const raw = await imageResultToBuffer(item.b64_json, item.url);
+  const finalPng = await processToExactSize(raw, input.outputSize, "png", "safe_full_bleed");
+  const [actual, saved] = await Promise.all([
+    readImageMetadata(finalPng),
+    saveImageBuffer(finalPng, "png", {
+      ratioLabel: input.outputRatioLabel,
+      quality: input.input.quality,
+      projectId: input.taskTrace?.projectId,
+      storageKind: "results",
+    }),
+  ]);
+  const qualityCheck = await inspectImageQuality(saved.path, {
+    quality: input.input.quality,
+    ratio: input.sourceRatio,
+    expectedSize: input.outputSize,
+    fileSizeBytes: saved.fileSizeBytes,
+    aspectRatio: input.outputRatioLabel,
+    operation: "design_optimize",
+    protectionContext: buildDesignOptimizationProtectionContext(input.analysis),
+  });
+  const payload = {
+    id: saved.fileName,
+    url: saved.url,
+    originalUrl: saved.originalUrl,
+    thumbnailUrl: saved.thumbnailUrl,
+    previewUrl: saved.previewUrl,
+    prompt,
+    variant: input.variant.variant,
+    branchLabel: input.variant.branchLabel,
+    ratio: input.sourceRatio,
+    mode: input.variant.mode,
+    model: input.imageModel,
+    aspectRatio: input.outputRatioLabel,
+    quality: input.input.quality,
+    generatedAt: new Date().toISOString(),
+    outputSize: { width: actual.width, height: actual.height },
+    expectedOutputSize: input.outputSize,
+    qualityCheck,
+    fileSizeBytes: saved.fileSizeBytes,
+    savedPath: saved.path,
+    durationMs: Date.now() - input.startedAt,
+    projectId: input.taskTrace?.projectId,
+    nodeOperation: "design_optimize",
+    sourceCompareUrl: input.input.sourceCompareUrl,
+    sourceTaskId: input.taskTrace?.taskId || input.taskTrace?.requestId?.replace(/^req_/, "task_"),
+    sourceRequestId: input.taskTrace?.requestId,
+    sourceNodeId: input.taskTrace?.nodeId,
+    sourceNodeName: input.taskTrace?.nodeName,
+    sourceNodeKind: input.taskTrace?.nodeKind,
+    designOptimization: {
+      strength: input.input.strength,
+      comparisonMode: "lightbox_only",
+      variant: input.variant.key,
+      analysis: input.analysis,
+      promptModules: {
+        basePrompt: buildBasePrompt(),
+        industryPrompt: industryPromptFor(input.analysis.industry),
+        designTypePrompt: designTypePromptFor(input.analysis.design_type),
+        scenePrompt: scenePromptFor(input.analysis.scene),
+        safetyRules: buildSafetyRules(),
+        comparisonPrompt: buildComparisonPrompt("final_only"),
+      },
+    },
+  };
+  await saveImageMetadata(saved.fileName, payload);
+  return payload;
 }
 
 async function createDesignOptimizationImage(input: {
@@ -344,12 +362,13 @@ async function createDesignOptimizationImage(input: {
   sourceFileName: string;
   sourceRatio: PixelSize;
   strength: DesignOptimizationStrength;
+  variant: DesignOptimizationVariant;
 }) {
   const openai = getOpenAI();
   const sourceFile = await toFile(input.imageBuffer, input.sourceFileName || "design.png", { type: input.mimeType || "image/png" });
   const requestedSize = getOpenAIRequestedSize(input.sourceRatio, input.quality, input.imageModel);
   const response = await runQueuedImageModelRequestWithRetry(
-    { label: `设计优化/${designStrengthLabel(input.strength)}/${input.imageModel}` },
+    { label: `${input.variant.mode}/${designStrengthLabel(input.strength)}/${input.imageModel}` },
     () => openai.images.edit({
       model: input.imageModel,
       image: sourceFile,
@@ -358,7 +377,7 @@ async function createDesignOptimizationImage(input: {
       quality: input.quality === "standard" ? "medium" : "high",
       output_format: "png",
       background: "opaque",
-      ...(supportsConfigurableImageInputFidelity(input.imageModel) ? { input_fidelity: input.strength === "bold" ? "low" as const : "high" as const } : {}),
+      ...(supportsConfigurableImageInputFidelity(input.imageModel) ? { input_fidelity: input.strength === "conservative" ? "high" as const : "low" as const } : {}),
       n: 1,
     }, imageRequestOptions()),
   );
@@ -367,78 +386,15 @@ async function createDesignOptimizationImage(input: {
   return item;
 }
 
-async function createComparisonPng(input: {
-  after: Buffer;
-  before: Buffer;
-  mode: DesignComparisonMode;
-  sourceRatio: PixelSize;
-}) {
-  const layout = input.mode === "stacked" || (input.mode === "auto" && input.sourceRatio.width < input.sourceRatio.height * 0.82)
-    ? "stacked"
-    : "side_by_side";
-  const beforeMeta = await readImageMetadata(input.before);
-  const afterMeta = await readImageMetadata(input.after);
-  const panelWidth = Math.max(1, afterMeta.width || beforeMeta.width || 1536);
-  const panelHeight = Math.max(1, afterMeta.height || beforeMeta.height || 1024);
-  const labelHeight = Math.max(64, Math.round(panelHeight * 0.06));
-  const gap = Math.max(16, Math.round(Math.min(panelWidth, panelHeight) * 0.025));
-  const canvas = layout === "stacked"
-    ? { width: panelWidth, height: (panelHeight + labelHeight) * 2 + gap }
-    : { width: panelWidth * 2 + gap, height: panelHeight + labelHeight };
-  const beforePanel = await buildComparisonPanel(input.before, panelWidth, panelHeight, "修改前");
-  const afterPanel = await buildComparisonPanel(input.after, panelWidth, panelHeight, "修改后");
-  const placements = layout === "stacked"
-    ? [
-        { input: beforePanel, left: 0, top: 0 },
-        { input: afterPanel, left: 0, top: panelHeight + labelHeight + gap },
-      ]
-    : [
-        { input: beforePanel, left: 0, top: 0 },
-        { input: afterPanel, left: panelWidth + gap, top: 0 },
-      ];
-  return sharp({
-    create: {
-      width: canvas.width,
-      height: canvas.height,
-      channels: 4,
-      background: { r: 14, g: 17, b: 24, alpha: 1 },
-    },
-  })
-    .composite(placements)
-    .png({ compressionLevel: 9, palette: false })
-    .toBuffer();
-}
-
-async function buildComparisonPanel(buffer: Buffer, width: number, height: number, label: string) {
-  const labelHeight = Math.max(64, Math.round(height * 0.06));
-  const image = await processToExactSize(buffer, { width, height }, "png", "safe_no_crop");
-  const labelSvg = Buffer.from([
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${labelHeight}" viewBox="0 0 ${width} ${labelHeight}">`,
-    `<rect width="${width}" height="${labelHeight}" fill="#0e1118"/>`,
-    `<text x="${Math.round(width / 2)}" y="${Math.round(labelHeight * 0.64)}" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" font-size="${Math.max(24, Math.round(labelHeight * 0.42))}" font-weight="700" fill="${label === "修改后" ? "#adf8e5" : "#ffffff"}">${label}</text>`,
-    "</svg>",
-  ].join(""));
-  return sharp({
-    create: {
-      width,
-      height: height + labelHeight,
-      channels: 4,
-      background: { r: 14, g: 17, b: 24, alpha: 1 },
-    },
-  })
-    .composite([
-      { input: image, left: 0, top: 0 },
-      { input: labelSvg, left: 0, top: height },
-    ])
-    .png({ compressionLevel: 9, palette: false })
-    .toBuffer();
-}
-
 function buildBasePrompt() {
   return [
     "Professional design optimization task.",
     "Improve an existing finished design while preserving its core information, main subject, brand recognition, and intended communication goal.",
     "Optimize visual hierarchy, typography spacing, alignment, margins, color harmony, focal point, readability, subject texture, lighting, and conversion path.",
+    "This is not image enhancement, not upscaling, and not a subtle retouch. The optimized design must be visibly better and clearly different in layout quality, hierarchy, spacing, and commercial polish.",
+    "Use the design director analysis below as the execution plan. The image model must implement those optimization suggestions directly.",
+    "Keep the original visible copy meaning, brand/person/product identity, and industry, but redraw the design as a refined commercial layout when strength allows it.",
+    "If the original draft is already clean, still improve composition, title dominance, information grouping, contrast, breathing room, background depth, and visual focus.",
     "The result should look like a mature commercial design refinement, not a random redesign and not simple upscaling.",
   ].join("\n");
 }
@@ -474,12 +430,6 @@ function scenePromptFor(scene: string) {
   if (/ppt|汇报|会议/.test(key)) return "Scene rules: PPT/presentation use requires clean background, readable title area, and reduced decorative noise.";
   if (/详情|电商|落地页|landing/.test(key)) return "Scene rules: detail page/landing use requires conversion hierarchy, benefit blocks, product trust, and scan-friendly sections.";
   return "Scene rules: match the detected use scene and optimize readability, hierarchy, and conversion path.";
-}
-
-function strengthPromptFor(strength: DesignOptimizationStrength) {
-  if (strength === "bold") return "Keep core information and main subject, but allow a stronger overall redesign of layout, visual atmosphere, hierarchy, color system, and commercial style.";
-  if (strength === "professional") return "Re-adjust information hierarchy and local layout; make the image more mature while preserving key content, subject, and brand recognition.";
-  return "Mostly keep the original layout; improve clarity, spacing, color, lighting, material texture, margins, and readability without major rearrangement.";
 }
 
 function buildSafetyRules() {

@@ -20,7 +20,7 @@ import { parseProtectionContext, type ProtectionContext } from "@/lib/design-pro
 import { buildHdRedrawPrompt } from "@/lib/prompt";
 import { inspectImageQuality } from "@/lib/image-quality";
 import { imageRequestOptions, runQueuedImageModelRequestWithRetry } from "@/lib/image-request-queue";
-import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, taskRunResponseMeta, taskTraceFromFormData, taskTraceFromJson, type TaskRunTrace } from "@/lib/task-run-ledger";
+import { recordTaskRunFailed, recordTaskRunFinished, recordTaskRunStarted, startTaskRunHeartbeat, taskRunResponseMeta, taskTraceFromFormData, taskTraceFromJson, type TaskRunTrace } from "@/lib/task-run-ledger";
 import sharp from "sharp";
 import { withCurrentConfigUser } from "@/lib/request-config-user";
 import { readBrandReferenceImages } from "@/lib/brand-reference-images";
@@ -54,6 +54,7 @@ export async function POST(request: Request) {
   return await withCurrentConfigUser(async () => {
   const startedAt = Date.now();
   let taskTrace: TaskRunTrace | null = null;
+  let stopTaskHeartbeat = () => {};
   try {
     const contentType = request.headers.get("content-type") || "";
     const input = contentType.includes("multipart/form-data")
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
       : await parseJsonInput(request);
     taskTrace = input.taskTrace || null;
     await recordTaskRunStarted(taskTrace || {});
+    stopTaskHeartbeat = startTaskRunHeartbeat(taskTrace, "画质增强仍在处理：正在重绘高清细节。");
 
     const imageModel = resolveImageModel(input.imageModel, input.model);
     const originalRatio = await getImageRatio(input.imageBuffer);
@@ -201,6 +203,8 @@ export async function POST(request: Request) {
     const apiError = toApiError(error, "画质增强失败。");
     await recordTaskRunFailed(taskTrace, apiError.message);
     return NextResponse.json({ error: apiError.message }, { status: apiError.status });
+  } finally {
+    stopTaskHeartbeat();
   }
 
   });

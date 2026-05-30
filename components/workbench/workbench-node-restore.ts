@@ -25,10 +25,15 @@ export function restoreNodes(nodes: FlowNode[], runs: TaskRecord[] = []) {
       const taskOutputs = task?.outputs?.length ? task.outputs : task?.result ? [task.result] : [];
       const outputs = existingOutputs.length ? existingOutputs : taskOutputs;
       const activeWithoutOutput = isActiveNodeStatus(node.data.status) && !outputs.length;
+      const orphanedActiveRun = activeWithoutOutput && !task;
       const taskError = task?.error || task?.progressLabel || "";
-      const taskFinishedStatus = activeWithoutOutput && task && isFinishedNodeStatus(task.status) ? task.status : node.data.status;
+      const taskFinishedStatus = orphanedActiveRun
+        ? "failed"
+        : activeWithoutOutput && task && isFinishedNodeStatus(task.status) ? task.status : node.data.status;
       const restoredStatus = outputs.length && taskFinishedStatus === "failed" ? "completed" : taskFinishedStatus;
-      const restoredError = restoredStatus === "failed" && !node.data.error && taskError ? taskError : restoredStatus === "completed" ? "" : node.data.error;
+      const restoredError = orphanedActiveRun
+        ? "上次任务没有完整任务记录，可能已被刷新或后台重启中断，请重新运行。"
+        : restoredStatus === "failed" && !node.data.error && taskError ? taskError : restoredStatus === "completed" ? "" : node.data.error;
       return {
         ...node,
         type: kind,
