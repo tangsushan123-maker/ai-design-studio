@@ -1326,6 +1326,9 @@ describe("Image-to-image creative redesign", () => {
     assert.equal(routeSource.includes("shouldUseAiOutpaint ||"), true);
     assert.equal(routeSource.includes("shouldUseAiOutpaint ||\n      isSmartResize"), false);
     assert.equal(routeSource.includes("buildSmartResizeGenerateFallbackPrompt"), true);
+    assert.equal(routeSource.includes("改比例/原生重绘"), false);
+    assert.equal(routeSource.includes("This must remain the same poster campaign"), true);
+    assert.equal(promptSource.includes("必须保持同一张设计活动"), true);
     assert.equal(routeSource.includes("runQueuedImageModelRequestWithRetry"), true);
     assert.equal(routeSource.includes("native_smart_relayout"), true);
     assert.equal(routeSource.includes("target_canvas_relayout"), false);

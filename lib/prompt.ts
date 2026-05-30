@@ -971,6 +971,7 @@ export function buildImageEditPrompt(input: PromptRecipeInput) {
       : "",
     normalized.task === "resize" ? `处理方式：${normalized.fitMode || "smart_relayout"}。AI 改比例必须按目标画布原生重新构图和重绘，不是拉伸、压扁、裁切、简单缩放或把旧图贴在中间。` : "",
     normalized.task === "resize" ? "改比例必须先内部分析原图：设计类型、行业、核心文案、主体、信息层级、视觉重心和版面结构；再重新安排标题、主体、人物/产品、卖点、背景空间和安全边距，让画面天然符合目标比例。" : "",
+    normalized.task === "resize" ? "必须保持同一张设计活动：同一行业、同一主题、同一主标题含义、同一 IP/人物/产品、同一品牌色系；不能生成另一张无关海报、不能换行业、不能换产品或换人物。" : "",
     normalized.task === "resize" ? "字体、Logo、二维码、人物/IP、产品都要保持自然比例；标题可以重新做字形和排版，但不能横向拉宽、纵向压扁或让人物身体比例失真。" : "",
     "请直接分析输入图片和用户要求，然后输出修改后的最终图片。",
   ];

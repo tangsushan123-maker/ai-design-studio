@@ -243,7 +243,7 @@ export async function POST(request: Request) {
       );
       const result = await withTimeout(
         runEditRequest().catch(async (error) => {
-          if (!isCreativeImageToImage || !shouldFallbackCreativeImageEdit(error)) throw error;
+          if ((!isCreativeImageToImage && !isSmartResize) || !shouldFallbackCreativeImageEdit(error)) throw error;
           const summary = await getCreativeEditFallbackSummary();
           const fallbackSize = requestSize === "auto" ? getOpenAIRequestedSize(ratio, quality, imageModel) : requestSize;
           const fallbackPrompt = isSmartResize
@@ -637,6 +637,7 @@ function buildSmartResizeGenerateFallbackPrompt(prompt: string, sourceSummary: s
     "Generate a native smart relayout for a new canvas based on the source image analysis.",
     `Core request:\n${core}`,
     `Target canvas: ${ratioText}, ${target.width}x${target.height}. Redesign and redraw natively for this new size; do not keep old coordinates.`,
+    "This must remain the same poster campaign, same medical/endoscopy topic if present, same source IP/character/product, same brand color family, and same headline meaning.",
     "The source image is the only factual reference. Preserve the exact industry, subject/person/product/IP identity, headline meaning, brand color direction, and main visual idea.",
     "Only re-layout existing title, subject, selling points, and user-requested logo/QR/info area using the new canvas reading order and safe margins.",
     `Source analysis:\n${sourceSummary}`,
