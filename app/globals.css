@@ -874,6 +874,10 @@ textarea:focus-visible {
   display: none;
 }
 
+:root[data-project-home="true"] .theme-toggle-workbench {
+  display: none;
+}
+
 :root[data-theme="light"] code {
   border-color: rgb(20 28 38 / 0.1);
   background: rgb(255 255 255 / 0.62);

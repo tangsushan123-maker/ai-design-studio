@@ -107,13 +107,6 @@ import { ImageLightbox } from "@/components/workbench/image-lightbox";
 import { ProjectHomeScreen } from "@/components/workbench/project-home-screen";
 import { ProjectCreationModal, type ProjectCreationDraft } from "@/components/workbench/project-creation-modal";
 import {
-  buildWorkbenchTaskPrompt,
-  taskDraftVariantCount,
-  validateWorkbenchTaskDraft,
-  type WorkbenchTaskDraft,
-  type WorkbenchTaskTemplate,
-} from "@/components/workbench/workbench-task-templates";
-import {
   inferSimpleMaskEditIntent,
   maskEditEdgeBlendParam,
   maskEditProtectionStrengthParam,
@@ -5400,64 +5393,6 @@ function NodeWorkflowWorkbench({
     }
   }
 
-  async function startTaskTemplateFromHome(template: WorkbenchTaskTemplate, draft: WorkbenchTaskDraft) {
-    if (!projectBootReady || homeBusy) return;
-    const request = draft.request.trim();
-    const preflight = validateWorkbenchTaskDraft(template, draft);
-    if (!request || !preflight.canGenerate) {
-      const questionHint = preflight.questions?.length ? `建议补充：${preflight.questions.slice(0, 3).join("；")}` : "";
-      setStatus([preflight.message || "先补充关键信息，再生成。", questionHint].filter(Boolean).join(" "));
-      return;
-    }
-    setHomeBusy(true);
-    setHomeProjectPickerOpen(false);
-    setHomeOpen(false);
-    rememberWorkbenchHomeState(false);
-    const projectTitle = `${template.title}：${request}`.slice(0, 34);
-    const variantCount = taskDraftVariantCount(draft, template);
-    try {
-      await createNewProject({ projectName: projectTitle, organizationName: "", autoSearch: false });
-      const prompt = buildWorkbenchTaskPrompt(template, draft);
-      setComposerPrompt("");
-      setComposerRatio(template.ratio);
-      setComposerQuality("standard");
-      setComposerVariantCount(variantCount);
-      const node = addNode("text_to_image", { x: 0, y: 0 }, undefined, true, {
-        prompt,
-        model: effectiveImageModel,
-        aspectRatio: template.ratio,
-        targetSize: template.targetSize,
-        quality: "standard",
-        variantCount,
-        taskTemplateId: template.id,
-        taskTemplateTitle: template.title,
-        textMode: "ai_text_preview",
-        compositionCompleteness: "更完整",
-        safeMargin: template.ratio === "custom" || template.ratio === "16:9" ? "10%" : "15%",
-        cameraDistance: template.id === "ecommerce_main" ? "近景" : "中景",
-        subjectScale: template.id === "ecommerce_main" ? "大" : "中",
-      });
-      focusCanvasOnNodes([node.id]);
-      openRightPanelTab("params");
-      if (modelInfo.hasKey && effectiveImageModel) {
-        setPendingRunNodeId(node.id);
-        setStatus(`已按「${template.title}」创建任务，正在生成 ${variantCount} 个方案。`);
-      } else {
-        createManualTask({
-          nodeId: node.id,
-          nodeName: template.title,
-          type: "常用任务 / 待生成",
-          model: effectiveImageModel,
-          prompt,
-          deferred: true,
-        });
-        setStatus(`已按「${template.title}」创建任务。配置并测试图片模型后可运行。`);
-      }
-    } finally {
-      setHomeBusy(false);
-    }
-  }
-
   async function openProjectFromHome(id: string, ownerUserId?: string) {
     if (!projectBootReady || homeBusy) return;
     setHomeBusy(true);
@@ -5488,7 +5423,6 @@ function NodeWorkflowWorkbench({
         busy={homeBusy || !projectBootReady}
         formatUpdatedAt={formatGeneratedAt}
         onCreate={() => void enterNewProjectFromHome()}
-        onStartTask={(template, draft) => void startTaskTemplateFromHome(template, draft)}
         onOpen={(id, ownerUserId) => void openProjectFromHome(id, ownerUserId)}
         onRefreshProjects={() => void refreshProjectList()}
         onShowProjects={showHomeProjectPicker}
