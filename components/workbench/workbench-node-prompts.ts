@@ -27,7 +27,7 @@ export function buildImageRecommendations(image: ImageAsset | null): ImageRecomm
   const qualityEnhanceTarget = qualityEnhanceDefaultTargetForImage(image);
   const qualityEnhanceQuality = qualityForQualityEnhanceTarget(qualityEnhanceTarget);
   if (size && size < 1800) {
-    recommendations.push({ label: "画质增强", reason: "当前长边偏小，先用 Standard 修清文字和边缘，并保持原比例。", type: "hd_redraw", handle: "image", params: { quality: qualityEnhanceQuality, targetSize: qualityEnhanceTarget, enhancementMode: "standard" } });
+    recommendations.push({ label: "画质增强", reason: "当前长边偏小，先用文字修复模式修清文字和边缘，并保持原比例。", type: "hd_redraw", handle: "image", params: { quality: qualityEnhanceQuality, targetSize: qualityEnhanceTarget, enhancementMode: "standard" } });
   } else {
     recommendations.push({ label: "画质增强", reason: "保持构图和原比例，增强文字、边缘和商业质感。", type: "hd_redraw", handle: "image", params: { quality: qualityEnhanceQuality, targetSize: qualityEnhanceTarget, enhancementMode: "standard" } });
   }

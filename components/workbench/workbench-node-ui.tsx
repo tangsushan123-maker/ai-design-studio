@@ -177,7 +177,7 @@ export function TextReferenceQuickControls({
             <ImageFrame alt={item.label} className="rounded-[8px]" fit="cover" image={item.image} preserveRatio={false} variant="thumbnail" style={{ height: 28, width: 28 }} />
             <div className="min-w-0">
               <div className="truncate text-[11px] font-medium text-white/68">图 {index + 1}</div>
-              <div className="truncate text-[11px] text-white/34">{textReferenceRoleDescription(item.role)}</div>
+              <div className="truncate text-[11px] text-white/46">{textReferenceRoleDescription(item.role)}</div>
             </div>
             <div className="nodrag grid grid-cols-2 overflow-hidden rounded-[10px] border border-white/10 bg-black/18 text-[11px]">
               <button
@@ -198,7 +198,7 @@ export function TextReferenceQuickControls({
           </div>
         );
       })}
-      {references.length > 3 ? <div className="px-0.5 text-[11px] text-white/34">还有 {references.length - 3} 张在右侧参数里设置</div> : null}
+      {references.length > 3 ? <div className="px-0.5 text-[11px] text-white/46">还有 {references.length - 3} 张在右侧参数里设置</div> : null}
     </div>
   );
 }
@@ -254,10 +254,10 @@ export function InlineChipRow({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="mr-1 text-[11px] text-white/38">{label}</span>
+      <span className="mr-1 text-[11px] text-white/38 shrink-0 whitespace-nowrap">{label}</span>
       {options.map((option) => (
         <button
-          className={`rounded-full px-2 py-1 text-[11px] transition ${
+          className={`max-w-full truncate rounded-full px-2 py-1 text-[11px] whitespace-nowrap transition ${
             value === option ? "bg-white text-black" : "border border-white/10 bg-white/[0.045] text-white/52 hover:bg-white/[0.08]"
           }`}
           key={option}

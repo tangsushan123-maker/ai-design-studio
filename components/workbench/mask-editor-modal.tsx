@@ -332,9 +332,10 @@ export function MaskEditorModal({
               <span className="apple-field-label">快捷指令</span>
               {maskQuickActions.map((action) => (
                 <button
-                  className={`${prompt === action.prompt ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[11px]`}
+                  className={`${prompt === action.prompt ? "apple-button-primary font-semibold" : "apple-button"} max-w-[116px] truncate px-2.5 py-1.5 text-[11px]`}
                   key={action.label}
                   onClick={() => applyQuickAction(action)}
+                  title={action.prompt}
                   type="button"
                 >
                   {action.label}

@@ -152,6 +152,7 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
           targetSize: stringValue(savedMetadata.targetSize),
           materialCopy: stringValue(savedMetadata.materialCopy),
           materialScene: stringValue(savedMetadata.materialScene),
+          favorite: savedMetadata.favorite === true,
           protectionContext: objectValue(savedMetadata.protectionContext),
           version: objectValue(savedMetadata.version),
           maskProtectionCheck: objectValue(savedMetadata.maskProtectionCheck),

@@ -2,7 +2,7 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { mapWithConcurrency } from "@/lib/async-utils";
-import { listAuthUsers, requireCurrentUser, userDataPath } from "@/lib/auth";
+import { AuthRequiredError, listAuthUsers, requireCurrentUser, userDataPath } from "@/lib/auth";
 import { readJsonWithBackup, writeJsonAtomic } from "@/lib/local-json-store";
 import {
   createDefaultProjectKnowledge,
@@ -41,48 +41,53 @@ type ProjectStore = {
 };
 
 export async function GET(request: Request) {
-  const user = await requireCurrentUser();
-  const url = new URL(request.url);
-  const mode = url.searchParams.get("mode");
-  const id = url.searchParams.get("id");
-  const ownerUserId = url.searchParams.get("ownerUserId") || "";
-  const isOwner = user.role === "owner";
-  const store = isOwner && ownerUserId ? await readStore(ownerUserId, { includeRootMigration: false }) : await readStore(user.id);
+  try {
+    const user = await requireCurrentUser();
+    const url = new URL(request.url);
+    const mode = url.searchParams.get("mode");
+    const id = url.searchParams.get("id");
+    const ownerUserId = url.searchParams.get("ownerUserId") || "";
+    const isOwner = user.role === "owner";
+    const store = isOwner && ownerUserId ? await readStore(ownerUserId, { includeRootMigration: false }) : await readStore(user.id);
 
-  if (mode === "list") {
-    if (isOwner) {
-      const ownerStores = await readAllOwnerProjectStores(user.id);
-      const projects = ownerProjectsFromStores(ownerStores);
-      const sortedProjects = projects.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
-      const activeProjectId = ownerStores.find((entry) => entry.owner.id === user.id)?.store.activeProjectId || store.activeProjectId;
+    if (mode === "list") {
+      if (isOwner) {
+        const ownerStores = await readAllOwnerProjectStores(user.id);
+        const projects = ownerProjectsFromStores(ownerStores);
+        const sortedProjects = projects.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+        const activeProjectId = ownerStores.find((entry) => entry.owner.id === user.id)?.store.activeProjectId || store.activeProjectId;
+        return NextResponse.json({
+          activeProjectId,
+          projects: summarizeProjects(sortedProjects),
+          adminProjectView: true,
+        });
+      }
       return NextResponse.json({
-        activeProjectId,
-        projects: summarizeProjects(sortedProjects),
-        adminProjectView: true,
+        activeProjectId: store.activeProjectId,
+        projects: store.projects.map((project) => ({
+          id: project.id,
+          name: project.name,
+          projectKind: project.projectKind,
+          updatedAt: project.updatedAt,
+          nodeCount: project.nodes?.length || 0,
+          runCount: project.runs?.length || 0,
+          assetCount: project.assets?.length || 0,
+          coverUrl: getProjectCover(project),
+          organizationName: project.knowledge?.archive.organizationName || "",
+          libraryName: project.knowledge?.materialLibrary.name || "",
+          referenceCount: project.knowledge?.references.length || 0,
+        })),
       });
     }
-    return NextResponse.json({
-      activeProjectId: store.activeProjectId,
-      projects: store.projects.map((project) => ({
-        id: project.id,
-        name: project.name,
-        projectKind: project.projectKind,
-        updatedAt: project.updatedAt,
-        nodeCount: project.nodes?.length || 0,
-        runCount: project.runs?.length || 0,
-        assetCount: project.assets?.length || 0,
-        coverUrl: getProjectCover(project),
-        organizationName: project.knowledge?.archive.organizationName || "",
-        libraryName: project.knowledge?.materialLibrary.name || "",
-        referenceCount: project.knowledge?.references.length || 0,
-      })),
-    });
-  }
 
-  const project = isOwner
-    ? await findProjectForOwnerView(id, ownerUserId, user.id)
-    : store.projects.find((item) => item.id === id) || store.projects.find((item) => item.id === store.activeProjectId) || createBlankProject();
-  return NextResponse.json(project);
+    const project = isOwner
+      ? await findProjectForOwnerView(id, ownerUserId, user.id)
+      : store.projects.find((item) => item.id === id) || store.projects.find((item) => item.id === store.activeProjectId) || createBlankProject();
+    return NextResponse.json(project);
+  } catch (error) {
+    if (error instanceof AuthRequiredError) return NextResponse.json({ error: "请先登录。" }, { status: 401 });
+    return NextResponse.json({ error: projectErrorMessage("读取项目失败", error) }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -150,6 +155,7 @@ export async function POST(request: Request) {
       : summarizeProjects(nextStore.projects);
     return NextResponse.json({ ok: true, project, projects: responseProjects, activeProjectId: nextStore.activeProjectId });
   } catch (error) {
+    if (error instanceof AuthRequiredError) return NextResponse.json({ error: "请先登录。" }, { status: 401 });
     if (error instanceof InvalidProjectPayloadError) {
       return NextResponse.json(
         {
@@ -180,8 +186,8 @@ function parseProjectPayload(raw: string): Partial<StoredProject> & { setActive?
 }
 
 export async function DELETE(request: Request) {
-  const user = await requireCurrentUser();
   try {
+    const user = await requireCurrentUser();
     const input = await parseProjectDeletePayload(request);
     if (!input.id) return NextResponse.json({ error: "缺少项目 ID。" }, { status: 400 });
 
@@ -200,6 +206,7 @@ export async function DELETE(request: Request) {
       : summarizeProjects(nextStore.projects);
     return NextResponse.json({ ok: true, activeProjectId: nextStore.activeProjectId, projects: responseProjects });
   } catch (error) {
+    if (error instanceof AuthRequiredError) return NextResponse.json({ error: "请先登录。" }, { status: 401 });
     if (error instanceof InvalidProjectDeletePayloadError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }

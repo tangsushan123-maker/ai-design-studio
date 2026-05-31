@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { CheckCircle2, CircleAlert, CircleDashed, Loader2 } from "lucide-react";
 
 export type SettingsStatus = {
@@ -9,9 +10,10 @@ export type SettingsStatus = {
 export type SettingsStatusState = "idle" | "success" | "error";
 
 export function SettingsStatusBanner({ status }: { status: SettingsStatus }) {
+  const needsLogin = /请先登录|登录已过期/.test(status.message);
   return (
     <div
-      className={`mb-5 flex items-center gap-2 rounded-[14px] border px-4 py-3 text-sm ${
+      className={`mb-5 flex flex-wrap items-center gap-2 rounded-[14px] border px-4 py-3 text-sm ${
         status.type === "error"
           ? "apple-status-danger"
           : status.type === "success"
@@ -22,7 +24,12 @@ export function SettingsStatusBanner({ status }: { status: SettingsStatus }) {
       }`}
     >
       {status.type === "loading" ? <Loader2 className="size-4 shrink-0 animate-spin" /> : <SettingsStatusIcon state={status.type === "error" ? "error" : status.type === "success" ? "success" : "idle"} />}
-      {status.message}
+      <span className="min-w-0 flex-1 leading-5">{status.message}</span>
+      {needsLogin ? (
+        <Link className="apple-button rounded-full px-3 py-1.5 text-[11px] font-semibold text-white/78" href="/login">
+          去登录
+        </Link>
+      ) : null}
     </div>
   );
 }

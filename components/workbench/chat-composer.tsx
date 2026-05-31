@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, Camera, Check, ChevronDown, FileImage, Layers, Palette, Plus, ScanLine, ShieldCheck, Sparkles, Sticker } from "lucide-react";
+import { ArrowUp, Camera, Check, ChevronDown, FileImage, Layers, Palette, Plus, ScanLine, ShieldCheck, Sparkles, Star, Sticker } from "lucide-react";
 import { type AspectRatioValue, type QualityValue } from "@/lib/design-options";
 import { defaultParamsByKind } from "@/components/workbench/workbench-config";
 import {
@@ -14,8 +15,9 @@ import {
 } from "@/components/workbench/workbench-composer-helpers";
 import { imageModelProductHint, preferredAutoImageModelId } from "@/components/workbench/workbench-models";
 import { RatioGlyph } from "@/components/workbench/workbench-node-ui";
+import { imageKey } from "@/components/workbench/workbench-image-collection";
 import { adaptiveRatioOptions, firstSupportedImageFile, ratioOptionLabel, stringParam } from "@/components/workbench/workbench-utils";
-import type { BrandAssetSummary, BrandAssetUsage, FlowNode } from "@/components/workbench/workbench-types";
+import type { BrandAssetSummary, BrandAssetUsage, FlowNode, ImageAsset } from "@/components/workbench/workbench-types";
 import type { ModelCatalogItem } from "@/lib/openai-defaults";
 
 export function ChatComposer({
@@ -23,43 +25,53 @@ export function ChatComposer({
   brandUsage,
   effectiveModel,
   focusTick,
+  favoriteStyleImages,
   hasKey,
   model,
   modelOptions,
   onBrandUsageChange,
   onImageFile,
+  onFavoriteStyleSelect,
   onModelChange,
   onPasteHint,
   onPromptChange,
   onQualityChange,
   onRatioChange,
+  onVariantCountChange,
   onSubmit,
   prompt,
   quality,
   ratio,
   runningNodeIds,
   selectedNode,
+  selectedFavoriteStyleKeys,
+  variantCount,
 }: {
   brandSummary: BrandAssetSummary;
   brandUsage: BrandAssetUsage;
   effectiveModel: string;
   focusTick: number;
+  favoriteStyleImages: ImageAsset[];
   hasKey: boolean;
   model: string;
   modelOptions: ModelCatalogItem[];
   onBrandUsageChange: (value: BrandAssetUsage) => void;
+  onFavoriteStyleSelect: (key: string) => void;
   onImageFile: (file: File) => void;
   onModelChange: (value: string) => void;
   onPasteHint: () => void;
   onPromptChange: (value: string) => void;
   onQualityChange: (value: QualityValue) => void;
   onRatioChange: (value: AspectRatioValue) => void;
+  onVariantCountChange: (value: number) => void;
   onSubmit: (promptDraft?: string) => void;
   prompt: string;
   quality: QualityValue;
   ratio: AspectRatioValue;
   runningNodeIds: Set<string>;
   selectedNode: FlowNode | null;
+  selectedFavoriteStyleKeys: string[];
+  variantCount: number;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -68,7 +80,9 @@ export function ChatComposer({
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [ratioMenuOpen, setRatioMenuOpen] = useState(false);
   const [qualityMenuOpen, setQualityMenuOpen] = useState(false);
+  const [variantMenuOpen, setVariantMenuOpen] = useState(false);
   const [brandMenuOpen, setBrandMenuOpen] = useState(false);
+  const [composerExpanded, setComposerExpanded] = useState(false);
   const ratios: AspectRatioValue[] = adaptiveRatioOptions;
   const qualityOptions = [
     { label: "标准", description: "适合快速出图", value: "standard" as QualityValue },
@@ -94,6 +108,8 @@ export function ChatComposer({
   );
   const activeModelLabel = menuModelOptions.find((item) => item.value === model)?.label || model || "Auto";
   const selectedPromptNode = selectedNode && isComposerDrivenNode(selectedNode.data.kind) ? selectedNode : null;
+  const selectedFavoriteStyleKeySet = useMemo(() => new Set(selectedFavoriteStyleKeys), [selectedFavoriteStyleKeys]);
+  const selectedFavoriteStyleCount = favoriteStyleImages.filter((image) => selectedFavoriteStyleKeySet.has(imageKey(image))).length;
   const selectedPromptNodeValue = selectedPromptNode ? stringParam(selectedPromptNode.data.params.prompt) : "";
   const selectedPromptNodeDefault = selectedPromptNode ? stringParam(defaultParamsByKind[selectedPromptNode.data.kind]?.prompt) : "";
   const displayPrompt = selectedPromptNode
@@ -109,7 +125,15 @@ export function ChatComposer({
     runningNodeIds.has(selectedPromptNode.id)
   ));
   const canSubmit = Boolean(effectiveModel) && !selectedPromptNodeBusy && (selectedPromptNode ? canSubmitComposerForNode(selectedPromptNode, displayPrompt) : Boolean(prompt.trim()));
-  const anyMenuOpen = uploadMenuOpen || modelMenuOpen || ratioMenuOpen || qualityMenuOpen || brandMenuOpen;
+  const submitDisabledReason = selectedPromptNodeBusy
+    ? "当前节点正在运行"
+    : !effectiveModel
+      ? (hasKey ? "还没有可用图片模型，请先到设置页测试模型" : "还没有配置 API Key")
+      : selectedPromptNode
+        ? composerHelper || "请补齐这个节点需要的输入"
+        : "请输入提示词";
+  const variantOptions = [2, 3, 4, 5, 6];
+  const anyMenuOpen = uploadMenuOpen || modelMenuOpen || ratioMenuOpen || qualityMenuOpen || variantMenuOpen || brandMenuOpen;
   const apiSetupMessage = !hasKey
     ? "还没有配置 API Key，配置后才能生成图片。"
     : !effectiveModel
@@ -121,7 +145,13 @@ export function ChatComposer({
     setModelMenuOpen(false);
     setRatioMenuOpen(false);
     setQualityMenuOpen(false);
+    setVariantMenuOpen(false);
     setBrandMenuOpen(false);
+  }
+
+  function expandComposer() {
+    setComposerExpanded(true);
+    window.setTimeout(() => textareaRef.current?.focus(), 30);
   }
 
   useEffect(() => {
@@ -142,15 +172,27 @@ export function ChatComposer({
   }, [anyMenuOpen]);
 
   useEffect(() => {
-    const input = textareaRef.current;
-    if (!input) return;
     const timer = window.setTimeout(() => {
+      setComposerExpanded(true);
+    }, 0);
+    const focusTimer = window.setTimeout(() => {
+      const input = textareaRef.current;
+      if (!input) return;
       input.focus();
       const end = input.value.length;
       input.setSelectionRange(end, end);
     }, 30);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(focusTimer);
+    };
   }, [focusTick]);
+
+  useEffect(() => {
+    if (!selectedPromptNode) return;
+    const timer = window.setTimeout(() => setComposerExpanded(true), 0);
+    return () => window.clearTimeout(timer);
+  }, [selectedPromptNode]);
 
   function handleFiles(files: FileList | File[]) {
     const file = firstSupportedImageFile(files);
@@ -159,7 +201,24 @@ export function ChatComposer({
   }
 
   return (
-    <div className="pointer-events-none absolute bottom-3 left-1/2 z-30 w-[min(680px,calc(100vw-24px))] -translate-x-1/2 px-2">
+    <div className="pointer-events-none absolute bottom-3 left-1/2 z-30 w-[min(760px,calc(100vw-24px))] -translate-x-1/2 px-2">
+      {!composerExpanded && !anyMenuOpen ? (
+        <button
+          className="apple-panel-strong pointer-events-auto mx-auto flex h-12 max-w-[min(520px,calc(100vw-32px))] items-center gap-2 rounded-full px-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.34)]"
+          onClick={expandComposer}
+          type="button"
+        >
+          <Plus className="size-4 shrink-0 text-white/62" />
+          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-white/74">
+            输入需求，生成设计方案
+          </span>
+          <span className="apple-pill hidden shrink-0 px-2 py-1 text-[11px] text-white/58 sm:inline">{ratioOptionLabel(ratio)}</span>
+          <span className="apple-pill shrink-0 px-2 py-1 text-[11px] text-white/58">{variantCount}方案</span>
+          <span className="apple-button-primary flex size-8 shrink-0 items-center justify-center">
+            <ArrowUp className="size-4" />
+          </span>
+        </button>
+      ) : (
       <div
         className="apple-panel-strong pointer-events-auto relative overflow-visible"
         onDragOver={(event) => {
@@ -179,6 +238,16 @@ export function ChatComposer({
               <div className="apple-section-title">{composerTitle}</div>
               {composerHelper ? <div className="apple-caption mt-0.5 line-clamp-1 max-w-[460px] text-white/52">{composerHelper}</div> : null}
             </div>
+            <button
+              className="apple-button flex h-8 shrink-0 items-center px-3 text-[11px] text-white/62"
+              onClick={() => {
+                closeMenus();
+                setComposerExpanded(false);
+              }}
+              type="button"
+            >
+              收起
+            </button>
           </div>
           <textarea
             ref={textareaRef}
@@ -204,7 +273,7 @@ export function ChatComposer({
         </div>
 
         <div ref={menuAreaRef} className="flex flex-wrap items-center gap-1.5 px-3.5 pb-3 sm:flex-nowrap sm:px-4">
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               className={`apple-button flex size-8 items-center justify-center rounded-full text-white/74 transition ${uploadMenuOpen ? "bg-white/[0.13] text-white" : ""}`}
               onClick={() => {
@@ -212,6 +281,7 @@ export function ChatComposer({
                 setModelMenuOpen(false);
                 setRatioMenuOpen(false);
                 setQualityMenuOpen(false);
+                setVariantMenuOpen(false);
                 setBrandMenuOpen(false);
               }}
               title="上传文件"
@@ -256,11 +326,13 @@ export function ChatComposer({
             />
           </div>
 
+          <span className="ml-1 hidden h-4 w-px shrink-0 bg-white/12 sm:block" />
           <ComposerSelectButton open={ratioMenuOpen} title="切换比例" onClick={() => {
             setRatioMenuOpen((value) => !value);
             setUploadMenuOpen(false);
             setModelMenuOpen(false);
             setQualityMenuOpen(false);
+            setVariantMenuOpen(false);
             setBrandMenuOpen(false);
           }}>
             {ratioOptionLabel(ratio)}
@@ -292,6 +364,7 @@ export function ChatComposer({
             setUploadMenuOpen(false);
             setModelMenuOpen(false);
             setRatioMenuOpen(false);
+            setVariantMenuOpen(false);
             setBrandMenuOpen(false);
           }}>
             {qualityOptions.find((item) => item.value === quality)?.label || "标准"}
@@ -318,14 +391,16 @@ export function ChatComposer({
             </div>
           ) : null}
 
+          <span className="ml-1 hidden h-4 w-px shrink-0 bg-white/12 sm:block" />
           <div className="relative">
             <button
-              className={`apple-button flex h-8 max-w-[124px] shrink items-center gap-1.5 px-2.5 text-[11px] font-semibold text-white/74 sm:max-w-[176px] ${modelMenuOpen ? "bg-white/[0.13] text-white" : ""}`}
+              className={`apple-button flex h-8 max-w-[124px] shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-[11px] font-semibold text-white/74 sm:max-w-[176px] ${modelMenuOpen ? "bg-white/[0.13] text-white" : ""}`}
               onClick={() => {
                 setModelMenuOpen((value) => !value);
                 setUploadMenuOpen(false);
                 setRatioMenuOpen(false);
                 setQualityMenuOpen(false);
+                setVariantMenuOpen(false);
                 setBrandMenuOpen(false);
               }}
               title="切换图片模型"
@@ -366,21 +441,24 @@ export function ChatComposer({
             ) : null}
           </div>
 
-          <div className="relative">
+          <span className="ml-1 hidden h-4 w-px shrink-0 bg-white/12 sm:block" />
+          <div className="relative shrink-0">
             <button
-              className={`apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-semibold text-white/74 ${brandMenuOpen ? "bg-white/[0.13] text-white" : ""}`}
+              className={`apple-button flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-[11px] font-semibold text-white/74 ${brandMenuOpen ? "bg-white/[0.13] text-white" : ""}`}
               onClick={() => {
                 setBrandMenuOpen((value) => !value);
                 setUploadMenuOpen(false);
                 setRatioMenuOpen(false);
                 setQualityMenuOpen(false);
+                setVariantMenuOpen(false);
                 setModelMenuOpen(false);
               }}
               title="项目资产调用"
               type="button"
             >
               <Palette className="size-3.5" />
-              项目调用
+              <span className="hidden sm:inline">项目调用</span>
+              <span className="sm:hidden">项目</span>
               <ChevronDown className="size-3.5 text-white/38" />
             </button>
             {brandMenuOpen ? (
@@ -396,23 +474,70 @@ export function ChatComposer({
                 </div>
                 <div className="space-y-1">
                   {brandUsageItems.map((item) => (
-                    <button
-                      className="apple-menu-item flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
-                      key={item.key}
-                      onClick={() => onBrandUsageChange({ ...brandUsage, [item.key]: !brandUsage[item.key] })}
-                      type="button"
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/58">{item.icon}</span>
-                        <span className="min-w-0">
-                          <span className="block text-[12px] font-semibold text-white/86">{item.label}</span>
-                          <span className="apple-menu-meta mt-0.5 block truncate text-[11px]">{item.description}</span>
+                    <div key={item.key}>
+                      <button
+                        className="apple-menu-item flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+                        onClick={() => onBrandUsageChange({ ...brandUsage, [item.key]: !brandUsage[item.key] })}
+                        type="button"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-white/58">{item.icon}</span>
+                          <span className="min-w-0">
+                            <span className="block text-[12px] font-semibold text-white/86">{item.label}</span>
+                            <span className="apple-menu-meta mt-0.5 block truncate text-[11px]">
+                              {item.key === "useFavoriteStyle" && selectedFavoriteStyleCount ? `已选 ${selectedFavoriteStyleCount} 张收藏图` : item.description}
+                            </span>
+                          </span>
                         </span>
-                      </span>
-                      <span className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition ${brandUsage[item.key] ? "bg-[#74e3c5]" : "bg-white/12"}`}>
-                        <span className={`block size-4 rounded-full bg-white transition ${brandUsage[item.key] ? "translate-x-4" : ""}`} />
-                      </span>
-                    </button>
+                        <span className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition ${brandUsage[item.key] ? "bg-[#74e3c5]" : "bg-white/12"}`}>
+                          <span className={`block size-4 rounded-full bg-white transition ${brandUsage[item.key] ? "translate-x-4" : ""}`} />
+                        </span>
+                      </button>
+                      {item.key === "useFavoriteStyle" && brandUsage.useFavoriteStyle ? (
+                        <div className="mx-2 mb-1 rounded-[14px] border border-white/10 bg-white/[0.035] p-2">
+                          {favoriteStyleImages.length ? (
+                            <>
+                              <div className="mb-2 flex items-center justify-between gap-2 text-[11px] text-white/48">
+                                <span>{selectedFavoriteStyleCount ? "按已选收藏图参考" : "未选择时自动取最近 3 张"}</span>
+                                <span>{selectedFavoriteStyleCount}/3</span>
+                              </div>
+                              <div className="mb-2 rounded-[10px] border border-[#74e3c5]/12 bg-[#74e3c5]/8 px-2 py-1.5 text-[11px] leading-5 text-[#adf8e5]/72">
+                                只弱参考配色、构图和质感，不复制收藏图里的主体、文字和真实信息。
+                              </div>
+                              <div className="grid grid-cols-3 gap-1.5">
+                                {favoriteStyleImages.slice(0, 9).map((image) => {
+                                  const key = imageKey(image);
+                                  const selected = selectedFavoriteStyleKeySet.has(key);
+                                  return (
+                                    <button
+                                      className={`group relative aspect-square overflow-hidden rounded-[10px] border transition ${selected ? "border-[#74e3c5] ring-1 ring-[#74e3c5]/60" : "border-white/10 hover:border-white/28"}`}
+                                      key={key}
+                                      onClick={() => onFavoriteStyleSelect(key)}
+                                      title={selected ? "取消引用这张收藏图" : "引用这张收藏图"}
+                                      type="button"
+                                    >
+                                      <Image
+                                        alt={image.fileName || image.mode || "收藏图"}
+                                        className="size-full object-cover"
+                                        fill
+                                        sizes="72px"
+                                        src={image.thumbnailUrl || image.previewUrl || image.url}
+                                        unoptimized
+                                      />
+                                      <span className={`absolute right-1 top-1 flex size-5 items-center justify-center rounded-full border text-[11px] ${selected ? "border-[#74e3c5] bg-[#74e3c5] text-[#06131f]" : "border-white/24 bg-black/42 text-white/64"}`}>
+                                        {selected ? <Check className="size-3.5" /> : null}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="px-1 py-2 text-[11px] leading-5 text-white/48">还没有收藏图。先在结果图或图片管理里点星标收藏。</div>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
                 {brandSummary.missing.length ? (
@@ -424,15 +549,44 @@ export function ChatComposer({
             ) : null}
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <ComposerSelectButton open={variantMenuOpen} title="方案数量" onClick={() => {
+            setVariantMenuOpen((value) => !value);
+            setUploadMenuOpen(false);
+            setModelMenuOpen(false);
+            setRatioMenuOpen(false);
+            setQualityMenuOpen(false);
+            setBrandMenuOpen(false);
+          }}>
+            {variantCount}方案
+          </ComposerSelectButton>
+          {variantMenuOpen ? (
+            <div className="apple-menu absolute bottom-12 right-[76px] w-[154px] overflow-hidden p-1.5">
+              {variantOptions.map((count) => (
+                <button
+                  className="apple-menu-item flex items-center justify-between gap-3 px-3 py-2.5 text-left text-[12px] font-medium"
+                  key={count}
+                  onClick={() => {
+                    onVariantCountChange(count);
+                    setVariantMenuOpen(false);
+                  }}
+                  type="button"
+                >
+                  <span className="font-semibold text-white/88">{count} 个方案</span>
+                  {variantCount === count ? <Check className="size-4 text-white/82" /> : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <button
-              className="apple-button-primary flex h-9 items-center justify-center gap-1.5 px-3.5 text-[12px] font-semibold disabled:bg-white/[0.08] disabled:text-white/30"
+              className="apple-button-primary flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap px-3.5 text-[12px] font-semibold disabled:bg-white/[0.08] disabled:text-white/30"
               disabled={!canSubmit}
               onClick={() => {
                 closeMenus();
                 onSubmit(displayPrompt);
               }}
-              title="生成"
+              title={canSubmit ? "生成" : submitDisabledReason}
               type="button"
             >
               <ArrowUp className="size-4" />
@@ -441,15 +595,16 @@ export function ChatComposer({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
 
 function ComposerSelectButton({ children, onClick, open, title }: { children: ReactNode; onClick: () => void; open: boolean; title: string }) {
   return (
-    <div className="relative">
+    <div className="relative shrink-0">
       <button
-        className={`apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-semibold text-white/74 ${open ? "bg-white/[0.13] text-white" : ""}`}
+        className={`apple-button flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-[11px] font-semibold text-white/74 ${open ? "bg-white/[0.13] text-white" : ""}`}
         onClick={onClick}
         title={title}
         type="button"
@@ -475,4 +630,5 @@ const brandUsageItems: Array<{
   { key: "useQrCode", label: "二维码", description: "明确要求时调用已上传二维码", icon: <ScanLine className="size-3.5" /> },
   { key: "useCopy", label: "常用文案", description: "带入项目宣传语和卖点", icon: <Sparkles className="size-3.5" /> },
   { key: "useForbiddenRules", label: "禁用规则", description: "避免改错品牌与敏感内容", icon: <ShieldCheck className="size-3.5" /> },
+  { key: "useFavoriteStyle", label: "收藏风格", description: "弱参考收藏图的配色、构图和商业质感", icon: <Star className="size-3.5" /> },
 ];

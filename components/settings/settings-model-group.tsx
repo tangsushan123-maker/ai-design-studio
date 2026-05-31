@@ -2,8 +2,10 @@
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import type { ModelCatalogItem } from "@/lib/openai-defaults";
+
+const compactModelLimit = 3;
 
 export function ModelGroup({
   activeModel,
@@ -28,6 +30,9 @@ export function ModelGroup({
 }) {
   const [activeModelAction, setActiveModelAction] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  const visibleModels = expanded ? models : prioritizedCompactModels(models, activeModel);
+  const hiddenCount = Math.max(0, models.length - visibleModels.length);
 
   async function runModelAction(label: string, model: ModelCatalogItem, action: () => void | Promise<unknown>) {
     const key = `${label}:${model.id}`;
@@ -55,17 +60,30 @@ export function ModelGroup({
         <span className="apple-icon-bubble size-8">{icon}</span>
         <div>
           <div className="text-sm font-semibold text-white/86">{label}</div>
-          <div className="apple-caption">{models.length} 个模型</div>
+          <div className="apple-caption">
+            <span className="apple-count-badge mr-1.5 px-1.5 py-0.5 text-[11px]">{models.length}</span>
+            个模型{hiddenCount && !expanded ? `，已收起 ${hiddenCount} 个` : ""}
+          </div>
         </div>
+        {models.length > compactModelLimit ? (
+          <button
+            className="apple-button ml-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-white/66"
+            onClick={() => setExpanded((value) => !value)}
+            type="button"
+          >
+            {expanded ? "收起" : `展开 ${hiddenCount} 个`}
+            <ChevronDown className={`size-3.5 transition ${expanded ? "rotate-180" : ""}`} />
+          </button>
+        ) : null}
       </div>
       <div className="space-y-2">
-        {models.map((model) => (
+        {visibleModels.map((model) => (
           <div className="rounded-[12px] border border-white/10 bg-white/[0.05] p-3" key={`${label}-${model.id}`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-semibold text-white/84">{model.label || model.id}</span>
-                  {activeModel === model.id ? <span className="apple-pill-accent px-2 py-0.5 text-[11px]">默认</span> : null}
+                  {activeModel === model.id ? <span className="apple-pill-accent px-2 py-0.5 text-[11px] shrink-0">默认</span> : null}
                 </div>
                 <div className="apple-caption mt-1 truncate">{model.id}</div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -83,7 +101,7 @@ export function ModelGroup({
                 <button className="apple-button px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={isBusy || Boolean(activeModelAction)} onClick={() => onEdit(model)} type="button">编辑</button>
                 <button className="apple-button-danger flex items-center gap-1 px-2.5 py-1.5 text-[11px] disabled:opacity-45" disabled={isBusy || Boolean(activeModelAction)} onClick={() => void deleteModel(model)} type="button">
                   <Trash2 className="size-3" />
-                  {activeModelAction === `删除:${model.id}` ? "删除中" : confirmDeleteId === model.id ? "确认删" : "删"}
+                  <span className="truncate">{activeModelAction === `删除:${model.id}` ? "删除中" : confirmDeleteId === model.id ? "确认删" : "删"}</span>
                 </button>
               </div>
             </div>
@@ -94,6 +112,21 @@ export function ModelGroup({
       </div>
     </section>
   );
+}
+
+function prioritizedCompactModels(models: ModelCatalogItem[], activeModel: string) {
+  if (models.length <= compactModelLimit) return models;
+  const picked: ModelCatalogItem[] = [];
+  const seen = new Set<string>();
+  const add = (model?: ModelCatalogItem) => {
+    if (!model || seen.has(model.id) || picked.length >= compactModelLimit) return;
+    seen.add(model.id);
+    picked.push(model);
+  };
+  add(models.find((model) => model.id === activeModel));
+  for (const model of models.filter((item) => item.testStatus === "passed")) add(model);
+  for (const model of models) add(model);
+  return picked;
 }
 
 function ModelStatus({ model }: { model: ModelCatalogItem }) {

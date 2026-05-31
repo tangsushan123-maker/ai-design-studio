@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useState, type ReactNode } from "react";
-import { Copy, Images, RefreshCcw, RotateCcw, Search, Star, Trash2, X } from "lucide-react";
+import { Check, Copy, Images, LockKeyhole, RefreshCcw, RotateCcw, Search, Star, Trash2, X } from "lucide-react";
 import { ImageFrame } from "@/components/workbench/image-frame";
 import { imageManagerMatchesSearch } from "@/lib/workbench-image-manager";
 
@@ -84,6 +84,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   nodes,
   onCopyImage,
   onDelete,
+  onDeleteMany,
   onLoadMore,
   onLoadMoreTrash,
   onPermanentDelete,
@@ -110,6 +111,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   shouldShowCheckerboard: (image: TImage | null | undefined) => boolean;
   onCopyImage: (image: TImage) => void | Promise<unknown>;
   onDelete: (image: TImage) => void | Promise<unknown>;
+  onDeleteMany: (images: TImage[]) => void | Promise<unknown>;
   onLoadMore: () => void;
   onLoadMoreTrash: () => void;
   onPermanentDelete: (image: TImage) => void | Promise<unknown>;
@@ -122,7 +124,9 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   const [copyingKey, setCopyingKey] = useState("");
   const [favoritingKey, setFavoritingKey] = useState("");
   const [rowActionKey, setRowActionKey] = useState("");
+  const [batchActionKey, setBatchActionKey] = useState("");
   const [confirmActionKey, setConfirmActionKey] = useState("");
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const [loadingMoreKey, setLoadingMoreKey] = useState("");
   const [actionMessage, setActionMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const normalizedQuery = query.trim();
@@ -138,9 +142,19 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
     () => managedRows.filter((row) => imageManagerMatchesFilter(row.protection, filter) && imageManagerMatchesSearch(row.image, row.protection, normalizedQuery, nodeOperationLabel)),
     [filter, managedRows, nodeOperationLabel, normalizedQuery],
   );
+  const selectableRows = useMemo(
+    () => filteredRows.filter((row) => canBatchDeleteImage(row.protection)),
+    [filteredRows],
+  );
+  const selectedRows = useMemo(
+    () => selectableRows.filter((row) => selectedKeys.has(imageManagerKey(row.image))),
+    [selectableRows, selectedKeys],
+  );
+  const allSelectableSelected = Boolean(selectableRows.length) && selectedRows.length === selectableRows.length;
 
   function clearSelected() {
     setConfirmActionKey("");
+    setSelectedKeys(new Set());
   }
 
   async function copyImage(image: TImage) {
@@ -182,6 +196,62 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
     }
     setConfirmActionKey("");
     await runRowAction(label, image, action);
+  }
+
+  async function runConfirmedBatchDelete() {
+    if (!selectedRows.length || batchActionKey) return;
+    const key = filter === "回收站" ? "批量彻底删除回收站图片" : "批量删除图片";
+    if (confirmActionKey !== key) {
+      setConfirmActionKey(key);
+      setActionMessage({
+        tone: "success",
+        text: filter === "回收站"
+          ? `再点一次确认从本地彻底删除 ${selectedRows.length} 张图片。`
+          : `再点一次确认将 ${selectedRows.length} 张图片移到回收站。收藏图不会批量删除。`,
+      });
+      return;
+    }
+    setConfirmActionKey("");
+    setBatchActionKey(key);
+    setActionMessage(null);
+    try {
+      await onDeleteMany(selectedRows.map((row) => row.image));
+      setSelectedKeys(new Set());
+      setActionMessage({
+        tone: "success",
+        text: filter === "回收站"
+          ? `已从本地彻底删除 ${selectedRows.length} 张图片。`
+          : `已将 ${selectedRows.length} 张图片移到回收站。`,
+      });
+    } catch (error) {
+      setActionMessage({ tone: "error", text: error instanceof Error ? error.message : "批量删除失败。" });
+    } finally {
+      setBatchActionKey("");
+    }
+  }
+
+  function toggleImageSelected(image: TImage) {
+    const key = imageManagerKey(image);
+    setConfirmActionKey("");
+    setSelectedKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setConfirmActionKey("");
+    setSelectedKeys((current) => {
+      const next = new Set(current);
+      if (allSelectableSelected) {
+        selectableRows.forEach((row) => next.delete(imageManagerKey(row.image)));
+      } else {
+        selectableRows.forEach((row) => next.add(imageManagerKey(row.image)));
+      }
+      return next;
+    });
   }
 
   async function toggleFavorite(image: TImage) {
@@ -226,7 +296,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
       <div className="apple-panel sticky top-0 z-10 rounded-[18px] p-2">
         <div className="mb-2 flex items-center justify-between gap-2 px-1">
           <div className="text-[13px] font-semibold text-white/82">项目图片</div>
-          <div className="apple-pill px-2 py-1 text-[11px]">{filteredRows.length}/{managedRows.length}</div>
+          <div className="apple-count-badge px-2 py-1 text-[11px]">{filteredRows.length}/{managedRows.length}</div>
         </div>
         <div className="grid grid-cols-3 gap-1">
           {imageManagerFilters.map((item) => (
@@ -268,6 +338,34 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
             </button>
           ) : null}
         </label>
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <button
+            className="apple-button flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 px-2 text-[11px] text-white/70 disabled:opacity-45"
+            disabled={!selectableRows.length || Boolean(batchActionKey)}
+            onClick={toggleSelectAll}
+            title={allSelectableSelected ? "取消全选当前列表" : "全选当前可批量删除图片，收藏图需单独删除"}
+            type="button"
+          >
+            <Check className={`size-3.5 ${allSelectableSelected ? "text-[#74e3c5]" : "text-white/44"}`} />
+            <span className="truncate">{allSelectableSelected ? "取消全选" : "全选"}</span>
+          </button>
+          <button
+            className="apple-button flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 px-2 text-[11px] text-[#ffb4a8] disabled:cursor-not-allowed disabled:text-white/28"
+            disabled={!selectedRows.length || Boolean(batchActionKey) || Boolean(rowActionKey)}
+            onClick={() => void runConfirmedBatchDelete()}
+            title={selectedRows.length ? (filter === "回收站" ? "从本地彻底删除选中图片" : "将选中图片移到回收站") : "先选择要删除的图片"}
+            type="button"
+          >
+            {batchActionKey ? <RefreshCcw className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+            <span className="min-w-0 truncate">
+              {confirmActionKey === "批量删除图片" || confirmActionKey === "批量彻底删除回收站图片"
+                ? "确认删除"
+                : filter === "回收站"
+                  ? `彻底删除${selectedRows.length ? ` ${selectedRows.length}` : ""}`
+                  : `移到回收站${selectedRows.length ? ` ${selectedRows.length}` : ""}`}
+            </span>
+          </button>
+        </div>
       </div>
 
       {actionMessage ? (
@@ -300,22 +398,59 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
       ) : null}
 
       <div className="grid grid-cols-2 gap-2">
-        {filteredRows.map(({ image, protection }) => (
-          <article className="apple-surface-section min-w-0 overflow-hidden p-1.5" key={imageManagerKey(image)}>
-            <button className="relative block w-full overflow-hidden rounded-[14px] text-left" onClick={() => onPreview(image)} type="button">
+        {filteredRows.map(({ image, protection }) => {
+          const title = imageManagerTitle(image);
+          const meta = imageManagerMeta(image, nodeOperationLabel);
+          const key = imageManagerKey(image);
+          return (
+          <article className={`apple-surface-section group relative min-w-0 overflow-hidden p-1.5 ${protection.isTrashed ? "opacity-[0.78] grayscale-[0.28]" : ""}`} key={key}>
+            <button className="relative block w-full overflow-hidden rounded-[14px] text-left" onClick={() => onPreview(image)} title={`${title}${meta ? ` · ${meta}` : ""}`} type="button">
               <ImageFrame
-                alt={imageManagerTitle(image)}
+                alt={title}
                 className="rounded-[14px] border-white/8"
                 fit="contain"
                 image={image}
                 preserveRatio={false}
                 showCheckerboard={shouldShowCheckerboard(image)}
-                style={{ height: 112 }}
+                style={{ height: 126 }}
                 variant="thumbnail"
               />
+              <span className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1">
+                {image.favorite ? (
+                  <span className="flex size-6 items-center justify-center rounded-full border border-[#ffe1a0]/38 bg-black/58 text-[#ffe1a0] backdrop-blur-md">
+                    <Star className="size-3.5 fill-current" />
+                  </span>
+                ) : null}
+                {protection.protected && !protection.isTrashed ? (
+                  <span className="flex size-6 items-center justify-center rounded-full border border-white/18 bg-black/58 text-white/78 backdrop-blur-md" title="受保护，不能批量删除">
+                    <LockKeyhole className="size-3.5" />
+                  </span>
+                ) : null}
+                {protection.isTrashed ? (
+                  <span className="rounded-full border border-[#ffb4a8]/28 bg-black/62 px-2 py-1 text-[11px] font-semibold leading-none text-[#ffcabf] backdrop-blur-md">回收站</span>
+                ) : null}
+              </span>
+              <span className="pointer-events-none absolute inset-x-0 bottom-0 block bg-gradient-to-t from-black/78 via-black/38 to-transparent px-2 pb-2 pt-6">
+                <span className="block truncate text-[11px] font-semibold leading-4 text-white/86">{title}</span>
+                {meta ? <span className="block truncate text-[11px] leading-4 text-white/50">{meta}</span> : null}
+              </span>
+            </button>
+            <button
+              aria-label={selectedKeys.has(imageManagerKey(image)) ? "取消选择图片" : "选择图片"}
+              className={`absolute right-3 top-3 flex size-6 items-center justify-center rounded-full border text-white transition ${
+                selectedKeys.has(imageManagerKey(image))
+                  ? "border-[#74e3c5]/70 bg-[#74e3c5]/24 text-[#adf8e5]"
+                  : "border-white/18 bg-[#101723]/70 text-white/48 hover:text-white/80"
+              }`}
+              disabled={!canBatchDeleteImage(protection)}
+              onClick={() => toggleImageSelected(image)}
+              title={canBatchDeleteImage(protection) ? "选择图片" : protection.isFavorite ? "收藏图需单独删除，不能批量删除" : "正在使用，不能批量删除"}
+              type="button"
+            >
+              {selectedKeys.has(key) ? <Check className="size-3.5" /> : null}
             </button>
 
-            <div className="mt-1.5 grid grid-cols-3 gap-1">
+            <div className="mt-1.5 grid grid-cols-3 gap-1 opacity-75 transition group-hover:opacity-100 group-focus-within:opacity-100">
               {protection.isTrashed ? (
                 <button
                   aria-label={rowActionKey === `恢复图片:${imageManagerKey(image)}` ? "恢复中" : "恢复"}
@@ -363,14 +498,14 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
                       : protection.isTrashed ? "彻底删除" : "删除"
                 }
                 className="apple-button flex h-8 min-w-0 items-center justify-center gap-1 px-1.5 text-[11px] text-[#ffb4a8] disabled:cursor-not-allowed disabled:text-white/28"
-                disabled={Boolean(rowActionKey) || (!protection.canDelete && !protection.isTrashed)}
+                disabled={Boolean(rowActionKey) || !canDeleteSingleImage(protection)}
                 onClick={() => void runConfirmedRowAction(protection.isTrashed ? "彻底删除图片" : "删除图片", image, () => protection.isTrashed ? onPermanentDelete(image) : onDelete(image))}
                 title={
                   rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}`
                     ? "处理中"
                     : confirmActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}`
                       ? "再次点击确认删除"
-                    : protection.isTrashed ? "从回收站彻底删除" : protection.canDelete ? "移到回收站" : "正在使用，暂不能删除"
+                    : protection.isTrashed ? "从回收站彻底删除" : canDeleteSingleImage(protection) ? "移到回收站" : "正在使用，暂不能删除"
                 }
                 type="button"
               >
@@ -379,7 +514,8 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
               </button>
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
 
       {filter !== "回收站" && historyHasMore ? (
@@ -389,7 +525,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
           onClick={() => void loadMoreImages("history", onLoadMore)}
           type="button"
         >
-          {historyLoadingMore || loadingMoreKey === "history" ? "加载中..." : "加载更多历史图片"}
+          <span className="min-w-0 truncate">{historyLoadingMore || loadingMoreKey === "history" ? "加载中..." : "加载更多历史图片"}</span>
         </button>
       ) : null}
       {filter === "回收站" && trashHasMore ? (
@@ -399,7 +535,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
           onClick={() => void loadMoreImages("trash", onLoadMoreTrash)}
           type="button"
         >
-          {trashLoadingMore || loadingMoreKey === "trash" ? "加载中..." : "加载更多回收站图片"}
+          <span className="min-w-0 truncate">{trashLoadingMore || loadingMoreKey === "trash" ? "加载中..." : "加载更多回收站图片"}</span>
         </button>
       ) : null}
     </div>
@@ -429,6 +565,29 @@ function imageManagerMatchesFilter(protection: ImageDeletionProtection, filter: 
   return true;
 }
 
+function canBatchDeleteImage(protection: ImageDeletionProtection) {
+  return !protection.isFavorite && (protection.canDelete || protection.isTrashed);
+}
+
+function canDeleteSingleImage(protection: ImageDeletionProtection) {
+  return protection.canDelete || protection.isTrashed || isOnlyFavoriteProtected(protection);
+}
+
+function isOnlyFavoriteProtected(protection: ImageDeletionProtection) {
+  return protection.isFavorite && !protection.isProjectAsset && !protection.usedByNodes;
+}
+
 function imageManagerTitle(image: ImageManagerImage) {
   return image.fileName?.split("/").pop() || image.id || "图片";
+}
+
+function imageManagerMeta(image: ImageManagerImage, nodeOperationLabel: (value?: string) => string) {
+  const source = image.nodeOperation || image.mode || image.sourceNodeKind;
+  const sourceLabel = source ? nodeOperationLabel(source) : image.materialType || "";
+  const size = image.outputSize
+    ? `${image.outputSize.width}x${image.outputSize.height}`
+    : image.width && image.height
+      ? `${image.width}x${image.height}`
+      : "";
+  return [sourceLabel, size].filter(Boolean).join(" · ");
 }

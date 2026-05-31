@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Brush, Layers, RefreshCcw, Sparkles } from "lucide-react";
+import { ArrowLeft, Brush, Layers, RefreshCcw, Sparkles } from "lucide-react";
 import { findSizePresetByLabel } from "@/lib/size-presets";
 import { NodeErrorNotice } from "@/components/workbench/node-error-notice";
 import { SmartRecommendations } from "@/components/workbench/smart-recommendations";
@@ -73,15 +73,19 @@ import type {
 } from "@/components/workbench/workbench-types";
 
 export function NodeInspectorPanel({
+  backNode,
   imageModel,
   node,
+  onBackToNode,
   onCreateAction,
   onMaskEdit,
   onParamChange,
   onRunNode,
 }: {
+  backNode: FlowNode | null;
   imageModel: string;
   node: FlowNode | null;
+  onBackToNode: (nodeId: string) => void;
   onCreateAction: (nodeId: string, type: NodeKind, handle: string, params?: Record<string, unknown>) => void;
   onMaskEdit: (nodeId: string) => void;
   onParamChange: (nodeId: string, key: string, value: unknown) => void;
@@ -136,6 +140,17 @@ export function NodeInspectorPanel({
 
   return (
     <div className="space-y-3">
+      {backNode ? (
+        <button
+          className="apple-button flex h-9 max-w-full items-center gap-1.5 px-3 text-[11px] font-semibold text-white/68"
+          onClick={() => onBackToNode(backNode.id)}
+          title={`返回 ${backNode.data.title}`}
+          type="button"
+        >
+          <ArrowLeft className="size-3.5 shrink-0" />
+          <span className="min-w-0 truncate">返回 {backNode.data.title}</span>
+        </button>
+      ) : null}
       <section className="apple-surface-section px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
@@ -149,7 +164,8 @@ export function NodeInspectorPanel({
         {node.data.kind !== "image_input" ? (
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className="apple-pill max-w-full px-2 py-1 text-[11px] leading-none text-white/56">预计 {selectedNodeRunEstimate(node.data.kind)}</span>
-            {node.data.kind === "text_to_image" ? <span className="apple-pill px-2 py-1 text-[11px] leading-none text-white/56">默认 2 个方向</span> : null}
+            {node.data.kind === "text_to_image" ? <span className="apple-pill px-2 py-1 text-[11px] leading-none text-white/56">按底部方案数量生成</span> : null}
+            {stringParam(params.taskTemplateTitle) ? <span className="apple-pill-accent px-2 py-1 text-[11px] leading-none">常用任务：{stringParam(params.taskTemplateTitle)}</span> : null}
           </div>
         ) : null}
         {node.data.error ? <NodeErrorNotice className="mt-3" error={String(node.data.error)} /> : null}
@@ -182,7 +198,7 @@ export function NodeInspectorPanel({
           <RatioPresetGrid label="比例" value={ratioParam(params.aspectRatio)} options={adaptiveRatioOptions} onChange={(value) => onParamChange(node.id, "aspectRatio", value)} />
           <InlineChipRow label="质量" value={qualityParam(params.quality)} options={["standard", "2k", "4k"]} onChange={(value) => onParamChange(node.id, "quality", value)} />
           <div className="rounded-[14px] border border-white/10 bg-white/[0.035] px-3 py-2 text-[11px] leading-5 text-white/54">
-            选择比例后会强制传给模型；未选择时按内容自动判断。每次默认输出转化广告版和品牌创意版。
+            选择比例后会强制传给模型；未选择时按内容自动判断。方案数量在底部输入框选择。
           </div>
           <InspectorAdvancedSection title="高级画面控制">
             <InlineChipRow label="完整" value={textToImageCompositionCompleteness(params)} options={["标准", "更完整", "大留白", "全身/全物体"]} onChange={(value) => onParamChange(node.id, "compositionCompleteness", value)} />
@@ -268,7 +284,7 @@ export function NodeInspectorPanel({
               <InlineChipRow
                 label="模式"
                 value={resizeFitModeLabel(stringParam(params.fitMode))}
-                options={["Standard", "Plus", "Creative"]}
+                options={["文字修复", "图文增强", "质感重绘"]}
                 onChange={(value) => onParamChange(node.id, "fitMode", resizeFitModeValue(value))}
               />
               <InlineChipRow
@@ -288,7 +304,7 @@ export function NodeInspectorPanel({
               <InlineChipRow
                 label="模式"
                 value={qualityEnhanceModeLabel(qualityEnhanceModeParam(params.enhancementMode))}
-                options={["Standard", "Plus", "Creative"]}
+                options={["文字修复", "图文增强", "质感重绘"]}
                 onChange={(value) => onParamChange(node.id, "enhancementMode", qualityEnhanceModeValue(value))}
               />
               <InlineChipRow

@@ -1,43 +1,48 @@
 import { NextResponse } from "next/server";
-import { requireCurrentUser } from "@/lib/auth";
+import { AuthRequiredError, requireCurrentUser } from "@/lib/auth";
 import { getOpenAIConfig, maskApiKey, readLocalConfig, runWithConfigUser, saveLocalConfig } from "@/lib/local-config";
 import type { ModelReasoningEffort, ModelWireApi } from "@/lib/openai-defaults";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const user = await requireCurrentUser();
-  return runWithConfigUser(user, () => {
-    const config = getOpenAIConfig();
+  try {
+    const user = await requireCurrentUser();
+    return runWithConfigUser(user, () => {
+      const config = getOpenAIConfig();
 
-    return NextResponse.json({
-      hasApiKey: config.hasApiKey,
-      maskedApiKey: maskApiKey(config.apiKey),
-      providerName: config.providerName,
-      providerId: config.providerId,
-      providerLabel: config.providerLabel,
-      websiteUrl: config.websiteUrl,
-      providerSiteUrl: config.providerSiteUrl,
-      apiBaseUrl: config.apiBaseUrl,
-      wireApi: config.wireApi,
-      requiresOpenAIAuth: config.requiresOpenAIAuth,
-      disableResponseStorage: config.disableResponseStorage,
-      modelReasoningEffort: config.modelReasoningEffort,
-      textModel: config.textModel,
-      imageModel: config.imageModel,
-      analysisModel: config.analysisModel,
-      videoModel: config.videoModel,
-      modelsCache: config.modelsCache,
-      modelsUpdatedAt: config.modelsUpdatedAt,
-      supportsModelsList: config.supportsModelsList,
-      supportsResponses: config.supportsResponses,
-      supportsChatCompletions: config.supportsChatCompletions,
-      supportsImageGeneration: config.supportsImageGeneration,
-      lastTestedAt: config.lastTestedAt,
-      isDefault: config.isDefault,
-      accountConfigScope: user.role === "owner" ? "owner" : "user",
+      return NextResponse.json({
+        hasApiKey: config.hasApiKey,
+        maskedApiKey: maskApiKey(config.apiKey),
+        providerName: config.providerName,
+        providerId: config.providerId,
+        providerLabel: config.providerLabel,
+        websiteUrl: config.websiteUrl,
+        providerSiteUrl: config.providerSiteUrl,
+        apiBaseUrl: config.apiBaseUrl,
+        wireApi: config.wireApi,
+        requiresOpenAIAuth: config.requiresOpenAIAuth,
+        disableResponseStorage: config.disableResponseStorage,
+        modelReasoningEffort: config.modelReasoningEffort,
+        textModel: config.textModel,
+        imageModel: config.imageModel,
+        analysisModel: config.analysisModel,
+        videoModel: config.videoModel,
+        modelsCache: config.modelsCache,
+        modelsUpdatedAt: config.modelsUpdatedAt,
+        supportsModelsList: config.supportsModelsList,
+        supportsResponses: config.supportsResponses,
+        supportsChatCompletions: config.supportsChatCompletions,
+        supportsImageGeneration: config.supportsImageGeneration,
+        lastTestedAt: config.lastTestedAt,
+        isDefault: config.isDefault,
+        accountConfigScope: user.role === "owner" ? "owner" : "user",
+      });
     });
-  });
+  } catch (error) {
+    if (error instanceof AuthRequiredError) return NextResponse.json({ error: "请先登录。" }, { status: 401 });
+    return NextResponse.json({ error: settingsErrorMessage("读取配置失败", error) }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -103,6 +108,7 @@ export async function POST(request: Request) {
       });
     });
   } catch (error) {
+    if (error instanceof AuthRequiredError) return NextResponse.json({ ok: false, error: "请先登录。" }, { status: 401 });
     if (error instanceof InvalidSettingsPayloadError) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
     }

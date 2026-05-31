@@ -7,9 +7,9 @@ import type { BrandAssetUsage, NodeKind, ProjectProfile } from "@/components/wor
 export const projectStorageKey = "ai-design-node-project-v1";
 export const favoriteStorageKey = "ai-design-favorite-images-v1";
 export const maskEditorDraftPrefix = `${projectStorageKey}:mask-editor-draft`;
-export const treeBranchHorizontalGap = 280;
-export const treeBranchVerticalGap = 216;
-export const treeResultHorizontalGap = 260;
+export const treeBranchHorizontalGap = 340;
+export const treeBranchVerticalGap = 280;
+export const treeResultHorizontalGap = 340;
 
 export const defaultBrandAssetUsage: BrandAssetUsage = {
   usePrimaryColors: true,
@@ -20,6 +20,7 @@ export const defaultBrandAssetUsage: BrandAssetUsage = {
   useQrCode: false,
   useCopy: true,
   useForbiddenRules: true,
+  useFavoriteStyle: false,
 };
 
 export const emptyProjectProfile: ProjectProfile = {
@@ -54,17 +55,16 @@ export const emptyProjectCreationDraft: ProjectCreationDraft = {
   autoSearch: false,
 };
 
-export const quickActions: Array<{ label: string; type: NodeKind; handle: string }> = [
-  { label: "扩图补画", type: "outpaint", handle: "image" },
-  { label: "AI改版适配", type: "resize", handle: "image" },
-  { label: "图生图", type: "image_to_image", handle: "image" },
-  { label: "局部 AI 修改", type: "mask_edit", handle: "image" },
-  { label: "画质增强", type: "hd_redraw", handle: "image" },
-  { label: "参考图重制", type: "reference_remake", handle: "image" },
-  { label: "设计优化", type: "design_optimize", handle: "image" },
-  { label: "AI合成", type: "fuse_images", handle: "imageA" },
-  { label: "PNG分层", type: "png_layers", handle: "image" },
-  { label: "输出", type: "output", handle: "image" },
+export const quickActions: Array<{ label: string; description: string; group: string; type: NodeKind; handle: string }> = [
+  { label: "参考原图出方案", description: "基于这张图重新设计多版", group: "生成新方案", type: "image_to_image", handle: "image" },
+  { label: "优化已有设计", description: "内容不变，提升版式质感", group: "优化/重制", type: "design_optimize", handle: "image" },
+  { label: "复刻参考图", description: "低清图重做成干净高清版", group: "优化/重制", type: "reference_remake", handle: "image" },
+  { label: "换尺寸/改版适配", description: "换比例，重新排版不拉伸", group: "换尺寸/扩图", type: "resize", handle: "image" },
+  { label: "扩图补画", description: "补全边缘，扩成新画幅", group: "换尺寸/扩图", type: "outpaint", handle: "image" },
+  { label: "局部修改", description: "涂抹哪里就改哪里", group: "局部处理", type: "mask_edit", handle: "image" },
+  { label: "高清/画质增强", description: "修文字、增强质感到 2K/4K", group: "交付处理", type: "hd_redraw", handle: "image" },
+  { label: "PNG 分层交付", description: "拆背景、文字、人物三层", group: "交付处理", type: "png_layers", handle: "image" },
+  { label: "两图合成", description: "把另一个主体放进场景", group: "更多", type: "fuse_images", handle: "imageA" },
 ];
 
 export const textReferenceInputHandle = "image";
@@ -126,6 +126,7 @@ export const defaultParamsByKind: Record<NodeKind, Record<string, unknown>> = {
     model: "",
     aspectRatio: "auto",
     quality: "standard",
+    variantCount: 2,
     designMode: "commercial",
     textMode: "ai_text_preview",
     designPlan: null,
@@ -143,6 +144,7 @@ export const defaultParamsByKind: Record<NodeKind, Record<string, unknown>> = {
     aspectRatio: "auto",
     strength: 0.75,
     quality: "standard",
+    variantCount: 2,
     keepOriginalRatio: false,
   },
   fuse_images: {
@@ -157,6 +159,7 @@ export const defaultParamsByKind: Record<NodeKind, Record<string, unknown>> = {
     prompt: "用户没有额外要求，请根据输入图片自行分析并扩展成目标画面。",
     model: "",
     quality: "standard",
+    variantCount: 2,
   },
   resize: {
     targetRatio: "16:9",
@@ -164,6 +167,7 @@ export const defaultParamsByKind: Record<NodeKind, Record<string, unknown>> = {
     sizePreset: "16:9",
     fitMode: "smart_relayout",
     quality: "standard",
+    variantCount: 2,
   },
   replace_product: {
     prompt: "把画面里的产品替换成新产品，保持原光影、透视和商业设计感。",

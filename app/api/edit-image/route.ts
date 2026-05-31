@@ -127,24 +127,27 @@ export async function POST(request: Request) {
       protectionContext,
     });
 
-    const targetCount = isLegacyQualityExport ? 1 : 2;
+    const targetCount = isLegacyQualityExport ? 1 : normalizeVariantCount(formData.get("variantCount"));
     const promptVariants = Array.from({ length: targetCount }, (_, index) =>
       isCreativeImageToImage
-        ? buildImageEditPrompt({
-            task,
-            userPrompt,
-            adType,
-            aspectRatioLabel: outputRatioLabel,
-            targetSize: `${outputSize.width}×${outputSize.height}`,
-            quality,
-            sourceAnalysis,
-            keepOriginalRatio,
-            fitMode,
-            direction,
-            creativeRedesign: true,
-            creativeVariant: index === 1 ? "subject" : "headline",
-            protectionContext,
-          })
+        ? [
+            buildImageEditPrompt({
+              task,
+              userPrompt,
+              adType,
+              aspectRatioLabel: outputRatioLabel,
+              targetSize: `${outputSize.width}×${outputSize.height}`,
+              quality,
+              sourceAnalysis,
+              keepOriginalRatio,
+              fitMode,
+              direction,
+              creativeRedesign: true,
+              creativeVariant: index === 1 ? "subject" : "headline",
+              protectionContext,
+            }),
+            editVariantDirection(index),
+          ].filter(Boolean).join("\n")
         : buildEditVariantPrompt(prompt, task, index, outputRatioLabel, outputSize),
     );
     const responsePrompt = promptVariants.join("\n\n---\n\n");
@@ -421,7 +424,7 @@ export async function POST(request: Request) {
     const settledImageResults = collectSettledImages(processedSettled);
     let images = settledImageResults.images;
     const fillErrors = settledImageResults.errors;
-    const fillAttemptLimit = isGeneratedResize ? 0 : targetCount * 2;
+    const fillAttemptLimit = isSmartResize ? 0 : targetCount * 2;
     for (let attempt = 1; images.length < targetCount && attempt <= fillAttemptLimit; attempt += 1) {
       const variantIndex = images.length;
       const basePrompt = promptVariants[variantIndex] || promptVariants[0] || prompt;
@@ -511,7 +514,7 @@ export async function POST(request: Request) {
     if (images.length < targetCount) {
       const lastError = fillErrors[fillErrors.length - 1];
       const reason = lastError instanceof Error ? lastError.message : String(lastError || "图片模型没有返回足够可用方案。");
-      const partialWarning = `本次只生成 ${images.length}/${targetCount} 张可用方案，已先展示可用结果；建议重新运行补齐第二张。最后原因：${reason}`;
+      const partialWarning = `本次只生成 ${images.length}/${targetCount} 张可用方案，已先展示可用结果；建议重新运行补齐缺失方案。最后原因：${reason}`;
       await recordTaskRunFinished(taskTrace, { outputs: images, model: imageModel, message: `${modeLabel} 完成但方案未补齐：${partialWarning}` });
       return NextResponse.json({
         ...taskRunResponseMeta(taskTrace, startedAt, images, "partial"),
@@ -705,12 +708,28 @@ function buildEditVariantPrompt(prompt: string, task: "image_to_image" | "resize
     prompt,
     "",
     `请先自行分析输入图和用户要求，再输出最终图片。目标比例/尺寸：${ratioText} / ${target.width}×${target.height}。`,
-    index <= 0
-      ? "方案A：偏清晰直接、好理解、适合投放。"
-      : "方案B：偏高级、有创意、有品牌感；不要只是和方案A换颜色。",
+    editVariantDirection(index),
     task === "resize" ? "这是 AI 改版适配任务：必须按目标画布原生重新构图和重绘，不要把原图拉伸、压扁、裁切、补黑边白边，也不要把旧图缩小贴在中间；字体、Logo、二维码、人物/IP、产品都要保持自然比例。" : "",
     task === "outpaint" ? "这是扩图任务，请按用户要求扩展画面。" : "",
   ].join("\n");
+}
+
+function editVariantDirection(index: number) {
+  const variantDirections = [
+    "方案A：偏清晰直接、好理解、适合投放。",
+    "方案B：偏高级、有创意、有品牌感；不要只是和方案A换颜色。",
+    "方案C：强化主体记忆点和视觉冲击，构图、层级、背景处理要明显区别于前两个方案。",
+    "方案D：偏商业成品交付感，信息组织更稳、更精致，避免和前面方案同构。",
+    "方案E：偏社媒传播感，节奏更鲜明，但仍保持品牌和原图核心事实准确。",
+    "方案F：偏极简高级感，减少杂乱元素，用留白、光影和重点信息形成差异。",
+  ];
+  return variantDirections[index] || `方案${index + 1}：必须和前面方案明显不同，但不要改变原图事实、行业、主体、品牌和用户要求。`;
+}
+
+function normalizeVariantCount(value: unknown) {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) return 2;
+  return Math.min(6, Math.max(2, Math.round(numeric)));
 }
 
 function buildEditModelNativeSizeFallbackPrompt(prompt: string, ratioText: string, target: PixelSize) {

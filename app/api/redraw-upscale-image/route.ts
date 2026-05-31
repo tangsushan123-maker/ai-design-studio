@@ -352,9 +352,9 @@ function normalizeEnhancementMode(value: unknown): QualityEnhanceMode {
 }
 
 function qualityEnhanceModeLabel(mode: QualityEnhanceMode) {
-  if (mode === "plus") return "Plus";
-  if (mode === "creative") return "Creative";
-  return "Standard";
+  if (mode === "plus") return "图文增强";
+  if (mode === "creative") return "质感重绘";
+  return "文字修复";
 }
 
 function qualityEnhanceWorkflowLabel(mode: QualityEnhanceMode) {

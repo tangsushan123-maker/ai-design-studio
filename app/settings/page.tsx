@@ -96,8 +96,20 @@ function settingsRequestFailure(action: string, error: unknown) {
   return detail ? `${action}：${detail}` : action;
 }
 
+function settingsResponseError(data: { error?: string; message?: string }, fallback: string) {
+  return data.error || data.message || fallback;
+}
+
 async function readSettingsJson<T>(response: Response): Promise<T & { error?: string; message?: string }> {
   return await response.json().catch(() => ({})) as T & { error?: string; message?: string };
+}
+
+async function readCheckedSettingsJson<T>(response: Response, fallback: string) {
+  const data = await readSettingsJson<T>(response);
+  if (!response.ok) {
+    throw new Error(data.error || data.message || fallback);
+  }
+  return data;
 }
 
 export default function SettingsPage() {
@@ -128,7 +140,9 @@ export default function SettingsPage() {
   const [lastModelTest, setLastModelTest] = useState<ModelTestResponse | null>(null);
   const [serverHealth, setServerHealth] = useState<SettingsHealthResponse | null>(null);
   const [savedAt, setSavedAt] = useState("");
+  const authRequired = /请先登录|登录已过期/.test(status.message);
   const isBusy = status.type === "loading";
+  const formDisabled = isBusy || authRequired;
   const passedModels = useMemo(() => modelsCache.filter((model) => model.testStatus === "passed"), [modelsCache]);
   const passedImageModels = useMemo(() => passedModels.filter((model) => model.capabilities.includes("image")), [passedModels]);
   const groupedModels = useMemo(() => ({
@@ -160,7 +174,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetch("/api/settings")
-      .then((response) => readSettingsJson<SettingsResponse>(response))
+      .then((response) => readCheckedSettingsJson<SettingsResponse>(response, "配置读取失败，请刷新或重新登录。"))
       .then((data: SettingsResponse) => applySettings(data))
       .catch((error) => setStatus({ type: "error", message: settingsRequestFailure("读取配置失败", error) }));
     void reloadServerHealth();
@@ -169,7 +183,7 @@ export default function SettingsPage() {
   async function reloadServerHealth() {
     try {
       const response = await fetch("/api/health-openai");
-      const data = await readSettingsJson<SettingsHealthResponse>(response);
+      const data = await readCheckedSettingsJson<SettingsHealthResponse>(response, "服务诊断读取失败");
       setServerHealth(data);
     } catch {
       setServerHealth({
@@ -190,9 +204,11 @@ export default function SettingsPage() {
   }
 
   function applySettings(data: SettingsResponse) {
-    const nextProvider = findProviderPreset(inferProviderId(data.providerId || customProvider.id, data.providerSiteUrl, data.apiBaseUrl, customProvider.id));
-    const nextSiteUrl = data.websiteUrl || data.providerSiteUrl || nextProvider.siteUrl || siteFromUrl(data.apiBaseUrl);
-    const nextApiUrl = normalizeApiUrl(data.apiBaseUrl || inferApiUrl(nextSiteUrl, nextProvider), nextProvider);
+    const currentProviderSiteUrl = data.providerSiteUrl || data.websiteUrl || "";
+    const currentApiBaseUrl = data.apiBaseUrl || "";
+    const nextProvider = findProviderPreset(inferProviderId(data.providerId || customProvider.id, currentProviderSiteUrl, currentApiBaseUrl, customProvider.id));
+    const nextSiteUrl = data.websiteUrl || data.providerSiteUrl || nextProvider.siteUrl || siteFromUrl(currentApiBaseUrl) || "";
+    const nextApiUrl = normalizeApiUrl(currentApiBaseUrl || inferApiUrl(nextSiteUrl, nextProvider), nextProvider);
     setProviderId(nextProvider.id);
     setProviderSiteUrl(nextSiteUrl);
     setApiBaseUrl(nextApiUrl);
@@ -264,7 +280,7 @@ export default function SettingsPage() {
       });
       const data = await readSettingsJson<SettingsResponse>(response);
       if (!response.ok) {
-        setStatus({ type: "error", message: data.error || "保存失败" });
+        setStatus({ type: "error", message: settingsResponseError(data, "保存失败") });
         return false;
       }
       setApiKey("");
@@ -333,7 +349,7 @@ export default function SettingsPage() {
         setApiKey("");
         await reloadSettings();
       }
-      setStatus({ type: response.ok && data.ok ? "success" : "error", message: data.message || data.error || (response.ok ? "检测完成" : "检测失败") });
+      setStatus({ type: response.ok && data.ok ? "success" : "error", message: settingsResponseError(data, response.ok ? "检测完成" : "检测失败") });
     } catch (error) {
       setStatus({ type: "error", message: settingsRequestFailure("检测失败", error) });
     }
@@ -346,7 +362,7 @@ export default function SettingsPage() {
     try {
       const response = await fetch("/api/models/refresh", { method: "POST" });
       const data = await readSettingsJson<{ ok: boolean; models?: ModelCatalogItem[]; modelsUpdatedAt?: string }>(response);
-      if (!response.ok || !data.ok) throw new Error(data.message || "刷新失败");
+      if (!response.ok || !data.ok) throw new Error(settingsResponseError(data, "刷新失败"));
       setModelsCache(data.models || []);
       setModelsUpdatedAt(data.modelsUpdatedAt || "");
       setStatus({ type: "success", message: data.message || "已刷新" });
@@ -383,7 +399,7 @@ export default function SettingsPage() {
         imageModel?: string;
         videoModel?: string;
       }>(response);
-      if (!response.ok || !data.ok) throw new Error(data.error || "模型保存失败");
+      if (!response.ok || !data.ok) throw new Error(settingsResponseError(data, "模型保存失败"));
       setModelsCache(data.modelsCache || modelsCache);
       setModelsUpdatedAt(data.modelsUpdatedAt || modelsUpdatedAt);
       setTextModel(data.textModel || textModel);
@@ -414,7 +430,7 @@ export default function SettingsPage() {
         videoModel?: string;
         modelsUpdatedAt?: string;
       }>(response);
-      if (!response.ok || !data.ok) throw new Error(data.error || "删除失败");
+      if (!response.ok || !data.ok) throw new Error(settingsResponseError(data, "删除失败"));
       setModelsCache(data.modelsCache || []);
       setTextModel(data.textModel || "");
       setImageModel(data.imageModel || "");
@@ -484,7 +500,7 @@ export default function SettingsPage() {
         modelsUpdatedAt?: string;
         imageModel?: string;
       }>(response);
-      if (!response.ok || !data.ok) throw new Error(data.error || "添加图片模型失败");
+      if (!response.ok || !data.ok) throw new Error(settingsResponseError(data, "添加图片模型失败"));
       setModelsCache(data.modelsCache || modelsCache);
       setModelsUpdatedAt(data.modelsUpdatedAt || modelsUpdatedAt);
       setImageModel(data.imageModel || imageModel || model.id);
@@ -509,7 +525,7 @@ export default function SettingsPage() {
   async function reloadSettings() {
     const response = await fetch("/api/settings");
     const data = await readSettingsJson<SettingsResponse>(response);
-    if (!response.ok) throw new Error(data.error || data.message || "读取配置失败");
+    if (!response.ok) throw new Error(settingsResponseError(data, "读取配置失败"));
     applySettings(data);
   }
 
@@ -531,7 +547,7 @@ export default function SettingsPage() {
             <p className="apple-subtitle mt-1">供应商、密钥、模型；配置只保存到当前登录账号。</p>
           </div>
           <div className="flex gap-2">
-            <button className="apple-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" disabled={isBusy} onClick={() => saveSettings()} type="button">
+            <button className="apple-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" disabled={formDisabled} onClick={() => saveSettings()} type="button">
               {isBusy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
               保存手动配置
             </button>
@@ -551,7 +567,7 @@ export default function SettingsPage() {
                 {providerPresets.map((provider) => (
                   <button
                     className={`apple-provider-card p-3 text-left disabled:cursor-not-allowed disabled:opacity-55 ${providerId === provider.id ? "is-active" : ""}`}
-                    disabled={isBusy}
+                    disabled={formDisabled}
                     key={provider.id}
                     onClick={() => selectProvider(provider.id)}
                     type="button"
@@ -575,7 +591,7 @@ export default function SettingsPage() {
                   </span>
                   <input
                     className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
-                    disabled={isBusy}
+                    disabled={formDisabled}
                     value={providerSiteUrl}
                     onChange={(event) => {
                       const nextSiteUrl = event.target.value;
@@ -595,7 +611,7 @@ export default function SettingsPage() {
                   </span>
                   <input
                     className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
-                    disabled={isBusy}
+                    disabled={formDisabled}
                     placeholder={maskedApiKey ? "留空保留当前 Key" : "sk-..."}
                     type="password"
                     value={apiKey}
@@ -609,15 +625,15 @@ export default function SettingsPage() {
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
-                <button className="apple-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" disabled={isBusy} onClick={() => detectProvider()} type="button">
+                <button className="apple-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" disabled={formDisabled} onClick={() => detectProvider()} type="button">
                   {isBusy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                   自动检测
                 </button>
-                <button className="apple-button inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white/72" disabled={isBusy} onClick={() => setShowManualConfig((value) => !value)} type="button">
+                <button className="apple-button inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white/72" disabled={formDisabled} onClick={() => setShowManualConfig((value) => !value)} type="button">
                   <ServerCog className="size-4" />
                   手动高级配置
                 </button>
-                <button className="apple-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" disabled={isBusy} onClick={() => detectProvider({ save: true })} type="button">
+                <button className="apple-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" disabled={formDisabled} onClick={() => detectProvider({ save: true })} type="button">
                   <CheckCircle2 className="size-4" />
                   保存并启用
                 </button>
@@ -628,7 +644,7 @@ export default function SettingsPage() {
                   <span className="apple-field-label mb-2 block">API URL</span>
                   <input
                     className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
-                    disabled={isBusy || !advancedUrl}
+                    disabled={formDisabled || !advancedUrl}
                     value={displayedApiBaseUrl}
                     onChange={(event) => {
                       setApiBaseUrl(event.target.value);
@@ -637,7 +653,7 @@ export default function SettingsPage() {
                   />
                 </label>
                 <label className="mt-7 flex h-10 items-center gap-2 text-sm text-white/64">
-                  <input className="size-4 accent-[#7cf0cf] disabled:opacity-60" checked={advancedUrl} disabled={isBusy} onChange={(event) => {
+                  <input className="size-4 accent-[#7cf0cf] disabled:opacity-60" checked={advancedUrl} disabled={formDisabled} onChange={(event) => {
                     setAdvancedUrl(event.target.checked);
                     markConfigDirty();
                   }} type="checkbox" />
@@ -653,19 +669,19 @@ export default function SettingsPage() {
                 <div className="grid gap-3 md:grid-cols-3">
                   <label className="block">
                     <span className="apple-field-label mb-2 block">接口</span>
-                    <select className="apple-select h-10 w-full px-3 text-sm outline-none disabled:opacity-60" disabled={isBusy} value={wireApi} onChange={(event) => setWireApi(event.target.value as ModelWireApi)}>
+                    <select className="apple-select h-10 w-full px-3 text-sm outline-none disabled:opacity-60" disabled={formDisabled} value={wireApi} onChange={(event) => setWireApi(event.target.value as ModelWireApi)}>
                       <option value="responses">Responses</option>
                       <option value="chat_completions">Chat Completions</option>
                     </select>
                   </label>
                   <label className="block">
                     <span className="apple-field-label mb-2 block">推理</span>
-                    <select className="apple-select h-10 w-full px-3 text-sm outline-none disabled:opacity-60" disabled={isBusy} value={modelReasoningEffort} onChange={(event) => setModelReasoningEffort(event.target.value as ModelReasoningEffort)}>
+                    <select className="apple-select h-10 w-full px-3 text-sm outline-none disabled:opacity-60" disabled={formDisabled} value={modelReasoningEffort} onChange={(event) => setModelReasoningEffort(event.target.value as ModelReasoningEffort)}>
                       {reasoningEfforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}
                     </select>
                   </label>
                   <label className="mt-7 flex h-10 items-center gap-2 text-sm text-white/64">
-                    <input className="size-4 accent-[#7cf0cf] disabled:opacity-60" checked={disableResponseStorage} disabled={isBusy} onChange={(event) => setDisableResponseStorage(event.target.checked)} type="checkbox" />
+                    <input className="size-4 accent-[#7cf0cf] disabled:opacity-60" checked={disableResponseStorage} disabled={formDisabled} onChange={(event) => setDisableResponseStorage(event.target.checked)} type="checkbox" />
                     不存储响应
                   </label>
                 </div>
@@ -676,21 +692,21 @@ export default function SettingsPage() {
               <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
                 <input
                   className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
-                  disabled={isBusy}
+                  disabled={formDisabled}
                   value={draft.id}
                   onChange={(event) => setDraft((current) => ({ ...current, id: event.target.value }))}
                   placeholder="gpt-5.5"
                 />
                 <input
                   className="apple-input h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
-                  disabled={isBusy}
+                  disabled={formDisabled}
                   value={draft.label}
                   onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))}
                   placeholder="显示名"
                 />
                 <select
                   className="apple-select h-10 w-full px-3 text-sm outline-none disabled:opacity-60"
-                  disabled={isBusy}
+                  disabled={formDisabled}
                   value={draft.capability}
                   onChange={(event) => setDraft((current) => ({ ...current, capability: event.target.value as ModelCapability }))}
                 >
@@ -700,15 +716,15 @@ export default function SettingsPage() {
                 </select>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button className="apple-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" disabled={isBusy} onClick={() => saveDraft({ testAfterSave: true })} type="button">
+                <button className="apple-button-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold" disabled={formDisabled} onClick={() => saveDraft({ testAfterSave: true })} type="button">
                   <Plus className="size-4" />
                   添加并测试
                 </button>
-                <button className="apple-button inline-flex items-center gap-2 px-4 py-2 text-sm text-white/70" disabled={isBusy} onClick={() => saveDraft()} type="button">
+                <button className="apple-button inline-flex items-center gap-2 px-4 py-2 text-sm text-white/70" disabled={formDisabled} onClick={() => saveDraft()} type="button">
                   {editingId ? "更新" : "只添加"}
                 </button>
                 {editingId ? (
-                  <button className="apple-button px-4 py-2 text-sm text-white/70" disabled={isBusy} onClick={() => { setEditingId(""); setDraft(emptyDraft); }} type="button">
+                  <button className="apple-button px-4 py-2 text-sm text-white/70" disabled={formDisabled} onClick={() => { setEditingId(""); setDraft(emptyDraft); }} type="button">
                     取消
                   </button>
                 ) : null}
@@ -717,15 +733,15 @@ export default function SettingsPage() {
 
             <SettingsPanel title="模型">
               <div className="mb-3 flex justify-end">
-                <button className="apple-button inline-flex items-center gap-2 px-3 py-2 text-xs text-white/70" disabled={isBusy} onClick={refreshModels} type="button">
+                <button className="apple-button inline-flex items-center gap-2 px-3 py-2 text-xs text-white/70" disabled={formDisabled} onClick={refreshModels} type="button">
                   <RefreshCw className="size-3.5" />
                   刷新
                 </button>
               </div>
               <div className="space-y-4">
-                <ModelGroup activeModel={textModel} icon={<DatabaseZap className="size-4" />} isBusy={isBusy} label="文本" models={groupedModels.text} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("text", model.id)} onUse={useAsDefault} />
-                <ModelGroup activeModel={imageModel} icon={<ImageIcon className="size-4" />} isBusy={isBusy} label="图片" models={groupedModels.image} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("image", model.id)} onUse={useAsDefault} />
-                <ModelGroup activeModel={videoModel} icon={<Film className="size-4" />} isBusy={isBusy} label="视频" models={groupedModels.video} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("video", model.id)} onUse={useAsDefault} />
+                <ModelGroup activeModel={textModel} icon={<DatabaseZap className="size-4" />} isBusy={formDisabled} label="文本" models={groupedModels.text} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("text", model.id)} onUse={useAsDefault} />
+                <ModelGroup activeModel={imageModel} icon={<ImageIcon className="size-4" />} isBusy={formDisabled} label="图片" models={groupedModels.image} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("image", model.id)} onUse={useAsDefault} />
+                <ModelGroup activeModel={videoModel} icon={<Film className="size-4" />} isBusy={formDisabled} label="视频" models={groupedModels.video} onDelete={deleteModel} onEdit={editModel} onTest={(model) => testModel("video", model.id)} onUse={useAsDefault} />
               </div>
             </SettingsPanel>
           </div>
@@ -744,7 +760,7 @@ export default function SettingsPage() {
             <SetupChecklist
               hasKey={Boolean(maskedApiKey || apiKey.trim())}
               hasProvider={Boolean(displayedApiBaseUrl)}
-              isBusy={isBusy}
+              isBusy={formDisabled}
               imageModel={primaryImageModel}
               passedImageCount={passedImageModels.length}
               supportsImageGeneration={supportsImageGeneration}
@@ -767,25 +783,39 @@ export default function SettingsPage() {
             </SettingsPanel>
 
             <SettingsPanel title="服务器">
-              <div className="space-y-3">
-                <SettingsStatusRow detail={nodeRuntime.detail} label="Node" state={nodeRuntime.state} />
-                <SettingsStatusRow detail={serverHealth?.diagnostics?.runtime || "未读取"} label="运行时" state={serverHealth?.diagnostics?.runtime ? "success" : "idle"} />
-                <SettingsStatusRow detail={serverHealth?.diagnostics?.platform || "未读取"} label="平台" state={serverHealth?.diagnostics?.platform ? "success" : "idle"} />
-                <SettingsStatusRow detail={formatServerTime(serverHealth?.diagnostics?.serverTime)} label="服务时间" state={serverHealth?.diagnostics?.serverTime ? "success" : "idle"} />
-              </div>
+              <details className="group" open={false}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-[14px] border border-white/10 bg-white/[0.045] px-3 py-2 text-sm font-semibold text-white/76 marker:hidden">
+                  <span>服务器诊断</span>
+                  <span className="text-[11px] text-white/42 transition group-open:rotate-180">⌄</span>
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <SettingsStatusRow detail={nodeRuntime.detail} label="Node" state={nodeRuntime.state} />
+                  <SettingsStatusRow detail={serverHealth?.diagnostics?.runtime || "未读取"} label="运行时" state={serverHealth?.diagnostics?.runtime ? "success" : "idle"} />
+                  <SettingsStatusRow detail={serverHealth?.diagnostics?.platform || "未读取"} label="平台" state={serverHealth?.diagnostics?.platform ? "success" : "idle"} />
+                  <SettingsStatusRow detail={formatServerTime(serverHealth?.diagnostics?.serverTime)} label="服务时间" state={serverHealth?.diagnostics?.serverTime ? "success" : "idle"} />
+                </div>
+              </details>
               {serverHealth?.message ? <div className="apple-caption mt-3 rounded-[12px] border border-white/10 bg-white/[0.045] px-3 py-2 text-white/44">{serverHealth.message}</div> : null}
-              <button className="apple-button mt-3 inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-xs text-white/70" disabled={isBusy} onClick={reloadServerHealth} type="button">
+              <button className="apple-button mt-3 inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-xs text-white/70" disabled={formDisabled} onClick={reloadServerHealth} type="button">
                 <RefreshCw className="size-3.5" />
                 刷新服务器诊断
               </button>
             </SettingsPanel>
 
             <SettingsPanel title="默认">
-              <div className="space-y-2 text-sm leading-6 text-white/64">
-                <div>文本：{textModel || "未选"}</div>
-                <div>图片：{imageModel || "未选"}</div>
-                <div>视频：{videoModel || "未选"}</div>
-                <div>接口：{wireApi}</div>
+              <div className="space-y-2 text-sm leading-6 text-white/72">
+                <div className="truncate">文本：{textModel || "未选"}</div>
+                <div className="truncate">图片：{imageModel || "未选"}</div>
+                <details className="group rounded-[14px] border border-white/10 bg-white/[0.035] px-3 py-2">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[12px] text-white/58 marker:hidden">
+                    <span>更多默认项</span>
+                    <span className="text-white/46 transition group-open:rotate-180">⌄</span>
+                  </summary>
+                  <div className="mt-2 space-y-1 text-[12px] text-white/62">
+                    <div className="truncate">视频：{videoModel || "未选"}</div>
+                    <div className="truncate">接口：{wireApi}</div>
+                  </div>
+                </details>
                 <div className="apple-caption pt-1">{savedAt ? `保存 ${savedAt}` : lastTestedAt ? `检测 ${new Date(lastTestedAt).toLocaleString("zh-CN")}` : modelsUpdatedAt ? `更新 ${new Date(modelsUpdatedAt).toLocaleString("zh-CN")}` : "未保存"}</div>
               </div>
             </SettingsPanel>

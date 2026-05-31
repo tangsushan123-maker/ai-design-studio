@@ -21,10 +21,16 @@ import {
   ChevronRight,
   Folder,
   FolderOpen,
+  Home,
   Images,
   KeyRound,
   Maximize2,
+  MessageCircle,
   Minus,
+  Minimize2,
+  MoreHorizontal,
+  PanelLeftOpen,
+  PanelRightOpen,
   Plus,
   ScanLine,
   Trash2,
@@ -101,6 +107,13 @@ import { AccountSwitcher } from "@/components/account-switcher";
 import { ImageLightbox } from "@/components/workbench/image-lightbox";
 import { ProjectHomeScreen } from "@/components/workbench/project-home-screen";
 import { ProjectCreationModal, type ProjectCreationDraft } from "@/components/workbench/project-creation-modal";
+import {
+  buildWorkbenchTaskPrompt,
+  taskDraftVariantCount,
+  validateWorkbenchTaskDraft,
+  type WorkbenchTaskDraft,
+  type WorkbenchTaskTemplate,
+} from "@/components/workbench/workbench-task-templates";
 import {
   inferSimpleMaskEditIntent,
   maskEditEdgeBlendParam,
@@ -193,7 +206,7 @@ import {
 } from "@/components/workbench/workbench-node-ui";
 import { appendDataUrlToForm, appendImageToForm, imageFromSingleResponse, imageSourcePayloadForPngLayerExport, imagesFromResponse } from "@/components/workbench/workbench-image-requests";
 import { copyImageToClipboard, copyTextToClipboard } from "@/components/workbench/workbench-file-actions";
-import { readResponseErrorMessage, withClientTimeout } from "@/components/workbench/workbench-response";
+import { readResponseErrorMessage, responseErrorMessage, withClientTimeout } from "@/components/workbench/workbench-response";
 import {
   buildTaskRecoveredCompletionPatch,
   hasTaskResultNodesOnCanvasFromNodes,
@@ -304,6 +317,15 @@ const workbenchHomeOpenStorageKey = "ai-design-workbench-home-open-v1";
 const canvasMinZoom = 0.18;
 const canvasMaxZoom = 4;
 const canvasFitMaxZoom = 1.15;
+function variantCountParam(value: unknown) {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) return 2;
+  return Math.min(6, Math.max(2, Math.round(numeric)));
+}
+
+function supportsComposerVariantCount(kind: NodeKind) {
+  return kind === "text_to_image" || kind === "image_to_image" || kind === "resize" || kind === "outpaint";
+}
 
 function rememberWorkbenchHomeState(open: boolean) {
   if (typeof window === "undefined") return;
@@ -376,6 +398,7 @@ function NodeWorkflowWorkbench({
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>([]);
   const edgesRef = useRef<FlowEdge[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => loadFavoriteIds());
+  const [selectedFavoriteStyleKeys, setSelectedFavoriteStyleKeys] = useState<string[]>([]);
   const [historyImages, setHistoryImages] = useState<ImageAsset[]>(() => {
     const initialFavoriteIds = loadFavoriteIds();
     return sortImagesByRecency(initialImages.map((image) => ({ ...image, source: "history", favorite: initialFavoriteIds.has(imageKey(image)) })));
@@ -403,6 +426,7 @@ function NodeWorkflowWorkbench({
   const [textProtectionMode, setTextProtectionMode] = useState(true);
   const [tasks, setTasks] = useState<TaskRecord[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [inspectorBackNodeId, setInspectorBackNodeId] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState>(null);
   const [nodeMenuOpen, setNodeMenuOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<ImageAsset | null>(null);
@@ -435,11 +459,15 @@ function NodeWorkflowWorkbench({
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [rightPanelTabHint, setRightPanelTabHint] = useState<RightPanelTab>("tasks");
   const [rightPanelTabTick, setRightPanelTabTick] = useState(0);
+  const [canvasFocusMode, setCanvasFocusMode] = useState(false);
+  const [topActionMenuOpen, setTopActionMenuOpen] = useState(false);
+  const topActionMenuRef = useRef<HTMLDivElement | null>(null);
   const [composerPrompt, setComposerPrompt] = useState("");
   const [composerFocusTick, setComposerFocusTick] = useState(0);
   const [composerModel, setComposerModel] = useState(initialImageModelFor(initialModelInfo));
   const [composerRatio, setComposerRatio] = useState<AspectRatioValue>("auto");
   const [composerQuality, setComposerQuality] = useState<QualityValue>("standard");
+  const [composerVariantCount, setComposerVariantCount] = useState(2);
   const [pendingRunNodeId, setPendingRunNodeId] = useState<string | null>(null);
   const [pendingRunNodeIds, setPendingRunNodeIds] = useState<string[]>([]);
   const [maskEditorNodeId, setMaskEditorNodeId] = useState<string | null>(null);
@@ -460,6 +488,22 @@ function NodeWorkflowWorkbench({
     dismissedTaskRefsRef.current = loadDismissedTaskRefs(projectId);
     dismissedImageKeysRef.current = loadDismissedImageKeySet(projectId);
   }, [projectId]);
+  useEffect(() => {
+    if (!topActionMenuOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      if (event.target instanceof globalThis.Node && topActionMenuRef.current?.contains(event.target)) return;
+      setTopActionMenuOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setTopActionMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [topActionMenuOpen]);
   const recoverTaskCanvasResult = useCallback((task: TaskResultMatchContext) => recoverTaskCanvasResultFromNodes(nodesRef.current, task), []);
   const hasTaskResultNodesOnCanvas = useCallback((task: TaskResultMatchContext) => {
     return hasTaskResultNodesOnCanvasFromNodes(nodesRef.current, task);
@@ -489,6 +533,7 @@ function NodeWorkflowWorkbench({
   const selectedNode = selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) ?? null : null;
   const composerDisplayRatio = selectedNode ? composerRatioForNode(selectedNode, composerRatio) : composerRatio;
   const composerDisplayQuality = selectedNode && isComposerDrivenNode(selectedNode.data.kind) ? qualityParam(selectedNode.data.params.quality) : composerQuality;
+  const composerDisplayVariantCount = selectedNode && supportsComposerVariantCount(selectedNode.data.kind) ? variantCountParam(selectedNode.data.params.variantCount) : composerVariantCount;
   const isLowZoom = viewportZoom < 0.58;
   const isLargeWorkflow = nodes.length > 50;
   const isPerformanceMode = isLowZoom ||
@@ -542,6 +587,22 @@ function NodeWorkflowWorkbench({
     () => summarizeBrandAssets(projectProfile, getCurrentProjectBrandAssets(projectAssets, projectKnowledge)),
     [projectAssets, projectKnowledge, projectProfile],
   );
+  const favoriteStyleCandidates = useMemo(() => {
+    const seen = new Set<string>();
+    const candidates: ImageAsset[] = [];
+    for (const image of sortImagesByRecency([
+      ...historyImages,
+      ...imageManagerImages,
+      ...projectAssets,
+    ].filter((item) => item.favorite || favoriteIds.has(imageKey(item))))) {
+      const key = imageKey(image);
+      if (!key || seen.has(key) || image.trashed) continue;
+      seen.add(key);
+      candidates.push(image);
+      if (candidates.length >= 9) break;
+    }
+    return candidates;
+  }, [favoriteIds, historyImages, imageManagerImages, projectAssets]);
   const maskEditorNode = maskEditorNodeId ? nodes.find((node) => node.id === maskEditorNodeId) ?? null : null;
   const maskEditorImage = maskEditorNode ? resolveInputImage(maskEditorNode.id, "image") : null;
   const nodeHandlersRef = useRef({
@@ -620,6 +681,15 @@ function NodeWorkflowWorkbench({
     // textReferencePreviewsForNode reads current nodes and edges.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edges, nodes, selectedNode]);
+  const selectedInspectorBackNode = useMemo(() => {
+    if (!selectedNodeId) return null;
+    const explicitBackNode = inspectorBackNodeId && inspectorBackNodeId !== selectedNodeId
+      ? nodes.find((node) => node.id === inspectorBackNodeId) ?? null
+      : null;
+    if (explicitBackNode) return explicitBackNode;
+    const incomingEdge = edges.find((edge) => edge.target === selectedNodeId);
+    return incomingEdge ? nodes.find((node) => node.id === incomingEdge.source) ?? null : null;
+  }, [edges, inspectorBackNodeId, nodes, selectedNodeId]);
   const decoratedEdges = useMemo(
     () =>
       edges.map((edge) => ({
@@ -1790,6 +1860,7 @@ function NodeWorkflowWorkbench({
         model: effectiveImageModel,
         aspectRatio: textRatio,
         quality: composerQuality,
+        variantCount: composerVariantCount,
         creativeBrief: brief,
       });
       if (!modelInfo.hasKey) {
@@ -1841,6 +1912,56 @@ function NodeWorkflowWorkbench({
     setSelectedNodeId(nodeId);
     focusComposerInput();
     if (options.openPanel || rightPanelOpen) openRightPanelTab("params");
+  }
+
+  function returnHomeFromCanvas() {
+    void saveProject();
+    setCanvasFocusMode(false);
+    setProjectPanelOpen(false);
+    setAssetPanelOpen(false);
+    setProjectCreateOpen(false);
+    setRightPanelOpen(false);
+    setNodeMenuOpen(false);
+    setMenu(null);
+    setHomeProjectPickerOpen(false);
+    setHomeOpen(true);
+    rememberWorkbenchHomeState(true);
+  }
+
+  function enterCanvasFocusMode() {
+    setCanvasFocusMode(true);
+    setLeftRailOpen(false);
+    setRightPanelOpen(false);
+    setProjectPanelOpen(false);
+    setAssetPanelOpen(false);
+    setNodeMenuOpen(false);
+    setMenu(null);
+  }
+
+  function exitCanvasFocusMode() {
+    setCanvasFocusMode(false);
+  }
+
+  function openFocusProjectPanel() {
+    exitCanvasFocusMode();
+    setProjectPanelOpen(true);
+    setAssetPanelOpen(false);
+  }
+
+  function openFocusAssetPanel() {
+    exitCanvasFocusMode();
+    setAssetPanelOpen(true);
+    setProjectPanelOpen(false);
+  }
+
+  function openFocusRightPanel(tab: RightPanelTab = "tasks") {
+    exitCanvasFocusMode();
+    openRightPanelTab(tab);
+  }
+
+  function openFocusComposer() {
+    exitCanvasFocusMode();
+    focusComposerInput();
   }
 
   async function uploadProjectAssets(files: FileList, assetKind: ProjectAssetUploadKind) {
@@ -2015,7 +2136,7 @@ function NodeWorkflowWorkbench({
     const bottomY = Math.max(...laneNodes.map((node) => node.position.y + estimateWorkflowNodeHeight(node)));
     return avoidNodeOverlap({
       x: Number.isFinite(leftX) ? leftX : center.x,
-      y: Number.isFinite(bottomY) ? bottomY + 78 : center.y,
+      y: Number.isFinite(bottomY) ? bottomY + 112 : center.y,
     });
   }
 
@@ -2109,6 +2230,7 @@ function NodeWorkflowWorkbench({
         updateNodeParam(selectedPromptNode.id, "aspectRatio", composerDisplayRatio);
         updateNodeParam(selectedPromptNode.id, "quality", composerDisplayQuality);
       }
+      if (supportsComposerVariantCount(kind)) updateNodeParam(selectedPromptNode.id, "variantCount", composerDisplayVariantCount);
       if (kind === "resize" || kind === "outpaint") {
         updateNodeParam(selectedPromptNode.id, "targetRatio", composerDisplayRatio);
         if (kind === "resize" && composerDisplayRatio !== "auto") {
@@ -2134,6 +2256,7 @@ function NodeWorkflowWorkbench({
       updateNodeParam(reusableNode.id, "prompt", prompt);
       updateNodeParam(reusableNode.id, "aspectRatio", composerRatio);
       updateNodeParam(reusableNode.id, "quality", composerQuality);
+      updateNodeParam(reusableNode.id, "variantCount", composerVariantCount);
       if (composerModel) updateNodeParam(reusableNode.id, "model", composerModel);
       setSelectedNodeId(reusableNode.id);
       setPendingRunNodeId(reusableNode.id);
@@ -2165,6 +2288,21 @@ function NodeWorkflowWorkbench({
     if (selectedNode?.data.kind === "text_to_image") updateNodeParam(selectedNode.id, "quality", value);
   }
 
+  function changeComposerVariantCount(value: number) {
+    const next = variantCountParam(value);
+    setComposerVariantCount(next);
+    if (selectedNode && supportsComposerVariantCount(selectedNode.data.kind)) updateNodeParam(selectedNode.id, "variantCount", next);
+  }
+
+  function toggleFavoriteStyleReference(key: string) {
+    if (!key) return;
+    setProjectProfile((current) => ({ ...current, brandAssetUsage: normalizeBrandAssetUsage({ ...current.brandAssetUsage, useFavoriteStyle: true }) }));
+    setSelectedFavoriteStyleKeys((current) => {
+      if (current.includes(key)) return current.filter((item) => item !== key);
+      return [...current, key].slice(-3);
+    });
+  }
+
   function changeComposerModel(value: string) {
     setComposerModel(value);
     if (selectedNode && isComposerDrivenNode(selectedNode.data.kind)) updateNodeParam(selectedNode.id, "model", value);
@@ -2173,6 +2311,7 @@ function NodeWorkflowWorkbench({
   function addQuickNode(sourceNodeId: string, type: NodeKind, targetHandle: string, paramsOverride: Record<string, unknown> = {}) {
     const source = nodes.find((node) => node.id === sourceNodeId);
     if (!source) return;
+    setInspectorBackNodeId(sourceNodeId);
     const next = addNode(type, nextTreeChildPosition(source), undefined, true, {
       ...paramsOverride,
     });
@@ -2193,6 +2332,13 @@ function NodeWorkflowWorkbench({
     setStatus(nodeCreationHint(type, true));
   }
 
+  function returnToInspectorBackNode(nodeId: string) {
+    setSelectedNodeId(nodeId);
+    setInspectorBackNodeId(null);
+    openRightPanelTab("params");
+    focusCanvasOnNodes([nodeId]);
+  }
+
   function nextTreeChildPosition(source: FlowNode, options: { xGap?: number; yOffset?: number } = {}) {
     const branchIndex = countEdgesFromSource(edges, source.id);
     const x = source.position.x + (options.xGap || nodeAutoSpacingX(source));
@@ -2204,7 +2350,7 @@ function NodeWorkflowWorkbench({
     let next = { ...position };
     for (let attempts = 0; attempts < 12; attempts += 1) {
       const collides = nodes.some((node) =>
-        Math.abs(node.position.x - next.x) < 260 && Math.abs(node.position.y - next.y) < 250,
+        Math.abs(node.position.x - next.x) < 330 && Math.abs(node.position.y - next.y) < 300,
       );
       if (!collides) return next;
       next = { ...next, y: next.y + treeBranchVerticalGap };
@@ -2429,12 +2575,13 @@ function NodeWorkflowWorkbench({
           }
           setHistoryImages((current) => mergeImages(outputs, current));
           setImageManagerImages((current) => mergeImages(outputs, current));
-          nodesRef.current = applyNodeGeneratedOutputs(nodesRef.current, nodeId, outputs);
-          setNodes((current) => applyNodeGeneratedOutputs(current, nodeId, outputs));
-          if (shouldCreateSeparateResultNodes(node.data.kind)) {
+          if (shouldCreateSeparateResultNodes(node.data.kind, outputs.length)) {
+            clearInlineNodeOutputs(nodeId, "completed");
             resultNodeIds = addOutputImageNodes(node, outputs);
             focusCanvasOnNodes([node.id, ...resultNodeIds]);
           } else {
+            nodesRef.current = applyNodeGeneratedOutputs(nodesRef.current, nodeId, outputs);
+            setNodes((current) => applyNodeGeneratedOutputs(current, nodeId, outputs));
             resultNodeIds = [node.id];
             focusCanvasOnNodes([node.id]);
           }
@@ -2458,10 +2605,13 @@ function NodeWorkflowWorkbench({
         }),
       });
       if (activeProjectIdRef.current === taskProjectId) {
+        const resultPlacementLabel = resultNodeIds.length && !resultNodeIds.includes(node.id)
+          ? "结果已拆分为独立方案节点。"
+          : "结果已显示在当前节点。";
         setStatus(
           qualityWarning
-            ? `${node.data.title} 已生成 ${outputs.length} 张，质检提醒：${blockedOutput ? qualityBadgeLabel(blockedOutput) : "请检查尺寸和白边"}。结果已在画布，不再标为失败。`
-            : `${node.data.title} 完成：${outputs.length} 张，耗时 ${formatDuration(endedAt - requestStartedAt)}。结果已显示在当前节点。`,
+            ? `${node.data.title} 已生成 ${outputs.length} 张，质检提醒：${blockedOutput ? qualityBadgeLabel(blockedOutput) : "请检查尺寸和白边"}。${resultPlacementLabel}`
+            : `${node.data.title} 完成：${outputs.length} 张，耗时 ${formatDuration(endedAt - requestStartedAt)}。${resultPlacementLabel}`,
         );
       }
       return outputs;
@@ -2776,6 +2926,31 @@ function NodeWorkflowWorkbench({
     return getCurrentProjectBrandAssets(projectAssets, projectKnowledge);
   }
 
+  function favoriteStyleReferenceImages(limit = 3) {
+    if (!projectProfile.brandAssetUsage.useFavoriteStyle) return [];
+    if (selectedFavoriteStyleKeys.length) {
+      const byKey = new Map(favoriteStyleCandidates.map((image) => [imageKey(image), image]));
+      return selectedFavoriteStyleKeys
+        .map((key) => byKey.get(key))
+        .filter((image): image is ImageAsset => Boolean(image))
+        .slice(0, limit);
+    }
+    return favoriteStyleCandidates.slice(0, limit);
+  }
+
+  function favoriteStyleReferencePrompt(images: ImageAsset[]) {
+    if (!images.length) return "";
+    const labels = images
+      .map((image, index) => image.branchLabel || image.mode || image.materialType || image.fileName || `收藏图 ${index + 1}`)
+      .slice(0, 3)
+      .join("、");
+    return [
+      `收藏风格弱参考：已选 ${images.length} 张收藏图（${labels}）。`,
+      "只学习这些收藏图的整体审美、配色倾向、构图节奏、版式密度、光影质感和商业完成度。",
+      "不要复制收藏图里的具体主体、文案、Logo、二维码、电话、地址或机构信息；当前用户需求和项目真实素材优先。",
+    ].join("\n");
+  }
+
   function hasSchemeDecisionAssets() {
     const assets = currentProjectBrandAssets();
     return Boolean(
@@ -3011,7 +3186,11 @@ function NodeWorkflowWorkbench({
     outputs: ImageAsset[],
   ) {
     const kind = recoveredOutputNodeKind(task, run, outputs);
-    if (kind === "text_to_image" || kind === "image_to_image" || kind === "resize" || kind === "design_optimize" || kind === "outpaint") return 2;
+    if (kind === "text_to_image" || kind === "image_to_image" || kind === "resize" || kind === "outpaint") {
+      const sourceNode = task.nodeId ? nodesRef.current.find((node) => node.id === task.nodeId) : null;
+      return variantCountParam(sourceNode?.data.params.variantCount);
+    }
+    if (kind === "design_optimize") return 2;
     return 1;
   }
 
@@ -3079,6 +3258,12 @@ function NodeWorkflowWorkbench({
     return refs.length;
   }
 
+  async function appendFavoriteStyleReferenceAssets(formData: FormData, references: ImageAsset[]) {
+    for (const [index, image] of references.slice(0, 3).entries()) {
+      await appendImageToForm(formData, image, `styleReference_${index + 1}`, `styleReferenceUrl_${index + 1}`, image.fileName || `favorite-style-${index + 1}.png`);
+    }
+  }
+
   function appendTextToImageCompositionSettings(formData: FormData, params: Record<string, unknown>) {
     formData.append("compositionCompleteness", textToImageCompositionCompleteness(params));
     formData.append("safeMargin", textToImageSafeMargin(params));
@@ -3109,24 +3294,39 @@ function NodeWorkflowWorkbench({
     const prompt = basePrompt.trim();
     if (!prompt) throw new Error("文生图节点需要填写 prompt。");
     setStatus("AI 正在后台分析需求、参考图和素材，并生成成品图。");
+    const favoriteStyleReferences = favoriteStyleReferenceImages();
+    const favoriteStylePrompt = favoriteStyleReferencePrompt(favoriteStyleReferences);
     const shouldAttachProjectContext = shouldUseProjectPromptContext(basePrompt) || hasSchemeDecisionAssets();
     const brandReferences = shouldAttachProjectContext ? resolveSchemeDecisionBrandReferenceAssets(currentProjectBrandAssets()) : [];
-    if (brandReferences.length || references.items.length) {
+    if (brandReferences.length || references.items.length || favoriteStyleReferences.length) {
       const formData = new FormData();
-      formData.append("prompt", prompt);
+      formData.append("prompt", [prompt, favoriteStylePrompt].filter(Boolean).join("\n\n"));
       formData.append("adType", "通用设计");
       formData.append("aspectRatio", requestRatio);
       formData.append("customWidth", String(custom.width || 0));
       formData.append("customHeight", String(custom.height || 0));
       formData.append("exactSize", String(Boolean(custom.width && custom.height)));
       formData.append("quality", qualityParam(params.quality));
+      formData.append("variantCount", String(variantCountParam(params.variantCount)));
       appendImageModel(formData, node, stringParam(params.model));
       appendTaskTrace(formData, taskId, node, "text_to_image");
-      formData.append("referenceManifest", JSON.stringify(references.manifest));
+      formData.append("referenceManifest", JSON.stringify([
+        ...references.manifest,
+        ...favoriteStyleReferences.map((image, index) => ({
+          id: `favorite_style_${index + 1}`,
+          label: image.branchLabel || image.mode || image.fileName || `收藏风格 ${index + 1}`,
+          role: "style",
+          weight: "low",
+          fileName: image.fileName || image.id,
+          materialType: image.materialType || image.mode || "收藏风格",
+          styleReference: true,
+        })),
+      ]));
       formData.append("textMode", stringParam(params.textMode) || "ai_text_preview");
       appendTextToImageCompositionSettings(formData, params);
       formData.append("protectionContext", JSON.stringify(buildProductionProtectionContext("text_to_image", references.items.map((item) => item.image), node, basePrompt)));
       await appendTextReferenceImages(formData, references.items);
+      await appendFavoriteStyleReferenceAssets(formData, favoriteStyleReferences);
       await appendBrandReferenceAssets(formData, { requireExplicitProjectContext: true, visibleRequestText: basePrompt, allowSchemeDecision: true });
       const response = await fetch("/api/generate-image", { method: "POST", body: formData, signal });
       return imagesFromResponse(response);
@@ -3137,13 +3337,14 @@ function NodeWorkflowWorkbench({
       signal,
       body: JSON.stringify({
         ...taskTracePayload(taskId, node, "text_to_image"),
-        prompt,
+        prompt: [prompt, favoriteStylePrompt].filter(Boolean).join("\n\n"),
         adType: "通用设计",
         aspectRatio: requestRatio,
         customWidth: custom.width,
         customHeight: custom.height,
         exactSize: Boolean(custom.width && custom.height),
         quality: qualityParam(params.quality),
+        variantCount: variantCountParam(params.variantCount),
         imageModel: activeImageModelForNode(node, stringParam(params.model)),
         model: activeImageModelForNode(node, stringParam(params.model)),
         referenceImages: references.manifest,
@@ -3167,16 +3368,20 @@ function NodeWorkflowWorkbench({
     const imageToImagePrompt = sanitizeLegacyImageToImagePrompt(stringParam(params.prompt)) || IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST;
     const requestRatio = isOutpaint ? ratioParam(params.targetRatio) : resolveRequestedAspectRatio(params.aspectRatio, imageToImagePrompt);
     const requestText = isOutpaint ? buildOutpaintPrompt(params) : imageToImagePrompt;
+    const favoriteStyleReferences = favoriteStyleReferenceImages();
+    const favoriteStylePrompt = favoriteStyleReferencePrompt(favoriteStyleReferences);
     const prompt = requestText.trim();
     const formData = new FormData();
     await appendImageToForm(formData, image, "image", "sourceUrl", "source.png");
     await appendBrandReferenceAssets(formData, { requireExplicitProjectContext: true, visibleRequestText: requestText, allowSchemeDecision: true });
-    formData.append("prompt", prompt);
+    await appendFavoriteStyleReferenceAssets(formData, favoriteStyleReferences);
+    formData.append("prompt", [prompt, favoriteStylePrompt].filter(Boolean).join("\n\n"));
     formData.append("adType", "通用设计");
     formData.append("aspectRatio", requestRatio);
     formData.append("customWidth", String(customSize(params).width || 0));
     formData.append("customHeight", String(customSize(params).height || 0));
     formData.append("quality", qualityParam(params.quality));
+    formData.append("variantCount", String(variantCountParam(params.variantCount)));
     appendImageModel(formData, node, stringParam(params.model));
     formData.append("keepOriginalRatio", "false");
     if (isOutpaint) formData.append("direction", stringParam(params.direction) || "四周");
@@ -3256,14 +3461,18 @@ function NodeWorkflowWorkbench({
     await appendImageToForm(formData, image, "image", "sourceUrl", "source.png");
     const resizePrompt = buildResizePrompt(resizeParams, ratio);
     const userResizePrompt = stringParam(params.prompt);
+    const favoriteStyleReferences = favoriteStyleReferenceImages();
+    const favoriteStylePrompt = favoriteStyleReferencePrompt(favoriteStyleReferences);
     const shouldAttachResizeProjectContext = shouldUseProjectPromptContext(userResizePrompt);
     await appendBrandReferenceAssets(formData, { requireExplicitProjectContext: true, visibleRequestText: userResizePrompt, allowSchemeDecision: false });
-    formData.append("prompt", resizePrompt);
+    await appendFavoriteStyleReferenceAssets(formData, favoriteStyleReferences);
+    formData.append("prompt", [resizePrompt, favoriteStylePrompt].filter(Boolean).join("\n\n"));
     formData.append("adType", "通用设计");
     formData.append("aspectRatio", ratio);
     formData.append("customWidth", String(targetSize.width || 0));
     formData.append("customHeight", String(targetSize.height || 0));
     formData.append("quality", qualityParam(params.quality));
+    formData.append("variantCount", String(variantCountParam(params.variantCount)));
     appendImageModel(formData, node, stringParam(params.model));
     formData.append("keepOriginalRatio", "false");
     formData.append("modeLabel", "AI改版适配");
@@ -3622,8 +3831,27 @@ function NodeWorkflowWorkbench({
     return resultNodes.map((node) => node.id);
   }
 
-  function shouldCreateSeparateResultNodes(kind: NodeKind) {
-    return kind === "text_to_image" || kind === "output" || kind === "png_layers";
+  function clearInlineNodeOutputs(nodeId: string, status: NodeStatus = "completed") {
+    const update = (node: FlowNode): FlowNode =>
+      node.id === nodeId
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              output: null,
+              outputs: [],
+              resultCount: 0,
+              status,
+              error: status === "completed" ? "" : node.data.error,
+            },
+          }
+        : node;
+    nodesRef.current = nodesRef.current.map(update);
+    setNodes((current) => current.map(update));
+  }
+
+  function shouldCreateSeparateResultNodes(kind: NodeKind, outputCount = 1) {
+    return outputCount > 1 || kind === "text_to_image" || kind === "output" || kind === "png_layers";
   }
 
   function restoreTaskOutputNodes(task: Pick<TaskRecord, "id" | "requestId" | "nodeId" | "nodeName" | "type">, images: ImageAsset[], options: { focus?: boolean; sourceStatus?: NodeStatus } = {}) {
@@ -3636,7 +3864,7 @@ function NodeWorkflowWorkbench({
       );
       if (!outputs.length && !sourceOutputs.length) return recoverTaskCanvasResult(task).resultNodeIds;
       const sourceStatus = options.sourceStatus || "completed";
-      if (!shouldCreateSeparateResultNodes(sourceNode.data.kind)) {
+      if (!shouldCreateSeparateResultNodes(sourceNode.data.kind, sourceOutputs.length)) {
         nodesRef.current = nodesRef.current.map((item) =>
           item.id === sourceNode.id
             ? {
@@ -3673,38 +3901,7 @@ function NodeWorkflowWorkbench({
         return [sourceNode.id];
       }
       const nodeIds = outputs.length ? addOutputImageNodes(sourceNode, outputs) : [];
-      nodesRef.current = nodesRef.current.map((item) =>
-        item.id === sourceNode.id
-          ? {
-              ...item,
-              data: {
-                ...item.data,
-                output: sourceOutputs[0],
-                outputs: sourceOutputs,
-                resultCount: sourceOutputs.length,
-                status: sourceStatus,
-                error: sourceStatus === "completed" ? "" : item.data.error,
-              },
-            }
-          : item,
-      );
-      setNodes((current) =>
-        current.map((item) =>
-          item.id === sourceNode.id
-            ? {
-                ...item,
-                data: {
-                  ...item.data,
-                  output: sourceOutputs[0],
-                  outputs: sourceOutputs,
-                  resultCount: sourceOutputs.length,
-                  status: sourceStatus,
-                  error: sourceStatus === "completed" ? "" : item.data.error,
-                },
-              }
-            : item,
-        ),
-      );
+      clearInlineNodeOutputs(sourceNode.id, sourceStatus);
       if (nodeIds.length && options.focus !== false) focusCanvasOnNodes([sourceNode.id, ...nodeIds]);
       if (!nodeIds.length && options.focus !== false) focusCanvasOnNodes([sourceNode.id]);
       return [sourceNode.id, ...nodeIds];
@@ -3814,7 +4011,7 @@ function NodeWorkflowWorkbench({
   }
 
   function resultBranchYPositions(sourceY: number, images: ImageAsset[]) {
-    const spacings = images.map((image) => Math.max(148, Math.min(224, imageNodePreviewMetrics(image).estimatedNodeHeight + 18)));
+    const spacings = images.map((image) => Math.max(180, Math.min(280, imageNodePreviewMetrics(image).estimatedNodeHeight + 48)));
     const total = spacings.length <= 1 ? 0 : spacings.slice(0, -1).reduce((sum, value) => sum + value, 0);
     let cursor = sourceY - total / 2;
     return images.map((_, index) => {
@@ -3986,13 +4183,6 @@ function NodeWorkflowWorkbench({
     setRightPanelOpen(true);
     openRightPanelTab("params");
     setStatus(options?.forkBranch ? "已复制为新方案分支，可以继续二次优化。" : "已基于当前图片创建二次优化节点。");
-  }
-
-  function addHistoryToCanvas(image: ImageAsset) {
-    undismissResultImages([image]);
-    const node = addNode("image_input", getViewportCenter(), { ...image, source: "history" });
-    setSelectedNodeId(node.id);
-    setStatus("已加入画布，可以继续连接 AI 改版适配、局部修改或4K节点。");
   }
 
   function applyHistoryFavoriteState(key: string, favorite: boolean) {
@@ -4358,15 +4548,6 @@ function NodeWorkflowWorkbench({
     void setViewport({ ...viewport, zoom }, { duration: 180 });
     updateViewportZoom(zoom);
     setCanvasInteractionFlag("isCanvasZooming", true, 220);
-  }
-
-  function fitCanvasToContent() {
-    if (nodes.length) {
-      void fitView({ padding: nodes.length > 8 ? 0.18 : 0.28, maxZoom: canvasFitMaxZoom, duration: 260 });
-      return;
-    }
-    void setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 180 });
-    updateViewportZoom(1);
   }
 
   function onPaneContextMenu(event: MouseEvent | ReactMouseEvent<Element, MouseEvent>) {
@@ -4774,7 +4955,7 @@ function NodeWorkflowWorkbench({
     try {
       const response = await fetch("/api/project?mode=list");
       const data = (await response.json().catch(() => ({}))) as { activeProjectId?: string; projects?: ProjectSummary[]; error?: string };
-      if (!response.ok) throw new Error(data.error || `项目列表刷新失败（HTTP ${response.status}）。`);
+      if (!response.ok) throw new Error(responseErrorMessage(response, data, "项目列表刷新失败"));
       setProjectList(data.projects || []);
       if (data.activeProjectId) setProjectId((current) => current || data.activeProjectId || "local-project");
       return true;
@@ -4797,7 +4978,7 @@ function NodeWorkflowWorkbench({
         projectLibraries?: MaterialLibrarySummary[];
         publicStyleLibraries?: MaterialLibrarySummary[];
       };
-      if (!response.ok) throw new Error(data.error || `素材库刷新失败（HTTP ${response.status}）。`);
+      if (!response.ok) throw new Error(responseErrorMessage(response, data, "素材库刷新失败"));
       setProjectLibraries(data.projectLibraries || []);
       setPublicStyleLibraries(data.publicStyleLibraries || []);
       return true;
@@ -4817,7 +4998,7 @@ function NodeWorkflowWorkbench({
     const response = await fetch(`/api/project?${params.toString()}`);
     if (!response.ok) {
       const data = (await response.json().catch(() => ({}))) as { error?: string };
-      setStatus(data.error || `打开项目失败（HTTP ${response.status}）。`);
+      setStatus(responseErrorMessage(response, data, "打开项目失败"));
       return false;
     }
     const project = (await response.json().catch(() => null)) as ProjectPayload | null;
@@ -4927,7 +5108,7 @@ function NodeWorkflowWorkbench({
     });
     if (!response.ok) {
       const data = (await response.json().catch(() => ({}))) as { error?: string };
-      const message = data.error || `删除项目失败（HTTP ${response.status}）。`;
+      const message = responseErrorMessage(response, data, "删除项目失败");
       setStatus(message);
       throw new Error(message);
     }
@@ -4955,8 +5136,9 @@ function NodeWorkflowWorkbench({
     options: { permanent?: boolean; quiet?: boolean; skipTrashRefresh?: boolean } = {},
   ) {
     const protection = imageDeletionProtection(image, nodes, projectAssets);
-    if (!options.permanent && protection.protected) {
-      if (!options.quiet) setStatus("这张图正在使用或已收藏，暂不能删除。先取消收藏或移除引用后再删除。");
+    const favoriteOnlyProtected = protection.isFavorite && !protection.isProjectAsset && !protection.usedByNodes;
+    if (!options.permanent && protection.protected && !favoriteOnlyProtected) {
+      if (!options.quiet) setStatus("这张图正在使用或作为项目素材，暂不能删除。先移除引用后再删除。");
       return false;
     }
     const fileName = generatedFileNameForImage(image);
@@ -4972,25 +5154,72 @@ function NodeWorkflowWorkbench({
       if (!options.quiet) setStatus(message);
       return false;
     }
-    dismissResultImages([image]);
-    setHistoryImages((current) => current.filter((item) => !imageMatchesGeneratedFile(item, fileName)));
-    setImageManagerImages((current) => current.filter((item) => !imageMatchesGeneratedFile(item, fileName)));
-    setProjectAssets((current) => current.filter((item) => !imageMatchesGeneratedFile(item, fileName)));
-    const nextNodesAfterImageDelete = nodesRef.current.map((node) => removeImageFromNode(node, fileName));
+    applyDeletedHistoryImages([image], [fileName]);
+    if (permanent) {
+      setImageManagerTrashImages((current) => current.filter((item) => !imageMatchesGeneratedFile(item, fileName)));
+      if (!options.quiet) setStatus("图片已彻底删除。");
+      return true;
+    }
+    if (!options.skipTrashRefresh) void loadImageManagerTrash(true);
+    if (!options.quiet) setStatus("图片已移到回收站，可在图片管理 → 回收站里恢复。");
+    return true;
+  }
+
+  async function deleteHistoryImagesBatch(images: ImageAsset[]) {
+    const candidates = images.filter((image) => {
+      const protection = imageDeletionProtection(image, nodesRef.current, projectAssets);
+      return !protection.isFavorite && (protection.canDelete || protection.isTrashed);
+    });
+    const fileNames = Array.from(new Set(candidates.map(generatedFileNameForImage).filter(Boolean)));
+    if (!fileNames.length) {
+      setStatus("没有可批量删除的图片。收藏图需要单独删除，正在使用或作为项目素材的图片会被跳过。");
+      return false;
+    }
+    const response = await fetch("/api/generated-images", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileNames, permanent: false }),
+    });
+    if (!response.ok) {
+      const message = await readResponseErrorMessage(response, "批量删除本地图片失败");
+      setStatus(message);
+      return false;
+    }
+    applyDeletedHistoryImages(candidates, fileNames);
+    setImageManagerTrashImages((current) => current.filter((item) => !fileNames.some((fileName) => imageMatchesGeneratedFile(item, fileName))));
+    const trashedCount = fileNames.filter((fileName) => fileName.startsWith("_trash/")).length;
+    const movedCount = fileNames.length - trashedCount;
+    if (movedCount) void loadImageManagerTrash(true);
+    setStatus([
+      movedCount ? `已将 ${movedCount} 张图片移到回收站` : "",
+      trashedCount ? `已从本地彻底删除 ${trashedCount} 张回收站图片` : "",
+    ].filter(Boolean).join("，") + "。");
+    return true;
+  }
+
+  function applyDeletedHistoryImages(images: ImageAsset[], fileNames: string[]) {
+    const uniqueFileNames = Array.from(new Set(fileNames.filter(Boolean)));
+    if (!uniqueFileNames.length) return;
+    const matchesDeleted = (image: ImageAsset | null | undefined) => Boolean(image && uniqueFileNames.some((fileName) => imageMatchesGeneratedFile(image, fileName)));
+    dismissResultImages(images);
+    setHistoryImages((current) => current.filter((item) => !matchesDeleted(item)));
+    setImageManagerImages((current) => current.filter((item) => !matchesDeleted(item)));
+    setProjectAssets((current) => current.filter((item) => !matchesDeleted(item)));
+    const nextNodesAfterImageDelete = uniqueFileNames.reduce((currentNodes, fileName) => currentNodes.map((node) => removeImageFromNode(node, fileName)), nodesRef.current);
     nodesRef.current = nextNodesAfterImageDelete;
     setNodes(nextNodesAfterImageDelete);
     setTasks((current) => {
       const removedTasks: TaskRecord[] = [];
       const next: TaskRecord[] = [];
       for (const task of current) {
-        const outputs = (task.outputs || []).filter((item) => !imageMatchesGeneratedFile(item, fileName));
-        const resultRemoved = task.result ? imageMatchesGeneratedFile(task.result, fileName) : false;
+        const outputs = (task.outputs || []).filter((item) => !matchesDeleted(item));
+        const resultRemoved = matchesDeleted(task.result);
         const nextTask = {
           ...task,
           outputs,
           result: resultRemoved ? outputs[0] : task.result,
           resultCount: outputs.length || (resultRemoved ? 0 : task.resultCount),
-          resultNodeIds: task.resultNodeIds?.filter((nodeId) => nextNodesAfterImageDelete.some((node) => node.id === nodeId && !nodeImageReferences(node).some((item) => imageMatchesGeneratedFile(item, fileName)))),
+          resultNodeIds: task.resultNodeIds?.filter((nodeId) => nextNodesAfterImageDelete.some((node) => node.id === nodeId && !nodeImageReferences(node).some(matchesDeleted))),
         };
         if ((task.status === "completed" || task.status === "failed" || task.status === "cancelled") && !nextTask.outputs.length && !nextTask.result) {
           removedTasks.push(task);
@@ -5003,15 +5232,7 @@ function NodeWorkflowWorkbench({
       return next;
     });
     writeProjectCacheFromRefs();
-    setLightboxImage((current) => (imageMatchesGeneratedFile(current, fileName) ? null : current));
-    if (permanent) {
-      setImageManagerTrashImages((current) => current.filter((item) => !imageMatchesGeneratedFile(item, fileName)));
-      if (!options.quiet) setStatus("图片已彻底删除。");
-      return true;
-    }
-    if (!options.skipTrashRefresh) void loadImageManagerTrash(true);
-    if (!options.quiet) setStatus("图片已移到回收站，可在图片管理 → 回收站里恢复。");
-    return true;
+    setLightboxImage((current) => (matchesDeleted(current) ? null : current));
   }
 
   async function restoreHistoryImage(image: ImageAsset, options: { quiet?: boolean; skipReload?: boolean } = {}) {
@@ -5198,6 +5419,64 @@ function NodeWorkflowWorkbench({
     }
   }
 
+  async function startTaskTemplateFromHome(template: WorkbenchTaskTemplate, draft: WorkbenchTaskDraft) {
+    if (!projectBootReady || homeBusy) return;
+    const request = draft.request.trim();
+    const preflight = validateWorkbenchTaskDraft(template, draft);
+    if (!request || !preflight.canGenerate) {
+      const questionHint = preflight.questions?.length ? `建议补充：${preflight.questions.slice(0, 3).join("；")}` : "";
+      setStatus([preflight.message || "先补充关键信息，再生成。", questionHint].filter(Boolean).join(" "));
+      return;
+    }
+    setHomeBusy(true);
+    setHomeProjectPickerOpen(false);
+    setHomeOpen(false);
+    rememberWorkbenchHomeState(false);
+    const projectTitle = `${template.title}：${request}`.slice(0, 34);
+    const variantCount = taskDraftVariantCount(draft, template);
+    try {
+      await createNewProject({ projectName: projectTitle, organizationName: "", autoSearch: false });
+      const prompt = buildWorkbenchTaskPrompt(template, draft);
+      setComposerPrompt("");
+      setComposerRatio(template.ratio);
+      setComposerQuality("standard");
+      setComposerVariantCount(variantCount);
+      const node = addNode("text_to_image", { x: 0, y: 0 }, undefined, true, {
+        prompt,
+        model: effectiveImageModel,
+        aspectRatio: template.ratio,
+        targetSize: template.targetSize,
+        quality: "standard",
+        variantCount,
+        taskTemplateId: template.id,
+        taskTemplateTitle: template.title,
+        textMode: "ai_text_preview",
+        compositionCompleteness: "更完整",
+        safeMargin: template.ratio === "custom" || template.ratio === "16:9" ? "10%" : "15%",
+        cameraDistance: template.id === "ecommerce_main" ? "近景" : "中景",
+        subjectScale: template.id === "ecommerce_main" ? "大" : "中",
+      });
+      focusCanvasOnNodes([node.id]);
+      openRightPanelTab("params");
+      if (modelInfo.hasKey && effectiveImageModel) {
+        setPendingRunNodeId(node.id);
+        setStatus(`已按「${template.title}」创建任务，正在生成 ${variantCount} 个方案。`);
+      } else {
+        createManualTask({
+          nodeId: node.id,
+          nodeName: template.title,
+          type: "常用任务 / 待生成",
+          model: effectiveImageModel,
+          prompt,
+          deferred: true,
+        });
+        setStatus(`已按「${template.title}」创建任务。配置并测试图片模型后可运行。`);
+      }
+    } finally {
+      setHomeBusy(false);
+    }
+  }
+
   async function openProjectFromHome(id: string, ownerUserId?: string) {
     if (!projectBootReady || homeBusy) return;
     setHomeBusy(true);
@@ -5228,6 +5507,7 @@ function NodeWorkflowWorkbench({
         busy={homeBusy || !projectBootReady}
         formatUpdatedAt={formatGeneratedAt}
         onCreate={() => void enterNewProjectFromHome()}
+        onStartTask={(template, draft) => void startTaskTemplateFromHome(template, draft)}
         onOpen={(id, ownerUserId) => void openProjectFromHome(id, ownerUserId)}
         onRefreshProjects={() => void refreshProjectList()}
         onShowProjects={showHomeProjectPicker}
@@ -5241,65 +5521,73 @@ function NodeWorkflowWorkbench({
 
   return (
     <main className="apple-shell flex h-screen overflow-hidden text-[#f5f7fb]">
-      <aside
-        className={`apple-sidebar z-20 flex shrink-0 flex-col items-center gap-1.5 px-1.5 py-3 transition-[width] duration-200 ${
-          leftRailOpen ? "w-[104px]" : "w-[54px]"
-        }`}
-      >
-        <button
-          className="apple-button mb-1.5 flex size-8 items-center justify-center rounded-full text-white/66"
-          onClick={() => setLeftRailOpen((value) => !value)}
-          title={leftRailOpen ? "收起左栏" : "展开左栏"}
-          type="button"
-        >
-          <ChevronRight className={`size-4 transition ${leftRailOpen ? "rotate-180" : ""}`} />
-        </button>
-        <button
-          className={`apple-button-primary mb-0.5 flex items-center justify-center gap-1.5 rounded-full px-2 text-[#07121f] ${
-            leftRailOpen ? "h-9 w-full" : "size-9"
+      {canvasFocusMode ? null : (
+        <aside
+          className={`apple-sidebar z-20 flex shrink-0 flex-col items-center gap-1.5 px-1.5 py-3 transition-[width] duration-200 ${
+            leftRailOpen ? "w-[104px]" : "w-[54px]"
           }`}
-          onClick={() => setNodeMenuOpen((value) => !value)}
-          title="添加节点"
-          type="button"
         >
-          <Plus className="size-4 shrink-0" />
-          {leftRailOpen ? <span className="text-[12px] font-semibold">添加</span> : null}
-        </button>
-        <div className="w-full space-y-1">
-          <ToolbarButton
-            expanded={leftRailOpen}
-            icon={<FolderOpen className="size-4" />}
-            label="项目"
-            onClick={() => {
-              setProjectPanelOpen((value) => !value);
-              setAssetPanelOpen(false);
-            }}
-          />
-          <ToolbarButton
-            expanded={leftRailOpen}
-            icon={<Images className="size-4" />}
-            label="素材"
-            onClick={() => {
-              setAssetPanelOpen((value) => !value);
-              setProjectPanelOpen(false);
-            }}
-          />
-          <Link
-            className={`apple-button flex items-center justify-center rounded-full border transition text-white/72 ${
-              leftRailOpen ? "h-9 w-full justify-start gap-2 px-3" : "size-9 px-0 py-0"
-            }`}
-            href="/settings"
-            onClick={() => void saveProject()}
-            title="设置"
+          <button
+            className="apple-button mb-1.5 flex size-8 items-center justify-center rounded-full text-white/66"
+            onClick={() => setLeftRailOpen((value) => !value)}
+            title={leftRailOpen ? "收起左栏" : "展开左栏"}
+            type="button"
           >
-            <KeyRound className="size-4 shrink-0" />
-            {leftRailOpen ? <span className="min-w-0 truncate text-[12px] leading-none opacity-85">设置</span> : null}
-          </Link>
-          <AccountSwitcher compact expanded={leftRailOpen} />
-        </div>
-      </aside>
+            <ChevronRight className={`size-4 transition ${leftRailOpen ? "rotate-180" : ""}`} />
+          </button>
+          <button
+            className={`apple-button-primary mb-0.5 flex items-center justify-center gap-1.5 rounded-full px-2 text-[#07121f] ${
+              leftRailOpen ? "h-9 w-full" : "size-9"
+            }`}
+            onClick={() => setNodeMenuOpen((value) => !value)}
+            title="添加节点"
+            type="button"
+          >
+            <Plus className="size-4 shrink-0" />
+            {leftRailOpen ? <span className="text-[12px] font-semibold">添加</span> : null}
+          </button>
+          <div className="w-full space-y-1">
+            <ToolbarButton
+              expanded={leftRailOpen}
+              icon={<Home className="size-4" />}
+              label="首页"
+              onClick={returnHomeFromCanvas}
+            />
+            <ToolbarButton
+              expanded={leftRailOpen}
+              icon={<FolderOpen className="size-4" />}
+              label="项目"
+              onClick={() => {
+                setProjectPanelOpen((value) => !value);
+                setAssetPanelOpen(false);
+              }}
+            />
+            <ToolbarButton
+              expanded={leftRailOpen}
+              icon={<Images className="size-4" />}
+              label="素材"
+              onClick={() => {
+                setAssetPanelOpen((value) => !value);
+                setProjectPanelOpen(false);
+              }}
+            />
+            <Link
+              className={`apple-button flex items-center justify-center rounded-full border transition text-white/72 ${
+                leftRailOpen ? "h-9 w-full justify-start gap-2 px-3" : "size-9 px-0 py-0"
+              }`}
+              href="/settings"
+              onClick={() => void saveProject()}
+              title="设置"
+            >
+              <KeyRound className="size-4 shrink-0" />
+              {leftRailOpen ? <span className="min-w-0 truncate text-[12px] leading-none opacity-85">设置</span> : null}
+            </Link>
+            <AccountSwitcher compact expanded={leftRailOpen} />
+          </div>
+        </aside>
+      )}
 
-      {projectPanelOpen ? (
+      {projectPanelOpen && !canvasFocusMode ? (
         <ProjectLibraryPanel
           activeProjectId={projectId}
           activeProjectOwnerUserId={projectOwnerUserId}
@@ -5324,7 +5612,7 @@ function NodeWorkflowWorkbench({
         />
       ) : null}
 
-      {assetPanelOpen ? (
+      {assetPanelOpen && !canvasFocusMode ? (
         <AssetLibraryPanel
           assets={projectAssets}
           currentProjectId={projectId}
@@ -5356,47 +5644,103 @@ function NodeWorkflowWorkbench({
       ) : null}
 
       <section className="relative min-w-0 flex-1" ref={wrapperRef}>
+        {canvasFocusMode ? (
+          <>
+            <div className="pointer-events-auto absolute left-4 top-4 z-30 flex flex-col gap-2" aria-label="专注画布左侧入口">
+              <button
+                className="apple-button-primary flex size-10 items-center justify-center rounded-full text-[#07121f] shadow-[0_16px_40px_rgba(0,0,0,0.25)]"
+                onClick={() => setNodeMenuOpen((value) => !value)}
+                title="添加节点"
+                type="button"
+              >
+                <Plus className="size-4" />
+              </button>
+              <button
+                className="apple-button flex size-10 items-center justify-center rounded-full text-white/72"
+                onClick={returnHomeFromCanvas}
+                title="回到首页"
+                type="button"
+              >
+                <Home className="size-4" />
+              </button>
+              <button
+                className="apple-button flex size-10 items-center justify-center rounded-full text-white/72"
+                onClick={openFocusProjectPanel}
+                title="项目"
+                type="button"
+              >
+                <PanelLeftOpen className="size-4" />
+              </button>
+              <button
+                className="apple-button flex size-10 items-center justify-center rounded-full text-white/72"
+                onClick={openFocusAssetPanel}
+                title="素材"
+                type="button"
+              >
+                <Images className="size-4" />
+              </button>
+            </div>
+            <div className="pointer-events-auto absolute right-4 top-4 z-30 flex flex-col gap-2" aria-label="专注画布右侧入口">
+              <button
+                className="apple-button flex size-10 items-center justify-center rounded-full text-white/72"
+                onClick={() => openFocusRightPanel("tasks")}
+                title="打开右侧栏"
+                type="button"
+              >
+                <PanelRightOpen className="size-4" />
+              </button>
+            </div>
+            <button
+              className="apple-button pointer-events-auto absolute bottom-4 left-1/2 z-30 flex h-10 -translate-x-1/2 items-center gap-2 rounded-full px-3 text-[12px] font-semibold text-white/78"
+              onClick={openFocusComposer}
+              title="打开输入框"
+              type="button"
+            >
+              <MessageCircle className="size-4" />
+              输入
+            </button>
+          </>
+        ) : null}
+
+        {canvasFocusMode ? null : (
         <header className="pointer-events-none absolute left-4 right-4 top-4 z-20 flex items-start justify-between gap-3">
-          <div className="apple-panel pointer-events-auto min-w-[220px] max-w-[min(430px,calc(100vw-220px))] px-3 py-2">
-            <input
-              className="w-full max-w-[320px] bg-transparent text-[14px] font-semibold leading-5 text-white/90 outline-none focus-visible:shadow-none"
-              onChange={(event) => {
-                const nextName = event.target.value;
-                setProjectName(nextName);
-                setProjectKnowledge((current) =>
-                  current.archive.projectName === nextName
-                    ? current
-                    : {
-                        ...current,
-                        archive: {
-                          ...current.archive,
-                          projectName: nextName,
-                          updatedAt: new Date().toISOString(),
+          <div className="pointer-events-auto w-[min(184px,calc(100vw-220px))]">
+            <div
+              className="apple-panel flex h-9 items-center gap-1.5 rounded-full px-2.5"
+              title={`${projectName} · ${saveStateLabel(projectSaveState, Boolean(saveQueuedRef.current))} · ${imageModelStatus.label} · 节点 ${nodes.length} · 图片 ${projectImageCount}${lastProjectJsonBytes ? ` · 项目 ${formatFileSize(lastProjectJsonBytes)} / 建议低于 ${formatFileSize(projectCapacityJsonWarningBytes)}` : ""}${lastSaveDurationMs ? ` · 保存 ${formatDuration(lastSaveDurationMs)}` : ""}`}
+            >
+              <Folder className="size-3.5 shrink-0 text-white/46" />
+              <input
+                className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold leading-5 text-white/86 outline-none focus-visible:shadow-none"
+                onChange={(event) => {
+                  const nextName = event.target.value;
+                  setProjectName(nextName);
+                  setProjectKnowledge((current) =>
+                    current.archive.projectName === nextName
+                      ? current
+                      : {
+                          ...current,
+                          archive: {
+                            ...current.archive,
+                            projectName: nextName,
+                            updatedAt: new Date().toISOString(),
+                          },
                         },
-                      },
-                );
-              }}
-              value={projectName}
-            />
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              {projectKind === "temporary" ? <span className="apple-pill-accent px-2 py-1 text-[11px] leading-none">临时项目</span> : null}
-              <span className={`apple-pill max-w-[170px] truncate px-2 py-1 text-[11px] leading-none ${projectSaveState === "error" ? "text-[#ffb4a8]" : projectSaveState === "saving" ? "text-[#ffe2a3]" : "text-[#adf8e5]"}`} title={projectSaveState === "saved" ? "项目、节点和任务记录已写入本地缓存；手动保存会同步到项目文件。" : ""}>
-                {saveStateLabel(projectSaveState, Boolean(saveQueuedRef.current))}
-              </span>
-              <span className={`apple-pill max-w-[190px] truncate px-2 py-1 text-[11px] leading-none ${imageModelStatus.toneClass}`} title={imageModelStatus.helper}>
-                {imageModelStatus.label}
-              </span>
-              <span className={`apple-pill px-2 py-1 text-[11px] leading-none ${projectCapacity.tone === "critical" ? "text-[#ffb4a8]" : projectCapacity.tone === "warning" ? "text-[#ffe2a3]" : ""}`}>
-                节点 {nodes.length}
-              </span>
-              <span className={`apple-pill px-2 py-1 text-[11px] leading-none ${projectCapacity.tone === "critical" ? "text-[#ffb4a8]" : projectCapacity.tone === "warning" ? "text-[#ffe2a3]" : ""}`}>
-                图片 {projectImageCount}
-              </span>
-              {lastProjectJsonBytes ? (
-                <span className={`apple-pill px-2 py-1 text-[11px] leading-none ${lastProjectJsonBytes >= projectCapacityJsonWarningBytes ? "text-[#ffe2a3]" : ""}`} title={`项目 ${formatFileSize(lastProjectJsonBytes)}${lastSaveDurationMs ? ` · 保存 ${formatDuration(lastSaveDurationMs)}` : ""}`}>
-                  项目
-                </span>
-              ) : null}
+                  );
+                }}
+                value={projectName}
+              />
+              {projectKind === "temporary" ? <span className="size-1.5 shrink-0 rounded-full bg-[#ffd166]" title="临时项目" /> : null}
+              <span
+                className={`size-2 shrink-0 rounded-full ${
+                  projectSaveState === "error"
+                    ? "bg-[#ff6b5f]"
+                    : projectSaveState === "saving"
+                      ? "bg-[#ffd166]"
+                      : "bg-[#74e3c5]"
+                }`}
+                title={saveStateLabel(projectSaveState, Boolean(saveQueuedRef.current))}
+              />
             </div>
             {saveFeedback?.tone === "error" ? (
               <div
@@ -5416,8 +5760,17 @@ function NodeWorkflowWorkbench({
                 {projectCapacity.message}
               </div>
             ) : null}
-          </div>
+            </div>
             <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
+            <button
+              className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium"
+              onClick={returnHomeFromCanvas}
+              title="回到首页，不清空当前项目"
+              type="button"
+            >
+              <Home className="size-3.5" />
+              首页
+            </button>
             {projectKind === "temporary" ? (
               <button
                 className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium"
@@ -5438,16 +5791,6 @@ function NodeWorkflowWorkbench({
                 整理
               </button>
             ) : null}
-            {nodes.length ? (
-              <button
-                className="apple-button flex size-8 items-center justify-center text-white/52"
-                onClick={clearCanvas}
-                title="清空画布"
-                type="button"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            ) : null}
             <button
               className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium"
               disabled={projectSaveState === "saving"}
@@ -5465,8 +5808,38 @@ function NodeWorkflowWorkbench({
               <Folder className="size-3.5" />
               {rightPanelOpen ? "收起" : "侧栏"}
             </button>
+            <div ref={topActionMenuRef} className="relative">
+              <button
+                className={`apple-button flex size-8 items-center justify-center text-white/56 ${topActionMenuOpen ? "bg-white/[0.13] text-white" : ""}`}
+                onClick={() => setTopActionMenuOpen((value) => !value)}
+                title="更多画布操作"
+                type="button"
+              >
+                <MoreHorizontal className="size-3.5" />
+              </button>
+              {topActionMenuOpen ? (
+                <div className="apple-menu absolute right-0 top-10 w-[168px] p-1.5">
+                  {nodes.length ? (
+                    <button
+                      className="apple-menu-item flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-[#ffb4a8]"
+                      onClick={() => {
+                        setTopActionMenuOpen(false);
+                        clearCanvas();
+                      }}
+                      type="button"
+                    >
+                      <Trash2 className="size-3.5" />
+                      清空画布
+                    </button>
+                  ) : (
+                    <div className="px-3 py-2 text-[11px] text-white/42">暂无可用操作</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
         </header>
+        )}
 
         {nodeMenuOpen && !isPerformanceMode ? (
           <NodeMenu
@@ -5552,9 +5925,10 @@ function NodeWorkflowWorkbench({
           onMoveStart={() => {
             setMenu(null);
             setNodeMenuOpen(false);
+            setTopActionMenuOpen(false);
             setCanvasInteractionFlag("isCanvasPanning", true, 260);
           }}
-          onNodeClick={(_, node) => focusNodeParams(node.id, { openPanel: true })}
+          onNodeClick={(_, node) => focusNodeParams(node.id, { openPanel: !canvasFocusMode })}
           onNodeContextMenu={(event, node) => {
             if (isPerformanceMode) return;
             onNodeContextMenu(event, node);
@@ -5569,6 +5943,7 @@ function NodeWorkflowWorkbench({
           onPaneClick={() => {
             setMenu(null);
             setNodeMenuOpen(false);
+            setTopActionMenuOpen(false);
             setProjectPanelOpen(false);
             setAssetPanelOpen(false);
           }}
@@ -5592,7 +5967,7 @@ function NodeWorkflowWorkbench({
         </ReactFlow>
 
         {nodes.length ? (
-          <div className="apple-panel pointer-events-auto absolute bottom-4 left-4 z-20 flex flex-col overflow-hidden p-1" aria-label="画布控制">
+          <div className="apple-panel pointer-events-auto absolute bottom-[112px] left-4 z-20 flex flex-col overflow-hidden p-1" aria-label="画布控制">
             <button
               aria-label="放大画布"
               className="flex size-8 items-center justify-center rounded-xl text-white/74 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
@@ -5612,20 +5987,23 @@ function NodeWorkflowWorkbench({
               <Minus className="size-4" />
             </button>
             <button
-              aria-label="适配视图"
+              aria-label={canvasFocusMode ? "恢复界面" : "全屏画布"}
               className="flex size-8 items-center justify-center rounded-xl text-white/74 transition hover:bg-white/10"
-              onClick={fitCanvasToContent}
+              onClick={canvasFocusMode ? exitCanvasFocusMode : enterCanvasFocusMode}
+              title={canvasFocusMode ? "恢复界面" : "全屏画布"}
               type="button"
             >
-              <Maximize2 className="size-3.5" />
+              {canvasFocusMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
             </button>
           </div>
         ) : null}
 
+        {canvasFocusMode ? null : (
         <ChatComposer
           brandSummary={brandAssetSummary}
           brandUsage={projectProfile.brandAssetUsage}
           effectiveModel={effectiveImageModel}
+          favoriteStyleImages={favoriteStyleCandidates}
           focusTick={composerFocusTick}
           hasKey={modelInfo.hasKey}
           model={composerModel}
@@ -5635,15 +6013,20 @@ function NodeWorkflowWorkbench({
           ratio={composerDisplayRatio}
           runningNodeIds={runningNodeIds}
           selectedNode={selectedNode}
+          selectedFavoriteStyleKeys={selectedFavoriteStyleKeys}
+          variantCount={composerDisplayVariantCount}
           onModelChange={changeComposerModel}
           onBrandUsageChange={(usage) => setProjectProfile((current) => ({ ...current, brandAssetUsage: normalizeBrandAssetUsage(usage) }))}
+          onFavoriteStyleSelect={toggleFavoriteStyleReference}
           onImageFile={addComposerImageAsReference}
           onPasteHint={() => setStatus("可以使用系统截图后直接 Command/Ctrl+V 粘贴，或把图片拖到画布里。")}
           onPromptChange={changeComposerPrompt}
           onQualityChange={changeComposerQuality}
           onRatioChange={changeComposerRatio}
+          onVariantCountChange={changeComposerVariantCount}
           onSubmit={submitComposer}
         />
+        )}
 
         <input
           ref={fileInputRef}
@@ -5660,7 +6043,7 @@ function NodeWorkflowWorkbench({
         />
       </section>
 
-      {rightPanelOpen ? (
+      {rightPanelOpen && !canvasFocusMode ? (
         <aside className="apple-panel-strong apple-drawer fixed bottom-3 right-3 top-3 z-40 flex w-[min(356px,calc(100vw-96px))] flex-col overflow-hidden rounded-[28px] xl:static xl:z-20 xl:w-[356px] xl:shrink-0 xl:rounded-none xl:border-y-0 xl:border-r-0 xl:shadow-none">
           <RightPanel
             historyImages={historyImages}
@@ -5675,7 +6058,6 @@ function NodeWorkflowWorkbench({
             imageModel={effectiveImageModel}
             nodes={nodes}
             projectAssets={projectAssets}
-            projectId={projectId}
             tabHint={rightPanelTabHint}
             tabHintTick={rightPanelTabTick}
             onDeleteHistory={deleteHistoryImage}
@@ -5683,19 +6065,6 @@ function NodeWorkflowWorkbench({
               await copyImageToClipboard(image);
               setStatus("图片已复制。");
             }}
-            onDragHistory={(event, image) => {
-              event.dataTransfer.setData("application/x-ai-history-image", JSON.stringify(stripImageFile(image)));
-              event.dataTransfer.effectAllowed = "copy";
-            }}
-            onResizeHistory={(image) => {
-              setLightboxImage(image);
-              setStatus("已打开图片，请先确认目标尺寸再创建 AI 改版适配任务。");
-            }}
-            onUpscaleHistory={(image) => {
-              setLightboxImage(image);
-              setStatus("已打开图片，可选择 Standard / Plus / Creative，再按原比例输出 2K/4K/8K。");
-            }}
-            onAddHistoryToCanvas={addHistoryToCanvas}
             onToggleFavorite={toggleHistoryFavorite}
             onEnsureImageManager={ensureImageManagerHistory}
             onLoadMoreImageManager={() => void loadImageManagerHistory(false)}
@@ -5705,11 +6074,13 @@ function NodeWorkflowWorkbench({
             onRestoreHistory={restoreHistoryImage}
             onPermanentDeleteHistory={(image) => deleteHistoryImage(image, { permanent: true })}
             onClose={() => setRightPanelOpen(false)}
+            backNode={selectedInspectorBackNode}
             selectedNode={selectedInspectorNode}
             tasks={tasks.map((task) => ({ ...task, resultOnCanvas: hasTaskResultNodesOnCanvas(task) }))}
             onCancelTask={cancelTask}
             onDeleteTask={removeTask}
             onDeleteFinishedTasks={removeFinishedTasks}
+            onDeleteHistoryMany={deleteHistoryImagesBatch}
             onMaskEdit={(nodeId) => {
               if (!resolveInputImage(nodeId, "image")) {
                 setStatus("局部 AI 修改需要先把图片连接到节点。");
@@ -5720,6 +6091,7 @@ function NodeWorkflowWorkbench({
             onParamChange={updateNodeParam}
             onRetryTask={retryTask}
             onCreateAction={(nodeId, type, handle, params) => addQuickNode(nodeId, type, handle, params)}
+            onBackToNode={returnToInspectorBackNode}
             onRunNode={(nodeId) => void runNode(nodeId)}
           />
         </aside>

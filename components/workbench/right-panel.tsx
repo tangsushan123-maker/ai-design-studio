@@ -1,12 +1,9 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState, type DragEvent } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { FileImage, Sparkles, X } from "lucide-react";
-import { qualityBadgeLabel, qualityTone } from "@/lib/workbench-delivery";
-import { formatDuration, formatFileSize, formatGeneratedAt } from "@/lib/workbench-format";
-import { historyMatchesFilter, historyMatchesQuery } from "@/lib/workbench-history";
+import { formatDuration, formatGeneratedAt } from "@/lib/workbench-format";
 import { imageSourceSummary } from "@/lib/workbench-image-source";
-import { HistoryPanel } from "@/components/workbench/history-panel";
 import { ImageManagerPanel } from "@/components/workbench/image-manager-panel";
 import { NodeInspectorPanel } from "@/components/workbench/node-inspector-panel";
 import { NodeResultsPanel } from "@/components/workbench/node-results-panel";
@@ -19,7 +16,6 @@ import {
 import { imageDeletionProtection } from "@/components/workbench/workbench-image-lifecycle";
 import { compactThumbStyle, shouldShowCheckerboard } from "@/components/workbench/workbench-image-metrics";
 import { nodeOperationLabel, taskStatusLabel } from "@/components/workbench/workbench-labels";
-import { projectUserFacingImages } from "@/components/workbench/workbench-runtime-helpers";
 import { EmptyPanel } from "@/components/workbench/workbench-small-ui";
 import { isDeferredQueuedTask, isTaskActivelyRunning, isTaskPossiblyStuck } from "@/components/workbench/workbench-task-state";
 import { taskHasResultImages } from "@/components/workbench/workbench-task-helpers";
@@ -45,24 +41,21 @@ export const RightPanel = memo(function RightPanel({
   imageModel,
   nodes,
   projectAssets,
-  projectId,
   tabHint,
   tabHintTick,
   onDeleteHistory,
+  onDeleteHistoryMany,
   onCopyHistory,
-  onAddHistoryToCanvas,
   onToggleFavorite,
   onEnsureImageManager,
   onLoadMoreImageManager,
   onLoadMoreTrash,
   onLoadMoreHistory,
-  onDragHistory,
-  onResizeHistory,
-  onUpscaleHistory,
   onPreview,
   onRestoreHistory,
   onPermanentDeleteHistory,
   onClose,
+  backNode,
   selectedNode,
   tasks,
   onCancelTask,
@@ -72,6 +65,7 @@ export const RightPanel = memo(function RightPanel({
   onParamChange,
   onRetryTask,
   onCreateAction,
+  onBackToNode,
   onRunNode,
 }: {
   historyImages: ImageAsset[];
@@ -86,24 +80,21 @@ export const RightPanel = memo(function RightPanel({
   imageModel: string;
   nodes: FlowNode[];
   projectAssets: ImageAsset[];
-  projectId: string;
   tabHint: RightPanelTab;
   tabHintTick: number;
   onDeleteHistory: (image: ImageAsset) => void | Promise<unknown>;
+  onDeleteHistoryMany: (images: ImageAsset[]) => void | Promise<unknown>;
   onCopyHistory: (image: ImageAsset) => void | Promise<unknown>;
-  onAddHistoryToCanvas: (image: ImageAsset) => void;
   onToggleFavorite: (image: ImageAsset) => void | Promise<unknown>;
   onEnsureImageManager: () => void;
   onLoadMoreImageManager: () => void;
   onLoadMoreTrash: () => void;
   onLoadMoreHistory: () => void;
-  onDragHistory: (event: DragEvent<HTMLElement>, image: ImageAsset) => void;
-  onResizeHistory: (image: ImageAsset) => void;
-  onUpscaleHistory: (image: ImageAsset) => void;
   onPreview: (image: ImageAsset) => void;
   onRestoreHistory: (image: ImageAsset) => void | Promise<unknown>;
   onPermanentDeleteHistory: (image: ImageAsset) => void | Promise<unknown>;
   onClose: () => void;
+  backNode: FlowNode | null;
   selectedNode: FlowNode | null;
   tasks: TaskRecord[];
   onCancelTask: (taskId: string) => void | Promise<unknown>;
@@ -113,6 +104,7 @@ export const RightPanel = memo(function RightPanel({
   onParamChange: (nodeId: string, key: string, value: unknown) => void;
   onRetryTask: (taskId: string) => void | Promise<unknown>;
   onCreateAction: (nodeId: string, type: NodeKind, handle: string, params?: Record<string, unknown>) => void;
+  onBackToNode: (nodeId: string) => void;
   onRunNode: (nodeId: string) => void;
 }) {
   const rawSelectedOutputs = useMemo(
@@ -120,7 +112,6 @@ export const RightPanel = memo(function RightPanel({
     [selectedNode],
   );
   const selectedOutputs = useMemo(() => sortResultImagesForDisplay(rawSelectedOutputs).filter(isUserFacingResultImage), [rawSelectedOutputs]);
-  const visibleHistoryImages = useMemo(() => projectUserFacingImages(historyImages, projectId), [historyImages, projectId]);
   const imageManagerVisibleImages = useMemo(
     () => (imageManagerImages.length ? imageManagerImages : historyImages).filter(isUserFacingResultImage),
     [historyImages, imageManagerImages],
@@ -142,6 +133,12 @@ export const RightPanel = memo(function RightPanel({
   const deferredTaskCount = taskCounts.deferred;
   const failedTaskCount = taskCounts.failed;
   const taskBadgeCount = runningTaskCount + deferredTaskCount + failedTaskCount || tasks.length;
+  const panelTitle = {
+    params: "参数",
+    tasks: "任务中心",
+    library: "当前方案",
+    images: "图库",
+  }[tab];
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -166,7 +163,7 @@ export const RightPanel = memo(function RightPanel({
       <div className="apple-hairline border-b p-3">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div>
-            <div className="text-[16px] font-semibold text-white/90">检查器</div>
+            <div className="text-[16px] font-semibold text-white/90">{panelTitle}</div>
           </div>
           <button
             className="apple-button flex size-7 items-center justify-center text-white/56"
@@ -181,12 +178,12 @@ export const RightPanel = memo(function RightPanel({
           {[
             ["params", "参数"],
             ["tasks", "任务"],
-            ["library", "结果"],
-            ["images", "图片"],
+            ["library", "当前方案"],
+            ["images", "图库"],
           ].map(([value, label]) => (
             <button
               key={value}
-              className={`apple-segment flex items-center justify-center gap-1 px-1.5 py-1.5 text-[11px] ${tab === value ? "apple-segment-active" : ""}`}
+              className={`apple-segment flex items-center justify-center gap-1 px-1 py-1.5 text-[11px] ${tab === value ? "apple-segment-active" : ""}`}
               onClick={() => setTab(value as RightPanelTab)}
               type="button"
             >
@@ -204,7 +201,7 @@ export const RightPanel = memo(function RightPanel({
       {tab === "params" ? (
         <div className="min-h-0 flex-1 overflow-auto p-3">
           <div className="space-y-3">
-            <NodeInspectorPanel imageModel={imageModel} node={selectedNode} onCreateAction={onCreateAction} onMaskEdit={onMaskEdit} onParamChange={onParamChange} onRunNode={onRunNode} />
+            <NodeInspectorPanel backNode={backNode} imageModel={imageModel} node={selectedNode} onBackToNode={onBackToNode} onCreateAction={onCreateAction} onMaskEdit={onMaskEdit} onParamChange={onParamChange} onRunNode={onRunNode} />
           </div>
         </div>
       ) : null}
@@ -238,42 +235,32 @@ export const RightPanel = memo(function RightPanel({
         <div className="min-h-0 flex-1 overflow-auto p-3">
           <div className="space-y-3">
             {selectedOutputs.length ? (
-              <NodeResultsPanel
-                compactThumbStyle={compactThumbStyle}
-                imageSourceSummary={imageSourceSummary}
-                images={selectedOutputs}
-                nodeOperationLabel={nodeOperationLabel}
-                onPreview={onPreview}
-                shouldShowCheckerboard={shouldShowCheckerboard}
-              />
-            ) : null}
-            <HistoryPanel
-              emptyState={
+              <>
+                <div className="apple-surface-section px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-white/82">{selectedNode?.data.title || "当前节点"}</div>
+                      <div className="apple-caption mt-0.5">只显示当前节点生成的方案</div>
+                    </div>
+                    <span className="apple-count-badge shrink-0 px-2 py-1 text-[11px]">{selectedOutputs.length} 张</span>
+                  </div>
+                </div>
+                <NodeResultsPanel
+                  compactThumbStyle={compactThumbStyle}
+                  imageSourceSummary={imageSourceSummary}
+                  images={selectedOutputs}
+                  nodeOperationLabel={nodeOperationLabel}
+                  onPreview={onPreview}
+                  shouldShowCheckerboard={shouldShowCheckerboard}
+                />
+              </>
+            ) : (
                 <EmptyPanel
                   icon={<FileImage className="size-8" />}
-                  title="暂无结果"
-                  description="生成或导入图片后会显示交付状态、质检提示和可继续优化的结果。"
+                title="当前节点暂无结果"
+                description="选择有输出的节点后，这里只显示该节点的方案。项目全部图片请到“图库”。"
                 />
-              }
-              formatFileSize={formatFileSize}
-              historyMatchesFilter={(image, filter, currentProjectId) => historyMatchesFilter(image as ImageAsset, filter, currentProjectId)}
-              historyMatchesQuery={(image, query) => historyMatchesQuery(image as ImageAsset, query)}
-              images={visibleHistoryImages}
-              hasMoreFromServer={historyHasMore}
-              loadingMore={historyLoadingMore}
-              nodeOperationLabel={nodeOperationLabel}
-              projectId={projectId}
-              onAddToCanvas={(image) => onAddHistoryToCanvas(image as ImageAsset)}
-              onDrag={(event, image) => onDragHistory(event, image as ImageAsset)}
-              onLoadMore={onLoadMoreHistory}
-              onDelete={(image) => onDeleteHistory(image as ImageAsset)}
-              onPreview={(image) => onPreview(image as ImageAsset)}
-              onResize={(image) => onResizeHistory(image as ImageAsset)}
-              onToggleFavorite={(image) => onToggleFavorite(image as ImageAsset)}
-              onUpscale={(image) => onUpscaleHistory(image as ImageAsset)}
-              qualityBadgeLabel={(image) => qualityBadgeLabel(image as ImageAsset)}
-              qualityTone={(image) => qualityTone(image as ImageAsset)}
-            />
+            )}
           </div>
         </div>
       ) : null}
@@ -295,6 +282,7 @@ export const RightPanel = memo(function RightPanel({
             trashLoadingMore={imageManagerTrashLoading}
             onCopyImage={(image) => onCopyHistory(image as ImageAsset)}
             onDelete={onDeleteHistory}
+            onDeleteMany={(images) => onDeleteHistoryMany(images as ImageAsset[])}
             onLoadMore={imageManagerImages.length ? onLoadMoreImageManager : onLoadMoreHistory}
             onLoadMoreTrash={onLoadMoreTrash}
             onPermanentDelete={onPermanentDeleteHistory}

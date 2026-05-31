@@ -1024,8 +1024,8 @@ export function buildHdRedrawPrompt(input: PromptRecipeInput) {
   const enhancementMode = normalizeQualityEnhanceMode(normalized.enhancementMode);
   const modePrompt = enhancementMode === "creative"
     ? [
-        "画质模式：Creative / 质感高清重绘。",
-        "Mode: Creative texture redraw.",
+        "画质模式：质感重绘。",
+        "Mode: texture redraw.",
         "Best for low-text hero visuals, food, products, backgrounds, and atmosphere images.",
         "Keep the original composition, subject placement, theme, color direction, and layout.",
         "Generatively rebuild texture, material detail, highlights, shadows, reflections, depth, clean edges, and commercial photography quality.",
@@ -1033,15 +1033,15 @@ export function buildHdRedrawPrompt(input: PromptRecipeInput) {
       ]
     : enhancementMode === "plus"
       ? [
-          "画质模式：Plus / 图文双清晰增强。",
-          "Mode: Plus text-and-visual enhancement.",
+          "画质模式：图文增强。",
+          "Mode: text-and-visual enhancement.",
           "Keep all text, logo text, package text, QR code, positions, and layout faithful.",
           "Enhance non-text visual areas: product material, edge detail, highlights, shadows, background texture, and commercial finish.",
           "Goal: text stays accurate and more readable; image areas become clearer and more premium.",
         ]
       : [
-        "画质模式：Standard / 文字优先高清修复。",
-        "Mode: Standard text-first faithful enhancement.",
+        "画质模式：文字修复。",
+        "Mode: text-first faithful enhancement.",
         "Best for posters, detail pages, screenshots, and images with lots of text.",
         "Strictly preserve composition, content, typography, logo, QR code, faces, product shape, element positions, and information hierarchy.",
         "Improve only text stroke clarity, edge sharpness, small-text readability, icon lines, denoise, deblocking, and overall crispness.",

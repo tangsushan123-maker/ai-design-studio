@@ -72,7 +72,7 @@ export function DetailLine({ label, value }: { label: string; value: string }) {
 export function EmptyPanel({ description, icon, title }: { description: string; icon: ReactNode; title: string }) {
   return (
     <div className="flex min-h-[240px] flex-col items-center justify-center rounded-[22px] border border-dashed border-white/12 bg-white/[0.035] p-6 text-center">
-      <div className="mb-3 text-white/34">{icon}</div>
+      <div className="mb-3 text-white/46">{icon}</div>
       <div className="text-[14px] font-semibold text-white/74">{title}</div>
       <p className="mt-2 max-w-[250px] text-[11px] leading-5 text-white/38">{description}</p>
     </div>
@@ -96,7 +96,7 @@ export function InspectorAdvancedSection({ children, defaultOpen = false, title 
     <details className="group rounded-[16px] border border-white/10 bg-white/[0.035] p-2" open={defaultOpen}>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-[12px] px-1 py-1 text-[11px] font-semibold text-white/56 marker:hidden">
         <span>{title}</span>
-        <span className="text-[11px] text-white/34 transition group-open:rotate-180">⌄</span>
+        <span className="text-[11px] text-white/46 transition group-open:rotate-180">⌄</span>
       </summary>
       <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
         {children}

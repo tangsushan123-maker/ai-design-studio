@@ -101,9 +101,10 @@ export function LightboxEditPanels({
         <div className="mt-3 grid grid-cols-2 gap-1.5">
           {maskQuickActions.map((action) => (
             <button
-              className="apple-button px-2 py-1.5 text-[11px] text-white/66"
+              className="apple-button truncate px-2 py-1.5 text-[11px] text-white/66"
               key={action.label}
               onClick={() => onMaskPromptChange(action.prompt)}
+              title={action.prompt}
               type="button"
             >
               {action.label}
@@ -180,7 +181,7 @@ export function LightboxEditPanels({
   return (
     <section className="apple-surface-section p-3">
       <div className="apple-section-title">AI 画质增强</div>
-      <div className="apple-caption mt-1">Standard 修文字，Plus 图文双清晰，Creative 做质感重绘，再输出到目标尺寸。</div>
+      <div className="apple-caption mt-1">文字修复保文字，图文增强兼顾文字和画面，质感重绘适合无字主视觉。</div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {qualityEnhanceTargets.map((value) => (
           <button className={`${activeUpscaleSize === value ? "apple-button-primary font-semibold" : "apple-button"} px-2.5 py-1.5 text-[11px]`} key={value} onClick={() => onUpscaleSizeChange(value)} type="button">
@@ -193,9 +194,9 @@ export function LightboxEditPanels({
         <label className="block">
           <span className="apple-field-label mb-1 block">处理方式</span>
           <select className="apple-select h-9 w-full px-3 text-[11px] text-white/76 outline-none" value={upscaleFitMode} onChange={(event) => onUpscaleFitModeChange(event.target.value as HistoryUpscaleOptions["fitMode"])}>
-            <option value="standard_enhance">Standard</option>
-            <option value="plus_enhance">Plus</option>
-            <option value="creative_redraw">Creative</option>
+            <option value="standard_enhance">文字修复</option>
+            <option value="plus_enhance">图文增强</option>
+            <option value="creative_redraw">质感重绘</option>
           </select>
         </label>
       </div>

@@ -427,7 +427,7 @@ export async function POST(request: Request) {
     if (images.length < targetCount) {
       const lastError = fillErrors[fillErrors.length - 1];
       const reason = lastError instanceof Error ? lastError.message : String(lastError || "图片模型没有返回足够可用方案。");
-      const partialWarning = `本次只生成 ${images.length}/${targetCount} 张可用方案，已先展示可用结果；建议重新运行补齐第二张。最后原因：${reason}`;
+      const partialWarning = `本次只生成 ${images.length}/${targetCount} 张可用方案，已先展示可用结果；建议重新运行补齐缺失方案。最后原因：${reason}`;
       await recordTaskRunFinished(taskTrace, { outputs: images, model: imageModel, message: `文生图完成但方案未补齐：${partialWarning}` });
       return NextResponse.json({
         ...taskRunResponseMeta(taskTrace, startedAt, images, "partial"),
@@ -492,10 +492,20 @@ function buildPromptsFromDesignPlan(plan: DesignPlan, body: DesignRequest, targe
     body.aspectRatio === "auto" ? "用户选择自适应：请根据内容自行判断画面比例，但最终按上面的系统目标输出。" : "用户已选择固定比例/尺寸：最终画面必须服从这个尺寸。",
     body.textMode === "background_only" ? "用户要求无文字/底图：输出无文字背景图。" : "如果用户明确给了标题、文案、人名、电话、地址等内容，请按用户原文理解和使用；不要擅自编造用户没给的真实信息。",
     buildPromptAssetPolicyFromProtection(body),
-    index === 0
-      ? "方案A：偏清晰直接、好理解、适合投放。"
-      : "方案B：偏高级、有创意、有品牌感；不要只是和方案A换颜色。",
+    textToImageVariantDirection(index),
   ].filter(Boolean).join("\n"));
+}
+
+function textToImageVariantDirection(index: number) {
+  const directions = [
+    "方案A：偏清晰直接、好理解、适合投放。",
+    "方案B：偏高级、有创意、有品牌感；不要只是和方案A换颜色。",
+    "方案C：强化主体记忆点和视觉冲击，构图、层级、背景处理要明显区别于前两个方案。",
+    "方案D：偏商业成品交付感，信息组织更稳、更精致，避免和前面方案同构。",
+    "方案E：偏社媒传播感，节奏更鲜明，但仍保持品牌和用户给定事实准确。",
+    "方案F：偏极简高级感，减少杂乱元素，用留白、光影和重点信息形成差异。",
+  ];
+  return directions[index] || `方案${index + 1}：必须和前面方案明显不同，但不要改变用户要求、品牌和真实信息。`;
 }
 
 function buildPromptAssetPolicyFromProtection(body: DesignRequest) {
@@ -519,7 +529,7 @@ function buildPromptAssetPolicyFromProtection(body: DesignRequest) {
 }
 
 function textToImageGenerationProfile(body: DesignRequest, hasReferenceFiles = false) {
-  const targetCount = 2;
+  const targetCount = normalizeVariantCount(body.variantCount);
   if (hasReferenceFiles) {
     return { label: "参考精修", targetCount, maxRetries: 0, briefMode: "ai_cached", modelCallPolicy: targetCount > 1 ? "dual_variants_fast_reference" : "single_fast_reference" };
   }
@@ -583,7 +593,8 @@ function referenceManifestFallbackSummary(manifest: TextReferenceImage[], refere
       const role = matched ? textReferenceRoleText(matched.role) : "只做参考";
       const weight = matched ? textReferenceWeightText(matched.weight) : "中";
       const label = matched?.label || item.fileName || `参考图${index + 1}`;
-      return `参考图${index + 1}：${label}，用途：${role}，权重：${weight}`;
+      const styleRule = matched?.styleReference ? "，弱参考：只学习风格、配色、构图节奏和商业质感，不复制具体内容" : "";
+      return `参考图${index + 1}：${label}，用途：${role}，权重：${weight}${styleRule}`;
     })
     .join("\n") || "没有可用参考图说明。";
 }
@@ -601,7 +612,7 @@ function buildDirectTextReferencePrompt(
     `目标比例/尺寸：${ratioText} / ${target.width}×${target.height}。`,
     strongReferenceMode ? "参数里标记为引用/人物/产品/主体/背景/Logo/IP 的图片，需要作为可见素材或核心依据进入结果。" : "参数里标记为参考的图片，只作为风格、构图、色彩、字体或氛围参考。",
     manifest.length
-      ? manifest.map((item, index) => `参考图${index + 1}：${item.label || item.fileName || item.id}，用途：${textReferenceRoleText(item.role)}，权重：${textReferenceWeightText(item.weight)}`).join("\n")
+      ? manifest.map((item, index) => `参考图${index + 1}：${item.label || item.fileName || item.id}，用途：${textReferenceRoleText(item.role)}，权重：${textReferenceWeightText(item.weight)}${item.styleReference ? "，弱参考：只学习风格、配色、构图节奏和商业质感，不复制具体主体/文字/Logo/二维码" : ""}`).join("\n")
       : "未提供结构化角色。",
     "如果用户给了明确文案，按用户原文理解和使用；不要擅自编造用户没给的电话、地址、二维码、Logo、人名或机构信息。",
   ].join("\n");
@@ -910,6 +921,7 @@ function normalizeTextToImageRequest(body: DesignRequest): DesignRequest {
   const hasCustomSize = Boolean(body.customWidth && body.customHeight && body.exactSize);
   return {
     ...body,
+    variantCount: normalizeVariantCount(body.variantCount),
     aspectRatio: hasCustomSize ? "custom" : body.aspectRatio === "auto" ? inferTextToImageAspectRatio(text) : body.aspectRatio,
     compositionCompleteness: body.compositionCompleteness || "更完整",
     safeMargin: body.safeMargin || "15%",
@@ -939,6 +951,7 @@ function designRequestFromFormData(formData: FormData): DesignRequest {
     customHeight: Number(formData.get("customHeight") || 0) || undefined,
     exactSize: String(formData.get("exactSize") ?? "") === "true",
     quality: String(formData.get("quality") ?? "standard") as DesignRequest["quality"],
+    variantCount: normalizeVariantCount(formData.get("variantCount")),
     imageModel: String(formData.get("imageModel") ?? "") || undefined,
     model: String(formData.get("model") ?? "") || undefined,
     keepOriginalRatio: String(formData.get("keepOriginalRatio") ?? "") === "true",
@@ -955,6 +968,12 @@ function designRequestFromFormData(formData: FormData): DesignRequest {
     previewFit: "contain",
     protectionContext: parseProtectionContext(formData.get("protectionContext")),
   };
+}
+
+function normalizeVariantCount(value: unknown) {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) return 2;
+  return Math.min(6, Math.max(2, Math.round(numeric)));
 }
 
 function parseDesignPlanField(value: FormDataEntryValue | null): DesignPlan | undefined {
@@ -1044,6 +1063,14 @@ async function readReferenceImages(formData: FormData): Promise<UploadedReferenc
         fileKey: `brandAsset_${index}`,
         urlKey: `brandAssetUrl_${index}`,
         fallbackFileName: `brand-asset-${index}.png`,
+      };
+    }),
+    ...Array.from({ length: 3 }, (_, offset) => {
+      const index = offset + 1;
+      return {
+        fileKey: `styleReference_${index}`,
+        urlKey: `styleReferenceUrl_${index}`,
+        fallbackFileName: `favorite-style-${index}.png`,
       };
     }),
   ];

@@ -426,6 +426,7 @@ export type BrandAssetUsage = {
   useQrCode: boolean;
   useCopy: boolean;
   useForbiddenRules: boolean;
+  useFavoriteStyle: boolean;
 };
 
 export type BrandAssetSummary = {

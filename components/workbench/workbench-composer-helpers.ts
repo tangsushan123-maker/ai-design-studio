@@ -17,16 +17,16 @@ export function composerRatioForNode(node: FlowNode, fallback: AspectRatioValue)
 }
 
 export function composerTitleForNode(node: FlowNode) {
-  if (node.data.kind === "text_to_image") return "文生图";
-  if (node.data.kind === "image_to_image") return "图生图";
-  if (node.data.kind === "fuse_images") return "AI合成";
-  if (node.data.kind === "resize") return "AI改版适配";
+  if (node.data.kind === "text_to_image") return "从零生成";
+  if (node.data.kind === "image_to_image") return "参考原图出方案";
+  if (node.data.kind === "fuse_images") return "两图合成";
+  if (node.data.kind === "resize") return "换尺寸/改版适配";
   if (node.data.kind === "outpaint") return "扩图";
-  if (node.data.kind === "hd_redraw") return "增强";
+  if (node.data.kind === "hd_redraw") return "高清/画质增强";
   if (node.data.kind === "mask_edit") return "局部修改";
-  if (node.data.kind === "reference_remake") return "参考图重制";
-  if (node.data.kind === "design_optimize") return "设计优化";
-  if (node.data.kind === "png_layers") return "PNG分层";
+  if (node.data.kind === "reference_remake") return "复刻参考图";
+  if (node.data.kind === "design_optimize") return "优化已有设计";
+  if (node.data.kind === "png_layers") return "PNG分层交付";
   if (node.data.kind === "output") return "输出";
   return "当前节点";
 }
@@ -53,15 +53,15 @@ export function composerHelperTextForNode(node: FlowNode) {
       ? `已连接 ${textReferenceCount} 张图片参考，可在右侧设为使用人物/产品/Logo。`
       : "可直接写“加入人物/医生/模特/IP”，或上传人物图后在右侧选使用人物。";
   }
-  if (node.data.kind === "image_to_image") return "模型先分析原图版面、文案层级和主体，再按当前比例生成 2 个重新设计方案。";
-  if (node.data.kind === "fuse_images") return "图1主体放入图2场景，生成自然版和广告版。";
+  if (node.data.kind === "image_to_image") return "基于原图重新设计，方案数量按底部选择。";
+  if (node.data.kind === "fuse_images") return "把一个主体自然放进另一个场景，适合产品入景、人物换装和海报合成。";
   if (node.data.kind === "resize") return "模型先理解画面内容，再按右侧目标尺寸重新设计版式，不拉伸不裁切。";
   if (node.data.kind === "outpaint") return "说明补哪里、补什么。";
-  if (node.data.kind === "hd_redraw") return "选择 Standard / Plus / Creative，按原比例输出 2K/4K/8K。";
+  if (node.data.kind === "hd_redraw") return "选择文字修复 / 图文增强 / 质感重绘，按原比例输出 2K/4K/8K。";
   if (node.data.kind === "mask_edit") return "涂哪里，改哪里。";
-  if (node.data.kind === "reference_remake") return "连接拍照参考图，选择快速复刻或精准重制，按参考图风格生成干净高清版。";
-  if (node.data.kind === "design_optimize") return "连接已有设计稿，自动识别行业和类型，输出优化图并支持前后对比。";
-  if (node.data.kind === "png_layers") return "连接成品图后，底部点运行即可生成背景、文字、人物三层 PNG。";
+  if (node.data.kind === "reference_remake") return "连接拍照图、截图或低清参考图，重做成干净高清版。";
+  if (node.data.kind === "design_optimize") return "连接已有设计稿，内容不变，优化版式、层级和商业质感。";
+  if (node.data.kind === "png_layers") return "连接成品图后，生成背景、文字、人物三层 PNG 用于交付。";
   if (node.data.kind === "output") return "下载、复制或保存结果。";
   return "";
 }
@@ -105,7 +105,7 @@ export function nodeCreationHint(type: NodeKind, fromImage: boolean) {
   if (type === "resize") return fromImage ? "已创建 AI 改版适配节点。先在右侧选目标尺寸，再运行。" : "已创建 AI 改版适配节点。请先连接图片，再选择目标尺寸。";
   if (type === "outpaint") return fromImage ? "已创建扩图补画节点。下面可补充扩图想法，右侧可改方向和比例。" : "已创建扩图补画节点。请先连接图片，再决定扩到什么比例。";
   if (type === "mask_edit") return "已创建局部 AI 修改节点。先连接图片并打开涂抹面板，再写要改什么。";
-  if (type === "hd_redraw") return fromImage ? "已创建画质增强节点。可选择 Standard / Plus / Creative，再输出 2K/4K/8K。" : "已创建画质增强节点。请先连接图片，再选择增强模式。";
+  if (type === "hd_redraw") return fromImage ? "已创建画质增强节点。可选择文字修复 / 图文增强 / 质感重绘，再输出 2K/4K/8K。" : "已创建画质增强节点。请先连接图片，再选择增强模式。";
   if (type === "reference_remake") return fromImage ? "已创建参考图重制节点。选择快速复刻或精准重制后运行。" : "已创建参考图重制节点。请先连接一张拍照参考图。";
   if (type === "design_optimize") return fromImage ? "已创建设计优化节点。选择优化强度后运行，可查看前后对比。" : "已创建设计优化节点。请先连接一张已有设计稿。";
   if (type === "png_layers") return fromImage ? "已创建 PNG 三层节点。默认 AI 三层精准，运行后可预览并单独下载。" : "已创建 PNG 三层节点。请先连接成品图，再运行生成三层 PNG。";

@@ -565,7 +565,7 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
                   <div className="text-[14px] font-semibold text-white/88">素材库</div>
                   <div className="mt-0.5 text-[11px] text-white/42">Logo、二维码和 IP 形象</div>
                 </div>
-                <span className="apple-pill px-2.5 py-1 text-[11px]">{mergedAssets.length} 张</span>
+                <span className="apple-count-badge px-2.5 py-1 text-[11px]">{mergedAssets.length} 张</span>
               </div>
 
               <div className="mt-3 grid grid-cols-3 gap-1.5">
@@ -585,7 +585,7 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
                       >
                         <span className="flex items-center justify-between gap-1.5">
                           <Icon className="size-3.5 shrink-0" />
-                          <span className={`rounded-full px-1.5 py-0.5 text-[11px] ${active ? "bg-black/10 text-[#07121f]/65" : "bg-white/8 text-white/42"}`}>{count}</span>
+                          <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${active ? "bg-black/12 text-[#07121f]/82" : "bg-white/14 text-white/84"}`}>{count}</span>
                         </span>
                         <span className="mt-1.5 block truncate text-[11px] font-semibold">{item.label}</span>
                       </button>
@@ -620,7 +620,7 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
                   <div className="text-[13px] font-semibold text-white/86">{categoryLabel(activeCategory)}</div>
                   <div className="mt-0.5 text-[11px] text-white/40">当前分类素材</div>
                 </div>
-                <span className="apple-pill px-2 py-1 text-[11px]">{categoryMap.get(activeCategory)?.length || 0}</span>
+                <span className="apple-count-badge px-2 py-1 text-[11px]">{categoryMap.get(activeCategory)?.length || 0}</span>
               </div>
 
               <div>
@@ -637,7 +637,7 @@ export function AssetLibraryPanel(props: AssetLibraryPanelProps) {
                         {asset.url ? (
                           <ImageFrame alt={asset.fileName || asset.id} className="aspect-[4/3] rounded-[14px]" image={{ url: asset.url }} preserveRatio={false} variant="thumbnail" />
                         ) : (
-                          <div className="flex aspect-[4/3] items-center justify-center rounded-[14px] border border-dashed border-white/10 bg-white/[0.03] text-white/34">
+                          <div className="flex aspect-[4/3] items-center justify-center rounded-[14px] border border-dashed border-white/10 bg-white/[0.03] text-white/46">
                             <FileText className="size-5" />
                           </div>
                         )}
@@ -756,7 +756,7 @@ function FieldBlock({
 
 function ColorSwatches({ colors, className = "" }: { colors: string[]; className?: string }) {
   if (!colors.length) {
-    return <div className={`text-[11px] text-white/34 ${className}`}>未识别到色值</div>;
+    return <div className={`text-[11px] text-white/46 ${className}`}>未识别到色值</div>;
   }
   return (
     <div className={`flex flex-wrap gap-1.5 ${className}`}>

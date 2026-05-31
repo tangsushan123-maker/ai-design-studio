@@ -3,7 +3,7 @@ import { mkdir, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { requireCurrentUser } from "@/lib/auth";
 import { listGeneratedImages } from "@/lib/generated-history";
-import { getGeneratedDir } from "@/lib/image-utils";
+import { getGeneratedDir, getImageVariantFileName } from "@/lib/image-utils";
 import { readJsonWithBackup, writeJsonAtomic } from "@/lib/local-json-store";
 
 export const runtime = "nodejs";
@@ -91,7 +91,12 @@ export async function DELETE(request: Request) {
   try {
     const user = await requireCurrentUser();
     const body = await parseGeneratedImagePayload(request, "delete");
-    const fileName = body.fileName || "";
+    const fileNames = normalizeGeneratedImageFileNames(body);
+    if (fileNames.length > 1) {
+      const result = await deleteGeneratedImages(user, fileNames, Boolean(body.permanent));
+      return NextResponse.json({ ok: true, ...result });
+    }
+    const fileName = body.fileName || fileNames[0] || "";
 
     if (!fileName) {
       return NextResponse.json({ error: "请选择要删除的图片。" }, { status: 400 });
@@ -102,7 +107,6 @@ export async function DELETE(request: Request) {
     }
 
     const dir = getGeneratedDir();
-    const imagePath = path.join(dir, fileName);
     const metadataPath = path.join(dir, `${fileName}.json`);
     const current = await readGeneratedMetadata(metadataPath);
     if (!canManageGeneratedImage(user, current)) {
@@ -110,10 +114,7 @@ export async function DELETE(request: Request) {
     }
 
     if (body.permanent || fileName.startsWith(`${generatedTrashDirName}/`)) {
-      await Promise.all([
-        unlink(imagePath).catch(() => {}),
-        unlink(metadataPath).catch(() => {}),
-      ]);
+      await unlinkGeneratedImageFiles(dir, fileName);
       return NextResponse.json({ ok: true, fileName, permanent: true });
     }
 
@@ -133,6 +134,7 @@ class InvalidGeneratedImagePayloadError extends Error {}
 async function parseGeneratedImagePayload(request: Request, mode: "update" | "delete"): Promise<{
   action?: string;
   fileName?: string;
+  fileNames?: string[];
   metadata?: Record<string, unknown>;
   permanent?: boolean;
 }> {
@@ -144,6 +146,7 @@ async function parseGeneratedImagePayload(request: Request, mode: "update" | "de
     return body as {
       action?: string;
       fileName?: string;
+      fileNames?: string[];
       metadata?: Record<string, unknown>;
       permanent?: boolean;
     };
@@ -151,6 +154,60 @@ async function parseGeneratedImagePayload(request: Request, mode: "update" | "de
     if (error instanceof InvalidGeneratedImagePayloadError) throw error;
     throw new InvalidGeneratedImagePayloadError(mode === "update" ? generatedImagePayloadMessages.updateJson : generatedImagePayloadMessages.deleteJson);
   }
+}
+
+function normalizeGeneratedImageFileNames(body: { fileName?: string; fileNames?: string[] }) {
+  const raw = Array.isArray(body.fileNames) ? body.fileNames : body.fileName ? [body.fileName] : [];
+  const seen = new Set<string>();
+  const fileNames: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const fileName = item.trim();
+    if (!fileName || seen.has(fileName)) continue;
+    seen.add(fileName);
+    fileNames.push(fileName);
+  }
+  return fileNames;
+}
+
+async function deleteGeneratedImages(user: { id: string; role: "owner" | "user" }, fileNames: string[], permanent: boolean) {
+  if (!fileNames.length) {
+    throw new InvalidGeneratedImagePayloadError(generatedImagePayloadMessages.deleteInvalid);
+  }
+  for (const fileName of fileNames) {
+    if (!isSafeGeneratedRelativePath(fileName)) {
+      throw new InvalidGeneratedImagePayloadError("图片文件名不合法。");
+    }
+  }
+  const dir = getGeneratedDir();
+  const deleted: string[] = [];
+  const movedToTrash: Array<{ fileName: string; trashFileName: string }> = [];
+  for (const fileName of fileNames) {
+    const metadataPath = path.join(dir, `${fileName}.json`);
+    const current = await readGeneratedMetadata(metadataPath);
+    if (!canManageGeneratedImage(user, current)) {
+      throw new InvalidGeneratedImagePayloadError("只能删除自己账号下的图片。");
+    }
+    if (permanent || fileName.startsWith(`${generatedTrashDirName}/`)) {
+      await unlinkGeneratedImageFiles(dir, fileName);
+      deleted.push(fileName);
+      continue;
+    }
+    const trashFileName = await moveGeneratedImageToTrash(fileName, current);
+    movedToTrash.push({ fileName, trashFileName });
+  }
+  return { deleted, movedToTrash, permanent };
+}
+
+async function unlinkGeneratedImageFiles(dir: string, fileName: string) {
+  const imagePath = path.join(dir, fileName);
+  const metadataPath = path.join(dir, `${fileName}.json`);
+  await Promise.all([
+    unlink(imagePath).catch(() => {}),
+    unlink(metadataPath).catch(() => {}),
+    unlink(path.join(dir, getImageVariantFileName(fileName, "thumbnail"))).catch(() => {}),
+    unlink(path.join(dir, getImageVariantFileName(fileName, "preview"))).catch(() => {}),
+  ]);
 }
 
 async function moveGeneratedImageToTrash(fileName: string, current: Record<string, unknown>) {

@@ -178,6 +178,7 @@ export function normalizeBrandAssetUsage(value: unknown): BrandAssetUsage {
     useQrCode: safeProfileBoolean(source.useQrCode, defaultBrandAssetUsage.useQrCode),
     useCopy: safeProfileBoolean(source.useCopy, defaultBrandAssetUsage.useCopy),
     useForbiddenRules: safeProfileBoolean(source.useForbiddenRules, defaultBrandAssetUsage.useForbiddenRules),
+    useFavoriteStyle: safeProfileBoolean(source.useFavoriteStyle, defaultBrandAssetUsage.useFavoriteStyle),
   };
 }
 

@@ -66,6 +66,7 @@ export type TextReferenceImage = {
   weight: TextReferenceWeight;
   fileName?: string;
   materialType?: string;
+  styleReference?: boolean;
 };
 
 export type DesignRequest = {
@@ -81,6 +82,7 @@ export type DesignRequest = {
   keepOriginalRatio?: boolean;
   sourceAnalysis?: string;
   referenceImages?: TextReferenceImage[];
+  variantCount?: number;
   variantDirection?: "stable" | "creative";
   compositionCompleteness?: string;
   safeMargin?: string;

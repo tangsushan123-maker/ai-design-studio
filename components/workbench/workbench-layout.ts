@@ -1,5 +1,5 @@
 import type { XYPosition } from "@xyflow/react";
-import { treeBranchHorizontalGap } from "@/components/workbench/workbench-config";
+import { treeBranchHorizontalGap, treeBranchVerticalGap } from "@/components/workbench/workbench-config";
 import { imageNodePreviewMetrics } from "@/components/workbench/workbench-image-metrics";
 import { variantNumberFromLabel } from "@/components/workbench/workbench-labels";
 import type { FlowEdge, FlowNode, ImageAsset } from "@/components/workbench/workbench-types";
@@ -12,6 +12,10 @@ export function nodeAutoSpacingX(node: FlowNode) {
   }
   return treeBranchHorizontalGap;
 }
+
+const workflowLayoutColumnGap = 390;
+const workflowLayoutRowGap = Math.max(96, Math.round(treeBranchVerticalGap * 0.4));
+const workflowLayoutRootGap = 112;
 
 export function arrangeWorkflowNodes(nodes: FlowNode[], edges: FlowEdge[]) {
   if (nodes.length <= 1) return nodes;
@@ -61,8 +65,8 @@ export function arrangeWorkflowNodes(nodes: FlowNode[], edges: FlowEdge[]) {
     const nodeHeight = estimateWorkflowNodeHeight(node);
     const children = (primaryChildren.get(nodeId) || []).filter((childId) => !visited.has(childId));
     if (!children.length) {
-      positioned.set(nodeId, { x: baseX + depth * 310, y: topY });
-      return nodeHeight + 54;
+      positioned.set(nodeId, { x: baseX + depth * workflowLayoutColumnGap, y: topY });
+      return nodeHeight + workflowLayoutRowGap;
     }
 
     let childCursor = topY;
@@ -77,24 +81,24 @@ export function arrangeWorkflowNodes(nodes: FlowNode[], edges: FlowEdge[]) {
     });
 
     if (!childRanges.length) {
-      positioned.set(nodeId, { x: baseX + depth * 310, y: topY });
-      return nodeHeight + 54;
+      positioned.set(nodeId, { x: baseX + depth * workflowLayoutColumnGap, y: topY });
+      return nodeHeight + workflowLayoutRowGap;
     }
 
     const first = childRanges[0];
     const last = childRanges[childRanges.length - 1];
     const childrenCenter = (first.y + last.y + last.height) / 2;
-    const subtreeHeight = Math.max(childCursor - topY - 54, nodeHeight);
+    const subtreeHeight = Math.max(childCursor - topY - workflowLayoutRowGap, nodeHeight);
     positioned.set(nodeId, {
-      x: baseX + depth * 310,
+      x: baseX + depth * workflowLayoutColumnGap,
       y: Math.max(topY, Math.round(childrenCenter - nodeHeight / 2)),
     });
-    return subtreeHeight + 54;
+    return subtreeHeight + workflowLayoutRowGap;
   }
 
   roots.forEach((root) => {
     const blockHeight = layoutSubtree(root.id, 0, cursorY);
-    cursorY += Math.max(blockHeight, estimateWorkflowNodeHeight(root) + 72);
+    cursorY += Math.max(blockHeight, estimateWorkflowNodeHeight(root) + workflowLayoutRootGap);
   });
 
   nodes
@@ -102,7 +106,7 @@ export function arrangeWorkflowNodes(nodes: FlowNode[], edges: FlowEdge[]) {
     .sort((a, b) => compareLayoutNodes(a, b, originalOrder))
     .forEach((node) => {
       positioned.set(node.id, { x: baseX, y: cursorY });
-      cursorY += estimateWorkflowNodeHeight(node) + 72;
+      cursorY += estimateWorkflowNodeHeight(node) + workflowLayoutRootGap;
     });
 
   return nodes.map((node) => ({

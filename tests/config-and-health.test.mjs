@@ -446,6 +446,8 @@ describe("Workbench node result panel", () => {
 
     assert.equal(nodeResultsSource.includes("actions?: string[]"), true);
     assert.equal(nodeResultsSource.includes("const firstAction = image.qualityCheck?.actions?.[0]"), true);
+    assert.equal(nodeResultsSource.includes("const recommendation = resultRecommendation(image)"), true);
+    assert.equal(nodeResultsSource.includes("label: \"待检查\""), true);
     assert.equal(nodeResultsSource.includes("建议：{firstAction}"), true);
     assert.equal(nodeResultsSource.includes("line-clamp-1 px-1 text-[11px] text-[#ffe1a0]/76"), true);
     assert.equal(nodeResultsSource.includes("rounded-[10px] border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px]"), true);
@@ -584,18 +586,23 @@ describe("Settings model management", () => {
 
     assert.equal(settingsSource.includes("settingsRequestFailure"), true);
     assert.equal(settingsSource.includes("readSettingsJson"), true);
-    assert.equal(settingsSource.includes("data.message || data.error || (response.ok ? \"检测完成\" : \"检测失败\")"), true);
+    assert.equal(settingsSource.includes("settingsResponseError(data, response.ok ? \"检测完成\" : \"检测失败\")"), true);
     assert.equal(settingsSource.includes("读取配置失败"), true);
     assert.equal(settingsSource.includes("保存配置失败"), true);
     assert.equal(settingsSource.includes("检测失败"), true);
     assert.equal(settingsSource.includes("测试失败"), true);
     assert.equal(settingsUiSource.includes("activeModelAction"), true);
-    assert.equal(settingsSource.includes("disabled={isBusy}"), true);
-    assert.equal(settingsSource.includes("disabled={isBusy || !advancedUrl}"), true);
-    assert.equal(settingsSource.includes("isBusy={isBusy}"), true);
+    assert.equal(settingsSource.includes("authRequired"), true);
+    assert.equal(settingsSource.includes("formDisabled"), true);
+    assert.equal(settingsSource.includes("disabled={formDisabled}"), true);
+    assert.equal(settingsSource.includes("disabled={formDisabled || !advancedUrl}"), true);
+    assert.equal(settingsSource.includes("isBusy={formDisabled}"), true);
     assert.equal(settingsUiSource.includes("disabled={isBusy || Boolean(activeModelAction)}"), true);
     assert.equal(settingsUiSource.includes("confirmDeleteId"), true);
     assert.equal(settingsUiSource.includes("runModelAction"), true);
+    assert.equal(settingsUiSource.includes("const compactModelLimit = 3"), true);
+    assert.equal(settingsUiSource.includes("prioritizedCompactModels"), true);
+    assert.equal(settingsUiSource.includes("展开 ${hiddenCount} 个"), true);
     assert.equal(settingsUiSource.includes("测试中"), true);
     assert.equal(settingsUiSource.includes("保存中"), true);
     assert.equal(settingsUiSource.includes("删除中"), true);
@@ -794,7 +801,10 @@ describe("Generated image serving", () => {
     assert.equal(generatedImagesRouteSource.includes("moveGeneratedImageToTrash(fileName, current)"), true);
     assert.equal(generatedImagesRouteSource.includes("async function restoreGeneratedImage(fileName: string, current: Record<string, unknown>)"), true);
     assert.equal(generatedImagesRouteSource.includes("async function moveGeneratedImageToTrash(fileName: string, current: Record<string, unknown>)"), true);
-    assert.equal(generatedImagesRouteSource.includes("await Promise.all([\n        unlink(imagePath).catch(() => {}),\n        unlink(metadataPath).catch(() => {}),\n      ])"), true);
+    assert.equal(generatedImagesRouteSource.includes("unlinkGeneratedImageFiles(dir, fileName)"), true);
+    assert.equal(generatedImagesRouteSource.includes('getImageVariantFileName(fileName, "thumbnail")'), true);
+    assert.equal(generatedImagesRouteSource.includes('getImageVariantFileName(fileName, "preview")'), true);
+    assert.equal(generatedImagesRouteSource.includes("deleteGeneratedImages(user, fileNames"), true);
     assert.equal(generatedImagesRouteSource.includes("const current = await readGeneratedMetadata(sourceMetadataPath)"), false);
   });
 });
@@ -922,9 +932,9 @@ describe("Quality enhance mode", () => {
 
     assert.equal(promptSource.includes("AI 画质增强流程：以输入图片为唯一事实来源"), true);
     assert.equal(promptSource.includes("Task: high-fidelity image enhancement and 4K-ready restoration"), true);
-    assert.equal(promptSource.includes("画质模式：Standard / 文字优先高清修复"), true);
-    assert.equal(promptSource.includes("画质模式：Plus / 图文双清晰增强"), true);
-    assert.equal(promptSource.includes("画质模式：Creative / 质感高清重绘"), true);
+    assert.equal(promptSource.includes("画质模式：文字修复"), true);
+    assert.equal(promptSource.includes("画质模式：图文增强"), true);
+    assert.equal(promptSource.includes("画质模式：质感重绘"), true);
     assert.equal(promptSource.includes("不要 AI 脑补新内容"), true);
     assert.equal(promptSource.includes("不能生成式乱重绘"), true);
     assert.equal(promptSource.includes("比例保护：画质增强必须优先保持源图宽高比"), true);
@@ -990,12 +1000,12 @@ describe("Quality enhance mode", () => {
     const removedOldQualityExportSentence = ["4K ", "导出默认走 AI 保真增强"].join("");
     const removedStandaloneQualityExportLabel = ["4K", "导出"].join("");
     assert.equal(workbenchSource.includes(removedOldQualityExportSentence), false);
-    assert.equal(workbenchSource.includes("Standard 修文字，Plus 图文双清晰，Creative 做质感重绘，再输出到目标尺寸"), true);
+    assert.equal(workbenchSource.includes("文字修复保文字，图文增强兼顾文字和画面，质感重绘适合无字主视觉"), true);
     assert.equal(workbenchSource.includes("画质增强"), true);
     assert.equal(workbenchSource.includes(removedStandaloneQualityExportLabel), false);
-    assert.equal(workbenchSource.includes("Standard"), true);
-    assert.equal(workbenchSource.includes("Plus"), true);
-    assert.equal(workbenchSource.includes("Creative"), true);
+    assert.equal(workbenchSource.includes("文字修复"), true);
+    assert.equal(workbenchSource.includes("图文增强"), true);
+    assert.equal(workbenchSource.includes("质感重绘"), true);
     assert.equal(workbenchSource.includes("8K长边7680"), false);
     assert.equal(workbenchSource.includes("qualityEnhanceTargetOptionsForImage"), true);
     assert.equal(workbenchSource.includes("qualityForQualityEnhanceTarget"), true);
@@ -1105,7 +1115,8 @@ describe("Controlled local mask editing", () => {
     assert.equal(routeSource.includes("mask 外区域发生变化。"), true);
 
     assert.equal(maskUiSource.includes("局部 AI 修改"), true);
-    assert.equal(maskUiSource.includes("去掉这里并补全背景"), true);
+    assert.equal(maskUiSource.includes("去掉补背景"), true);
+    assert.equal(maskUiSource.includes('prompt: "去掉这里并补全背景"'), true);
     assert.equal(maskUiSource.includes("去掉文字"), true);
     assert.equal(maskUiSource.includes("替换成新内容"), true);
     assert.equal(maskUiSource.includes("局部高清修复"), true);
@@ -1299,8 +1310,10 @@ describe("Image-to-image creative redesign", () => {
     assert.equal(routeSource.includes('creativeVariant: index === 1 ? "subject" : "headline"'), true);
     assert.equal(routeSource.includes('const inputFidelity = isCreativeImageToImage || isSmartResize ? "low" : "high"'), true);
     assert.equal(routeSource.includes("sanitizeLegacyImageToImagePrompt"), true);
-    assert.equal(routeSource.includes("const targetCount = isLegacyQualityExport ? 1 : 2"), true);
+    assert.equal(routeSource.includes('const targetCount = isLegacyQualityExport ? 1 : normalizeVariantCount(formData.get("variantCount"))'), true);
+    assert.equal(routeSource.includes("方案F：偏极简高级感"), true);
     assert.equal(routeSource.includes("resultItems.slice(0, targetCount)"), true);
+    assert.equal(routeSource.includes("const fillAttemptLimit = isSmartResize ? 0 : targetCount * 2"), true);
     assert.equal(routeSource.includes("const brandFilesPromise = Promise.all"), true);
     assert.equal(routeSource.includes("const [file, brandFiles, mask] = await Promise.all"), true);
     assert.equal(routeSource.includes("shouldUseAiOutpaint && preparedTargetCanvas ? toFile(preparedTargetCanvas.mask"), true);
@@ -1366,11 +1379,12 @@ describe("Image-to-image creative redesign", () => {
 
     assert.equal(workbenchSource.includes("prompt: IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST"), true);
     assert.equal(workbenchSource.includes("buildCreativeImageToImageConstraintText"), false);
-    assert.equal(workbenchSource.includes("参考原图做创意改版。"), true);
-    assert.equal(workbenchSource.includes("模型先分析原图版面、文案层级和主体，再按当前比例生成 2 个重新设计方案。"), true);
-    assert.equal(workbenchSource.includes("结果已显示在当前节点"), true);
+    assert.equal(workbenchSource.includes("参考原图出方案"), true);
+    assert.equal(workbenchSource.includes("基于原图重新设计，方案数量按底部选择。"), true);
+    assert.equal(workbenchSource.includes("结果已拆分为独立方案节点"), true);
     assert.equal(workbenchSource.includes("function shouldCreateSeparateResultNodes"), true);
-    assert.equal(workbenchSource.includes('return kind === "text_to_image" || kind === "output" || kind === "png_layers"'), true);
+    assert.equal(workbenchSource.includes("outputCount > 1"), true);
+    assert.equal(workbenchSource.includes("clearInlineNodeOutputs"), true);
     assert.equal(workbenchSource.includes("已先展示 ${outputs.length} 张结果到画布，后台继续补齐剩余方案"), true);
     assert.equal(workbenchSource.includes('formData.append("keepOriginalRatio", "false")'), true);
     assert.equal(workbenchSource.includes("图生图创意改版：只参考输入图的主题、配色、主体和核心文案含义"), false);
@@ -1388,7 +1402,7 @@ describe("Image-to-image creative redesign", () => {
 
 describe("Text-to-image references", () => {
   it("supports structured reference images for text-to-image only", async () => {
-    const [promptSource, routeSource, workbenchSource, optionsSource, creativeBriefSource, creativeBriefRouteSource, queueSource, deliverySource, designPlanSource, runtimeHelperSource] = await Promise.all([
+    const [promptSource, routeSource, workbenchSource, optionsSource, creativeBriefSource, creativeBriefRouteSource, queueSource, deliverySource, designPlanSource, runtimeHelperSource, chatComposerSource] = await Promise.all([
       readFile(new URL("../lib/prompt.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/generate-image/route.ts", import.meta.url), "utf8"),
       readWorkbenchSource(),
@@ -1399,6 +1413,7 @@ describe("Text-to-image references", () => {
       readFile(new URL("../lib/workbench-delivery.ts", import.meta.url), "utf8"),
       readFile(new URL("../lib/design-plan.ts", import.meta.url), "utf8"),
       readFile(new URL("../components/workbench/workbench-runtime-helpers.ts", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/chat-composer.tsx", import.meta.url), "utf8"),
     ]);
 
     assert.equal(optionsSource.includes("export type TextReferenceRole"), true);
@@ -1432,10 +1447,21 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("referenceManifest"), true);
     assert.equal(routeSource.includes("referenceImage_"), true);
     assert.equal(routeSource.includes("brandAsset_"), true);
+    assert.equal(routeSource.includes("styleReference_"), true);
+    assert.equal(routeSource.includes("item.styleReference"), true);
+    assert.equal(workbenchSource.includes("styleReference: true"), true);
+    assert.equal(workbenchSource.includes("useFavoriteStyle"), true);
+    assert.equal(workbenchSource.includes("selectedFavoriteStyleKeys"), true);
+    assert.equal(workbenchSource.includes("function toggleFavoriteStyleReference"), true);
+    assert.equal(workbenchSource.includes("favoriteStyleCandidates.slice(0, limit)"), true);
+    assert.equal(chatComposerSource.includes("未选择时自动取最近 3 张"), true);
+    assert.equal(chatComposerSource.includes("只弱参考配色、构图和质感"), true);
+    assert.equal(routeSource.includes("弱参考：只学习风格、配色、构图节奏和商业质感"), true);
     assert.equal(routeSource.includes("const textReferenceInputReadConcurrency = 4"), true);
     assert.equal(routeSource.includes("mapWithConcurrency(inputs, textReferenceInputReadConcurrency"), true);
     assert.equal(routeSource.includes("fileKey: `referenceImage_${index}`"), true);
     assert.equal(routeSource.includes("fileKey: `brandAsset_${index}`"), true);
+    assert.equal(routeSource.includes("fileKey: `styleReference_${index}`"), true);
     assert.equal(routeSource.includes("slice(0, 5)"), true);
     assert.equal(promptSource.includes("references.length >= 5"), true);
     assert.equal(routeSource.includes("references.length >= 5"), true);
@@ -1509,7 +1535,9 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("shouldRetryTextToImageQuality"), true);
     assert.equal(routeSource.includes("textToImageRiskValue"), true);
     assert.equal(routeSource.includes("textToImageGenerationProfile"), true);
-    assert.equal(routeSource.includes("const targetCount = 2"), true);
+    assert.equal(routeSource.includes("const targetCount = normalizeVariantCount(body.variantCount)"), true);
+    assert.equal(routeSource.includes("variantCount: normalizeVariantCount"), true);
+    assert.equal(routeSource.includes("方案F：偏极简高级感"), true);
     assert.equal(routeSource.includes('modelCallPolicy: targetCount > 1 ? "dual_variants_fast_reference" : "single_fast_reference"'), true);
     assert.equal(routeSource.includes('modelCallPolicy: targetCount > 1 ? "fast_dual_variants" : "fast_single_variant"'), true);
     assert.equal(routeSource.includes("function wantsMultipleDesignOutputs"), false);
@@ -1712,7 +1740,7 @@ describe("Workflow canvas performance", () => {
     assert.equal(workbenchCanvasSource.includes("apple-caption min-w-0 truncate text-[9.5px]"), false);
     assert.equal(workbenchCanvasSource.includes("apple-caption shrink-0 text-[11px]"), true);
     assert.equal(workbenchCanvasSource.includes('truncate text-[11px] text-white/38">{textReferenceRoleDescription'), true);
-    assert.equal(workbenchCanvasSource.includes("apple-pill px-2 py-1 text-[11px]"), true);
+    assert.equal(workbenchSource.includes("建议低于 ${formatFileSize(projectCapacityJsonWarningBytes)}"), true);
     assert.equal(workbenchSource.includes("composerStarterPrompts"), false);
     assert.equal(workbenchSource.includes("做一张高端电商产品主图"), false);
     assert.equal(workbenchSource.includes("做一张门店活动海报"), false);
@@ -1858,7 +1886,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(taskCenterSource.includes("TaskPhaseRail"), true);
     assert.equal(taskCenterSource.includes("结果核验"), true);
     assert.equal(taskCenterSource.includes("运行时间偏长，但后台仍在核验"), true);
-    assert.equal(taskCenterSource.includes("请求 {shortTaskRequestId(task.requestId)}"), true);
+    assert.equal(taskCenterSource.includes("请求 ${shortTaskRequestId(task.requestId)}"), true);
     assert.equal(taskCenterSource.includes("项目 {task.projectName"), true);
     assert.equal(taskCenterSource.includes("进程 {taskRunStateLabel(task.backendRunState)}"), true);
     assert.equal(taskCenterSource.includes("buildTaskCenterGroups(matchedTasks, visibleCount, isDeferredQueuedTask)"), true);
@@ -2031,23 +2059,26 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("ImageManagerPanel"), true);
     assert.equal(workbenchUiSource.includes("imageDeletionProtection"), true);
     assert.equal(workbenchUiSource.includes("selectedSummary"), false);
-    assert.equal(workbenchUiSource.includes("activeKeys"), false);
+    assert.equal(workbenchUiSource.includes("selectedKeys"), true);
+    assert.equal(workbenchUiSource.includes("apple-count-badge"), true);
     assert.equal(workbenchUiSource.includes("{filteredRows.length}/{managedRows.length}"), true);
     assert.equal(workbenchUiSource.includes("copyingKey"), true);
     assert.equal(workbenchUiSource.includes("disabled={Boolean(copyingKey)}"), true);
     assert.equal(workbenchUiSource.includes("\"复制中\""), true);
-    assert.equal(workbenchUiSource.includes("batchActionLabel"), false);
-    assert.equal(workbenchUiSource.includes("runBatchAction"), false);
+    assert.equal(workbenchUiSource.includes("batchActionKey"), true);
+    assert.equal(workbenchUiSource.includes("runConfirmedBatchDelete"), true);
     assert.equal(workbenchUiSource.includes("actionMessage"), true);
     assert.equal(workbenchUiSource.includes("\"移动中...\""), false);
     assert.equal(workbenchUiSource.includes("rowActionKey"), true);
     assert.equal(workbenchUiSource.includes("runRowAction"), true);
     assert.equal(workbenchUiSource.includes("confirmActionKey"), true);
-    assert.equal(workbenchUiSource.includes("runConfirmedBatchAction"), false);
+    assert.equal(workbenchUiSource.includes("批量删除图片"), true);
+    assert.equal(workbenchUiSource.includes("批量彻底删除回收站图片"), true);
+    assert.equal(workbenchUiSource.includes("收藏图需单独删除"), true);
     assert.equal(workbenchUiSource.includes("runConfirmedRowAction"), true);
     assert.equal(workbenchUiSource.includes("loadingMoreKey"), true);
-    assert.equal(workbenchSource.includes("batchImageMutationConcurrency = 3"), false);
-    assert.equal(workbenchSource.includes("mapWithConcurrency(candidates, batchImageMutationConcurrency"), false);
+    assert.equal(workbenchSource.includes("deleteHistoryImagesBatch"), true);
+    assert.equal(workbenchSource.includes("applyDeletedHistoryImages"), true);
     assert.equal(workbenchSource.includes("metadataPatchConcurrency = 4"), true);
     assert.equal(workbenchSource.includes("mapWithConcurrency(\n      images.filter((image) => image.fileName),\n      metadataPatchConcurrency"), true);
     assert.equal(workbenchUiSource.includes("确认彻删"), false);
@@ -2056,7 +2087,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchUiSource.includes("\"处理中\""), true);
     assert.equal(workbenchSource.includes("onDeleteHistory={deleteHistoryImage}"), true);
     assert.equal(workbenchSource.includes("onRestoreHistory={restoreHistoryImage}"), true);
-    assert.equal(workbenchSource.includes("onBatchDeleteHistory={deleteHistoryImagesBatch}"), false);
+    assert.equal(workbenchSource.includes("onDeleteHistoryMany={deleteHistoryImagesBatch}"), true);
     assert.equal(workbenchSource.includes("batchImageActionSummary"), true);
     assert.equal(workbenchSource.includes("loadImageManagerHistory"), true);
     assert.equal(workbenchSource.includes("loadImageManagerTrash"), true);
@@ -2094,15 +2125,15 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("favorite: nextFavorite"), true);
     assert.equal(workbenchSource.includes("metadata: { favorite: nextFavorite }"), true);
     assert.equal(workbenchSource.includes("throw new Error(\"收藏状态保存失败。\")"), true);
-    assert.equal(workbenchSource.includes("data.error || `删除项目失败（HTTP ${response.status}）。`"), true);
-    assert.equal(workbenchSource.includes("data.error || `打开项目失败（HTTP ${response.status}）。`"), true);
-    assert.equal(workbenchSource.includes("data.error || `项目列表刷新失败（HTTP ${response.status}）。`"), true);
+    assert.equal(workbenchSource.includes("responseErrorMessage(response, data, \"删除项目失败\")"), true);
+    assert.equal(workbenchSource.includes("responseErrorMessage(response, data, \"打开项目失败\")"), true);
+    assert.equal(workbenchSource.includes("responseErrorMessage(response, data, \"项目列表刷新失败\")"), true);
     assert.equal(workbenchSource.includes("打开项目失败：接口没有返回有效项目数据。"), true);
     assert.equal(workbenchSource.includes("projectListLoadingRef"), true);
     assert.equal(workbenchSource.includes("projectListLoading"), true);
     assert.equal(workbenchSource.includes("projectListError"), true);
     assert.equal(workbenchSource.includes("materialLibrariesLoadingRef"), true);
-    assert.equal(workbenchSource.includes("data.error || `素材库刷新失败（HTTP ${response.status}）。`"), true);
+    assert.equal(workbenchSource.includes("responseErrorMessage(response, data, \"素材库刷新失败\")"), true);
     assert.equal(workbenchSource.includes("data.error || `结果加载失败（HTTP ${response.status}）。`"), true);
     assert.equal(workbenchSource.includes("data.error || `图片管理加载失败（HTTP ${response.status}）。`"), true);
     assert.equal(workbenchSource.includes("data.error || `回收站加载失败（HTTP ${response.status}）。`"), true);
@@ -2164,7 +2195,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(assetLibraryPanelSource.includes("忽略中"), true);
     assert.equal(workbenchSource.includes("window.confirm"), false);
     assert.equal(workbenchSource.includes("skipConfirm"), false);
-    assert.equal(workbenchSource.includes("这张图正在使用或已收藏"), true);
+    assert.equal(workbenchSource.includes("这张图正在使用或作为项目素材"), true);
     assert.equal(imageManagerPanelSource.includes('const imageManagerFilters: ImageManagerFilter[] = ["全部", "收藏", "回收站"]'), true);
     assert.equal(imageManagerPanelSource.includes('"需复查"'), false);
     assert.equal(imageManagerPanelSource.includes("可清理"), false);
@@ -2272,8 +2303,8 @@ describe("AI compositing", () => {
     assert.equal(routeSource.includes("buildFuseCompositionRetryPrompt"), true);
     assert.equal(routeSource.includes("shouldRetryFuseQuality"), true);
 
-    assert.equal(workbenchSource.includes('label: "AI合成"'), true);
-    assert.equal(workbenchSource.includes("图1主体放入图2场景"), true);
+    assert.equal(workbenchSource.includes('label: "两图合成"'), true);
+    assert.equal(workbenchSource.includes("把图1主体自然放入图2场景"), true);
     assert.equal(promptSource.includes("请直接分析两张输入图和用户要求，然后输出最终合成图。"), true);
     assert.equal(workbenchSource.includes('{ id: "imageA", label: "主体" }'), true);
     assert.equal(workbenchSource.includes('{ id: "imageB", label: "场景" }'), true);
@@ -2379,12 +2410,88 @@ describe("Workbench compact typography", () => {
     assert.equal(sources.some((source) => source.includes("text-[9px]") || source.includes("text-[10px]") || source.includes("text-[10.5px]") || source.includes("font-size: 10px")), false);
   });
 
+  it("keeps an inspector back action after recommendation-driven node creation", async () => {
+    const [workbenchSource, rightPanelSource, inspectorSource] = await Promise.all([
+      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/right-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/node-inspector-panel.tsx", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(workbenchSource.includes("const [inspectorBackNodeId, setInspectorBackNodeId] = useState<string | null>(null)"), true);
+    assert.equal(workbenchSource.includes("setInspectorBackNodeId(sourceNodeId)"), true);
+    assert.equal(rightPanelSource.includes("onBackToNode"), true);
+    assert.equal(inspectorSource.includes("返回 {backNode.data.title}"), true);
+  });
+
+  it("keeps right panel result and image management responsibilities separated", async () => {
+    const [rightPanelSource, recommendationsSource, imageManagerSource] = await Promise.all([
+      readFile(new URL("../components/workbench/right-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/smart-recommendations.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/image-manager-panel.tsx", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(rightPanelSource.includes("[\"library\", \"当前方案\"]"), true);
+    assert.equal(rightPanelSource.includes("[\"images\", \"图库\"]"), true);
+    assert.equal(rightPanelSource.includes("只显示当前节点生成的方案"), true);
+    assert.equal(rightPanelSource.includes("<HistoryPanel"), false);
+    assert.equal(recommendationsSource.includes("继续优化"), true);
+    assert.equal(recommendationsSource.includes("尺寸改版"), true);
+    assert.equal(recommendationsSource.includes("复用输出"), true);
+    assert.equal(imageManagerSource.includes("imageManagerMeta"), true);
+    assert.equal(imageManagerSource.includes("bg-gradient-to-t from-black/78"), true);
+  });
+
   it("keeps the workbench first render stable for hydration", async () => {
     const workbenchSource = await readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8");
 
     assert.equal(workbenchSource.includes("useState(readInitialHomeOpen)"), false);
     assert.equal(workbenchSource.includes("const [homeOpen, setHomeOpen] = useState(true)"), true);
     assert.equal(workbenchSource.includes("setHomeOpen(window.localStorage.getItem(workbenchHomeOpenStorageKey) !== \"canvas\")"), true);
+  });
+
+  it("keeps a dedicated focus mode for dense canvas editing", async () => {
+    const workbenchSource = await readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8");
+
+    assert.equal(workbenchSource.includes("const [canvasFocusMode, setCanvasFocusMode] = useState(false)"), true);
+    assert.equal(workbenchSource.includes("function enterCanvasFocusMode()"), true);
+    assert.equal(workbenchSource.includes("function returnHomeFromCanvas()"), true);
+    assert.equal(workbenchSource.includes("回到首页，不清空当前项目"), true);
+    assert.equal(workbenchSource.includes("label=\"首页\""), true);
+    assert.equal(workbenchSource.includes("aria-label={canvasFocusMode ? \"恢复界面\" : \"全屏画布\"}"), true);
+    assert.equal(workbenchSource.includes("专注画布左侧入口"), true);
+    assert.equal(workbenchSource.includes("canvasFocusMode ? null : ("), true);
+  });
+
+  it("starts common design tasks from the home screen with structured briefs", async () => {
+    const [homeSource, templateSource, workbenchSource, inspectorSource] = await Promise.all([
+      readFile(new URL("../components/workbench/project-home-screen.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/workbench-task-templates.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/workbench-client.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/node-inspector-panel.tsx", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(homeSource.includes("开始一个设计"), true);
+    assert.equal(homeSource.includes("方案数量"), true);
+    assert.equal(homeSource.includes("生成前检查"), true);
+    assert.equal(homeSource.includes("建议先补充"), true);
+    assert.equal(homeSource.includes("preflight.canGenerate"), true);
+    assert.equal(homeSource.includes("selectedVariantCount"), true);
+    assert.equal(homeSource.includes("[2, 3, 4, 5, 6]"), true);
+    assert.equal(templateSource.includes("电商商品主图"), true);
+    assert.equal(templateSource.includes("小红书封面"), true);
+    assert.equal(templateSource.includes("Logo、二维码、电话、地址、产品图、人物图只能使用用户上传或项目真实素材"), true);
+    assert.equal(templateSource.includes("taskDraftVariantCount"), true);
+    assert.equal(templateSource.includes("validateWorkbenchTaskDraft"), true);
+    assert.equal(templateSource.includes("buildTaskFollowUpQuestions"), true);
+    assert.equal(templateSource.includes("方案策略"), true);
+    assert.equal(templateSource.includes("使用场景"), true);
+    assert.equal(templateSource.includes("buildWorkbenchTaskPrompt"), true);
+    assert.equal(workbenchSource.includes("startTaskTemplateFromHome"), true);
+    assert.equal(workbenchSource.includes("const variantCount = taskDraftVariantCount(draft, template)"), true);
+    assert.equal(workbenchSource.includes("if (!request || !preflight.canGenerate)"), true);
+    assert.equal(workbenchSource.includes("建议补充：${preflight.questions.slice(0, 3).join(\"；\")"), true);
+    assert.equal(workbenchSource.includes("taskTemplateTitle: template.title"), true);
+    assert.equal(inspectorSource.includes("常用任务：{stringParam(params.taskTemplateTitle)}"), true);
   });
 });
 

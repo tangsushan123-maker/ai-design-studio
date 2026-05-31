@@ -11,7 +11,7 @@ export const maskQuickActions: Array<{
   region?: MaskEditRegionType;
   edge?: MaskEditEdgeBlend;
 }> = [
-  { label: "去掉这里并补全背景", mode: "cleanup", prompt: "去掉这里并补全背景", protection: "strict", region: "auto", edge: "weak" },
+  { label: "去掉补背景", mode: "cleanup", prompt: "去掉这里并补全背景", protection: "strict", region: "auto", edge: "weak" },
   { label: "去掉文字", mode: "text_remove", prompt: "去掉文字并补全背景", protection: "strict", region: "text", edge: "weak" },
   { label: "替换成新内容", mode: "replace", prompt: "替换成新内容：", protection: "standard", region: "auto", edge: "standard" },
   { label: "局部高清修复", mode: "enhance", prompt: "局部高清修复，提升清晰度和细节，不改变内容", protection: "strict", edge: "weak" },

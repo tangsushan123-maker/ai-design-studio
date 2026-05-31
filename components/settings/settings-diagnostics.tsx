@@ -163,7 +163,7 @@ export function DetectionSummary({ result }: { result: DetectionResult | null })
               {model.id}
             </span>
           ))}
-          {result.models.length > 12 ? <span className="apple-pill px-2 py-1 text-[11px]">+{result.models.length - 12}</span> : null}
+          {result.models.length > 12 ? <span className="apple-count-badge px-2 py-1 text-[11px]">+{result.models.length - 12}</span> : null}
         </div>
       ) : null}
       {result.issues?.length ? (

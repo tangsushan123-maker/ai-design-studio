@@ -9,10 +9,10 @@ import type { PngLayerExportMode } from "@/components/workbench/result-preview-t
 export function resizeFitModeLabel(value: string) {
   if (value === "smart_relayout") return "智能重排";
   if (value === "smart_outpaint") return "保守扩图";
-  if (value === "keep_ratio") return "Standard";
-  if (value === "standard_enhance" || value === "faithful_enhance") return "Standard";
-  if (value === "plus_enhance") return "Plus";
-  if (value === "creative_redraw" || value === "texture_redraw" || value === "ai_redraw") return "Creative";
+  if (value === "keep_ratio") return "文字修复";
+  if (value === "standard_enhance" || value === "faithful_enhance") return "文字修复";
+  if (value === "plus_enhance") return "图文增强";
+  if (value === "creative_redraw" || value === "texture_redraw" || value === "ai_redraw") return "质感重绘";
   if (value === "crop" || value === "pad") return "智能重排";
   return "智能重排";
 }
@@ -21,8 +21,8 @@ export function resizeFitModeValue(label: string) {
   if (label === "智能重排" || label === "智能改版") return "smart_relayout";
   if (label === "保守扩图" || label === "扩图补画" || label === "智能扩图") return "smart_outpaint";
   if (label === "保持比例放大") return "standard_enhance";
-  if (label === "Standard" || label === "文字优先高清修复" || label === "保真增强") return "standard_enhance";
-  if (label === "Plus" || label === "图文双清晰增强") return "plus_enhance";
+  if (label === "Standard" || label === "文字修复" || label === "文字优先高清修复" || label === "保真增强") return "standard_enhance";
+  if (label === "Plus" || label === "图文增强" || label === "图文双清晰增强") return "plus_enhance";
   if (label === "Creative" || label === "AI高清重绘" || label === "质感重绘") return "creative_redraw";
   return "smart_relayout";
 }
@@ -45,20 +45,20 @@ export function qualityEnhanceModeFromFitMode(fitMode: string, params: Record<st
 }
 
 export function qualityEnhanceModeLabel(mode: QualityEnhanceMode) {
-  if (mode === "plus") return "Plus";
-  if (mode === "creative") return "Creative";
-  return "Standard";
+  if (mode === "plus") return "图文增强";
+  if (mode === "creative") return "质感重绘";
+  return "文字修复";
 }
 
 export function qualityEnhanceModeDescription(mode: QualityEnhanceMode) {
-  if (mode === "plus") return "Plus：图文双清晰增强。文字区域保真，画面区域增强质感，适合商业海报、电商图、产品图。";
-  if (mode === "creative") return "Creative：质感高清重绘。画面更惊艳，适合无字主视觉、食品、产品、背景，不适合重文字图。";
-  return "Standard：文字优先高清修复。适合海报、详情页、截图和大量文字图，重点文字清楚，不变字，不乱改。";
+  if (mode === "plus") return "图文增强：文字区域保真，画面区域增强质感，适合商业海报、电商图、产品图。";
+  if (mode === "creative") return "质感重绘：画面更惊艳，适合无字主视觉、食品、产品、背景，不适合重文字图。";
+  return "文字修复：适合海报、详情页、截图和大量文字图，重点文字清楚，不变字，不乱改。";
 }
 
 export function qualityEnhanceModeValue(label: string) {
-  if (label === "Plus") return "plus";
-  if (label === "Creative") return "creative";
+  if (label === "Plus" || label === "图文增强") return "plus";
+  if (label === "Creative" || label === "质感重绘") return "creative";
   return "standard";
 }
 
@@ -121,12 +121,12 @@ export function designComparisonModeValue(label: string): DesignComparisonMode {
 
 export function qualityEnhanceDefaultPrompt(mode: QualityEnhanceMode) {
   if (mode === "creative") {
-    return "Creative 质感高清重绘：适合无字主视觉、食品、产品和背景。保持大构图与主体不变，增强纹理、材质、高光、阴影、反射、景深和商业摄影质感；不适合重文字图。";
+    return "质感重绘：适合无字主视觉、食品、产品和背景。保持大构图与主体不变，增强纹理、材质、高光、阴影、反射、景深和商业摄影质感；不适合重文字图。";
   }
   if (mode === "plus") {
-    return "Plus 图文双清晰增强：文字区域保持原文、原位置和原排版，画面区域增强产品质感、光影、材质和背景细节，最后输出 4K/8K。";
+    return "图文增强：文字区域保持原文、原位置和原排版，画面区域增强产品质感、光影、材质和背景细节，最后输出 4K/8K。";
   }
-  return "Standard 文字优先高清修复：适合海报、详情页、截图和大量文字图。重点提升文字清晰度、小字可读性和边缘锐度，不变字、不乱改。";
+  return "文字修复：适合海报、详情页、截图和大量文字图。重点提升文字清晰度、小字可读性和边缘锐度，不变字、不乱改。";
 }
 
 export function exportFormatParam(value: unknown): "png" | "jpg" | "webp" {

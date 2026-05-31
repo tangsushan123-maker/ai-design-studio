@@ -128,11 +128,14 @@ export function errorRecoveryTips(message: string) {
   const clean = message.toLowerCase();
   if (isInvalidMaskFailure(message)) return ["重新打开局部 AI 修改，把目标、阴影和边缘完整涂满。", "蒙版必须和原图尺寸一致，换图后需要重新涂抹。"];
   if (/请输入文字需求|prompt|文生图节点需要填写/.test(message)) return ["补充清楚的目标、用途、主体、文字和风格后再运行。", "有参考图时先连接图片参考，再选择参考角色和权重。"];
+  if (/内容太少|信息不完整|还缺|需补充|生成前检查/.test(message)) return ["先补齐系统提示的主题、使用场景、必须文字和真实素材。", "人物、医疗、电商类任务不要让模型猜姓名、机构、价格和电话。"];
   if (/需要连接|请上传|请提供|没有检测到|请选择/.test(message)) return ["先把输入图片接到节点左侧入口，或上传/导入一张可用图片。", "如果图片来自网页链接，改用本地上传可以减少读取失败。"];
   if (/json|请求格式|接口返回格式异常/i.test(message)) return ["刷新页面后重试，避免旧页面状态继续发送异常请求。", "如果一直出现，请保存项目并重新打开。"];
+  if (/401|未登录|请先登录|登录已过期|unauthorized/i.test(message)) return ["先去登录页重新登录，再回到当前项目继续。", "登录恢复后不要刷新删除本地素材，先重新运行失败节点。"];
   if (/key|密钥|401|403|quota|余额|balance|permission|权限/i.test(message)) return ["进入 API 设置测试 Key、余额和模型权限。", "确认图片模型、分析模型都已通过检测。"];
   if (/model|模型/.test(message)) return ["到 API 设置重新检测模型，或切换为已通过测试的图片模型。", "中转站模型名要和服务商后台保持一致。"];
-  if (/timeout|timed out|超时|502|503|504|gateway|fetch failed|network|upstream/i.test(clean)) return ["稍后重试，或切换更快/更稳定的图片模型。", "重任务可降低质量目标或减少参考图数量后再运行。"];
+  if (/timeout|timed out|超时|502|503|504|gateway|fetch failed|network|upstream/i.test(clean)) return ["稍后重试，或切换更快/更稳定的图片模型。", "生成 4-6 个方案失败时，先降到 2 个方案验证模型稳定性。", "4K 或高质量任务可先出标准图，再用画质增强处理。"];
+  if (/4k|4096|高清|画质|upscale|enhance/i.test(message)) return ["先生成标准尺寸的稳定构图，再单独做画质增强。", "如果增强失败，换用较小目标尺寸或减少文字细节后重试。"];
   if (/比例|裁切|原生比例|画布/.test(message)) return ["改用常见比例重新生成，或打开精确尺寸让系统先做目标画布。", "避免让主体和大标题贴边，给四周留出安全边距。"];
   return [];
 }
@@ -151,6 +154,9 @@ export function friendlyDisplayError(message: string) {
   }
   if (/502|bad gateway|gateway timeout|nginx|upstream|timeout|fetch failed/i.test(message)) {
     return "图片模型服务暂时不可用，可能是 API 代理或上游模型超时。请稍后重试，或在 API 配置里换一个更稳定/更快的图片模型。";
+  }
+  if (/401|unauthorized|未登录|请先登录|登录已过期/i.test(message)) {
+    return "登录状态已失效，请重新登录后继续。当前项目和本地素材不会因为这条提示自动删除。";
   }
 
   return message

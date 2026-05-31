@@ -3,6 +3,7 @@
 import { RefreshCcw, Search, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ImageFrame } from "@/components/workbench/image-frame";
+import { friendlyDisplayError } from "@/components/workbench/workbench-labels";
 import { taskMatchesSearch } from "@/lib/workbench-tasks";
 
 type TaskCenterImage = {
@@ -210,40 +211,50 @@ export function TaskCenter({
                   style={{ width: `${Math.max(4, Math.min(100, task.progress || 4))}%` }}
                 />
               </span>
-              <span className="w-10 text-right text-[11px] text-white/46">{Math.round(task.progress || 0)}%</span>
+              <span className="w-10 text-right text-[11px] font-semibold tabular-nums text-white/78">{Math.round(task.progress || 0)}%</span>
             </div>
-            <div className="truncate text-[11px] text-white/56">
+            <div className="truncate text-[11px] font-medium text-white/70">
               {progressText}
             </div>
             <TaskPhaseRail phase={machinePhase} />
-            <div className="apple-caption mt-1 grid grid-cols-2 gap-x-2 gap-y-1 text-white/42">
-              <span className="truncate">开始 {formatGeneratedAt(new Date(task.startedAt).toISOString())}</span>
-              <span className="text-right">总耗时 {formatDuration(elapsedMs)}</span>
-              {showDetailedTiming && modelMs ? <span className="truncate">模型 {formatDuration(modelMs)}</span> : null}
-              {showDetailedTiming && saveMs ? <span className="text-right">保存 {formatDuration(saveMs)}</span> : null}
-              {task.projectName || task.projectId ? <span className="truncate">项目 {task.projectName || shortTaskRequestId(task.projectId || "")}</span> : null}
-              {task.requestId ? <span className="truncate">请求 {shortTaskRequestId(task.requestId)}</span> : null}
-              {task.backendRunState ? <span className="text-right">进程 {taskRunStateLabel(task.backendRunState)}</span> : null}
-            </div>
+            <details className="group mt-1 rounded-[12px] border border-white/8 bg-white/[0.025] px-2 py-1.5">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[11px] text-white/50 marker:hidden">
+                <span className="truncate">耗时 {formatDuration(elapsedMs)}{task.requestId ? ` · 请求 ${shortTaskRequestId(task.requestId)}` : ""}</span>
+                <span className="text-white/46 transition group-open:rotate-180">⌄</span>
+              </summary>
+              <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] leading-5 text-white/52">
+                <span className="truncate">开始 {formatGeneratedAt(new Date(task.startedAt).toISOString())}</span>
+                <span className="text-right">总耗时 {formatDuration(elapsedMs)}</span>
+                {showDetailedTiming && modelMs ? <span className="truncate">模型 {formatDuration(modelMs)}</span> : null}
+                {showDetailedTiming && saveMs ? <span className="text-right">保存 {formatDuration(saveMs)}</span> : null}
+                {task.projectName || task.projectId ? <span className="truncate">项目 {task.projectName || shortTaskRequestId(task.projectId || "")}</span> : null}
+                {task.backendRunState ? <span className="text-right">进程 {taskRunStateLabel(task.backendRunState)}</span> : null}
+              </div>
+            </details>
             {timingChips.length ? (
               <div className="mt-2 flex flex-wrap gap-1">
                 {timingChips.map((chip) => (
-                  <span className="rounded-full border border-white/10 bg-white/[0.045] px-2 py-1 text-[11px] leading-none text-white/42" key={chip}>
+                  <span className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-1 text-[11px] leading-none text-white/58" key={chip}>
                     {chip}
                   </span>
                 ))}
               </div>
             ) : null}
-            {task.error ? <div className="apple-caption mt-1 truncate text-[#ffb4a8]">{task.error}</div> : null}
+            {task.error ? (
+              <div className="mt-1 line-clamp-2 rounded-[10px] border border-[#ff6b5f]/12 bg-[#ff6b5f]/8 px-2 py-1 text-[11px] leading-5 text-[#ffb4a8]">
+                {friendlyDisplayError(task.error)}
+              </div>
+            ) : null}
             {recoveryHint ? (
               <div className={`mt-2 rounded-[12px] border px-2.5 py-2 text-[11px] leading-5 ${recoveryHint.tone === "danger" ? "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]" : "border-[#ffd166]/18 bg-[#ffd166]/10 text-[#ffe1a3]"}`}>
+                <span className="mb-0.5 block font-semibold">恢复建议</span>
                 {recoveryHint.text}
               </div>
             ) : null}
           </div>
         </div>
 
-        <div className="mt-3 flex items-center gap-1.5">
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
           {canStop ? (
             <button className="apple-button-danger px-3 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeTaskAction)} onClick={() => void runTaskAction("停止", task.id, () => onCancel(task.id))} type="button">
               {activeTaskAction === cancelActionKey ? "停止中" : "停止"}
@@ -255,11 +266,11 @@ export function TaskCenter({
             </button>
           ) : null}
           {canStop ? (
-            <span className="apple-caption px-2 text-white/38">停止后可删除</span>
+            <span className="apple-caption shrink-0 whitespace-nowrap px-2 text-white/38">停止后可删除</span>
           ) : (
             <button className="apple-button flex items-center gap-1 px-3 py-1.5 text-[11px] disabled:opacity-45" disabled={Boolean(activeTaskAction)} onClick={() => void runConfirmedTaskAction("删除记录", task.id, () => onDelete(task.id))} type="button">
               <Trash2 className="size-3" />
-              {activeTaskAction === deleteActionKey ? "删除中" : confirmActionKey === deleteActionKey ? "确认删除" : "删除记录"}
+              <span className="truncate">{activeTaskAction === deleteActionKey ? "删除中" : confirmActionKey === deleteActionKey ? "确认删除" : "删除记录"}</span>
             </button>
           )}
         </div>
@@ -283,21 +294,21 @@ export function TaskCenter({
         </div>
         {finishedCount ? (
           <button
-            className="apple-button flex shrink-0 items-center gap-1 px-3 py-1.5 text-[11px] disabled:opacity-45"
+            className="apple-button flex max-w-[148px] shrink-0 items-center gap-1 px-3 py-1.5 text-[11px] disabled:opacity-45 sm:max-w-none"
             disabled={Boolean(activeTaskAction)}
             onClick={() => void runConfirmedTaskAction(normalizedQuery ? "清理匹配已结束" : "清理已结束", "finished", () => onDeleteFinished(finishedTasks.map((task) => task.id)))}
             type="button"
           >
             <Trash2 className="size-3" />
-            {activeTaskAction.endsWith(":finished") ? "清理中" : confirmActionKey.endsWith(":finished") ? "确认清理" : normalizedQuery ? "清理匹配已结束" : "清理已结束"}
+            <span className="truncate">{activeTaskAction.endsWith(":finished") ? "清理中" : confirmActionKey.endsWith(":finished") ? "确认清理" : normalizedQuery ? "清理匹配已结束" : "清理已结束"}</span>
           </button>
         ) : null}
       </div>
       {runningCount ? (
-        <div className="grid grid-cols-3 gap-1.5 rounded-[16px] border border-white/10 bg-white/[0.035] p-1.5 text-center text-[11px] text-white/50">
-          <div className="rounded-[12px] bg-white/[0.045] px-1.5 py-1.5">1 排队/准备</div>
-          <div className="rounded-[12px] bg-white/[0.045] px-1.5 py-1.5">2 模型生成</div>
-          <div className="rounded-[12px] bg-white/[0.045] px-1.5 py-1.5">3 保存展示</div>
+        <div className="grid grid-cols-3 gap-1.5 rounded-[16px] border border-white/10 bg-white/[0.045] p-1.5 text-center text-[11px] text-white/64">
+          <div className="rounded-[12px] bg-white/[0.07] px-1.5 py-1.5">1 排队/准备</div>
+          <div className="rounded-[12px] bg-white/[0.07] px-1.5 py-1.5">2 模型生成</div>
+          <div className="rounded-[12px] bg-white/[0.07] px-1.5 py-1.5">3 保存展示</div>
         </div>
       ) : null}
       {actionMessage ? (
@@ -358,7 +369,7 @@ export function TaskCenter({
         <section className="space-y-2">
           <div className="flex items-center justify-between px-1">
             <div className="apple-section-title">待执行任务</div>
-            <div className="apple-caption">{deferredTasks.length} 个</div>
+            <div className="apple-count-badge px-2 py-0.5 text-[11px]">{deferredTasks.length} 个</div>
           </div>
           {deferredTasks.map(renderTask)}
         </section>
@@ -367,7 +378,7 @@ export function TaskCenter({
         <section className="space-y-2">
           <div className="flex items-center justify-between px-1">
             <div className="apple-section-title">进行中</div>
-            <div className="apple-caption">{runningTasks.length} 个</div>
+            <div className="apple-count-badge px-2 py-0.5 text-[11px]">{runningTasks.length} 个</div>
           </div>
           {runningTasks.map(renderTask)}
         </section>
