@@ -2455,7 +2455,8 @@ describe("Workbench compact typography", () => {
     assert.equal(workbenchSource.includes("const [canvasFocusMode, setCanvasFocusMode] = useState(false)"), true);
     assert.equal(workbenchSource.includes("function enterCanvasFocusMode()"), true);
     assert.equal(workbenchSource.includes("function returnHomeFromCanvas()"), true);
-    assert.equal(workbenchSource.includes("回到首页，不清空当前项目"), true);
+    assert.equal(workbenchSource.includes("title=\"回到首页\""), true);
+    assert.equal(workbenchSource.includes("清空当前画布，保留任务记录和图片库文件"), true);
     assert.equal(workbenchSource.includes("label=\"首页\""), true);
     assert.equal(workbenchSource.includes("aria-label={canvasFocusMode ? \"恢复界面\" : \"全屏画布\"}"), true);
     assert.equal(workbenchSource.includes("专注画布左侧入口"), true);

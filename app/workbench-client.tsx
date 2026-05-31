@@ -28,7 +28,6 @@ import {
   MessageCircle,
   Minus,
   Minimize2,
-  MoreHorizontal,
   PanelLeftOpen,
   PanelRightOpen,
   Plus,
@@ -460,8 +459,6 @@ function NodeWorkflowWorkbench({
   const [rightPanelTabHint, setRightPanelTabHint] = useState<RightPanelTab>("tasks");
   const [rightPanelTabTick, setRightPanelTabTick] = useState(0);
   const [canvasFocusMode, setCanvasFocusMode] = useState(false);
-  const [topActionMenuOpen, setTopActionMenuOpen] = useState(false);
-  const topActionMenuRef = useRef<HTMLDivElement | null>(null);
   const [composerPrompt, setComposerPrompt] = useState("");
   const [composerFocusTick, setComposerFocusTick] = useState(0);
   const [composerModel, setComposerModel] = useState(initialImageModelFor(initialModelInfo));
@@ -488,22 +485,6 @@ function NodeWorkflowWorkbench({
     dismissedTaskRefsRef.current = loadDismissedTaskRefs(projectId);
     dismissedImageKeysRef.current = loadDismissedImageKeySet(projectId);
   }, [projectId]);
-  useEffect(() => {
-    if (!topActionMenuOpen) return;
-    function onPointerDown(event: PointerEvent) {
-      if (event.target instanceof globalThis.Node && topActionMenuRef.current?.contains(event.target)) return;
-      setTopActionMenuOpen(false);
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setTopActionMenuOpen(false);
-    }
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
-  }, [topActionMenuOpen]);
   const recoverTaskCanvasResult = useCallback((task: TaskResultMatchContext) => recoverTaskCanvasResultFromNodes(nodesRef.current, task), []);
   const hasTaskResultNodesOnCanvas = useCallback((task: TaskResultMatchContext) => {
     return hasTaskResultNodesOnCanvasFromNodes(nodesRef.current, task);
@@ -5763,13 +5744,14 @@ function NodeWorkflowWorkbench({
             </div>
             <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
             <button
-              className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium"
-              onClick={returnHomeFromCanvas}
-              title="回到首页，不清空当前项目"
+              className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium text-[#ffb4a8] disabled:opacity-45"
+              disabled={!nodes.length}
+              onClick={clearCanvas}
+              title={nodes.length ? "清空当前画布，保留任务记录和图片库文件" : "当前画布为空"}
               type="button"
             >
-              <Home className="size-3.5" />
-              首页
+              <Trash2 className="size-3.5" />
+              清空画布
             </button>
             {projectKind === "temporary" ? (
               <button
@@ -5808,35 +5790,6 @@ function NodeWorkflowWorkbench({
               <Folder className="size-3.5" />
               {rightPanelOpen ? "收起" : "侧栏"}
             </button>
-            <div ref={topActionMenuRef} className="relative">
-              <button
-                className={`apple-button flex size-8 items-center justify-center text-white/56 ${topActionMenuOpen ? "bg-white/[0.13] text-white" : ""}`}
-                onClick={() => setTopActionMenuOpen((value) => !value)}
-                title="更多画布操作"
-                type="button"
-              >
-                <MoreHorizontal className="size-3.5" />
-              </button>
-              {topActionMenuOpen ? (
-                <div className="apple-menu absolute right-0 top-10 w-[168px] p-1.5">
-                  {nodes.length ? (
-                    <button
-                      className="apple-menu-item flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-[#ffb4a8]"
-                      onClick={() => {
-                        setTopActionMenuOpen(false);
-                        clearCanvas();
-                      }}
-                      type="button"
-                    >
-                      <Trash2 className="size-3.5" />
-                      清空画布
-                    </button>
-                  ) : (
-                    <div className="px-3 py-2 text-[11px] text-white/42">暂无可用操作</div>
-                  )}
-                </div>
-              ) : null}
-            </div>
           </div>
         </header>
         )}
@@ -5925,7 +5878,6 @@ function NodeWorkflowWorkbench({
           onMoveStart={() => {
             setMenu(null);
             setNodeMenuOpen(false);
-            setTopActionMenuOpen(false);
             setCanvasInteractionFlag("isCanvasPanning", true, 260);
           }}
           onNodeClick={(_, node) => focusNodeParams(node.id, { openPanel: !canvasFocusMode })}
@@ -5943,7 +5895,6 @@ function NodeWorkflowWorkbench({
           onPaneClick={() => {
             setMenu(null);
             setNodeMenuOpen(false);
-            setTopActionMenuOpen(false);
             setProjectPanelOpen(false);
             setAssetPanelOpen(false);
           }}
