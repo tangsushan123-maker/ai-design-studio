@@ -339,7 +339,7 @@ export async function POST(request: Request) {
         }
         if (!final && lastRatioMismatchItem) {
           final = await processEditResult(lastRatioMismatchItem, lastRatioMismatchItem.prompt || imagePrompt, processContext, {
-            allowSafeRatioFallback: true,
+            allowQualityFailedOriginal: true,
           });
         }
         if (!final) {
@@ -372,7 +372,7 @@ export async function POST(request: Request) {
             operation: isOutpaint ? "outpaint" : isAiResize ? "resize" : "image_to_image",
           }),
         });
-        const qualityCheck = tightenImageToImageCompositionRisk(savedQualityCheck, {
+        const qualityCheck = mergeEditQualityCheck(savedQualityCheck, final.qualityCheck, {
           exactSize,
           customWidth,
           customHeight,
@@ -468,7 +468,7 @@ export async function POST(request: Request) {
         operation: isOutpaint ? "outpaint" : isAiResize ? "resize" : "image_to_image",
         safeMarginPercent: editSafeMarginPercent(processContext),
       });
-      const qualityCheck = tightenImageToImageCompositionRisk(savedQualityCheck, processContext);
+      const qualityCheck = mergeEditQualityCheck(savedQualityCheck, final.qualityCheck, processContext);
       const variant = images.length + 1;
       const image = {
         id: saved.fileName,
@@ -558,18 +558,20 @@ async function processEditResult(
   item: { b64_json?: string | null; url?: string | null },
   prompt: string,
   context: EditResultProcessContext,
-  options: { allowSafeRatioFallback?: boolean } = {},
+  options: { allowQualityFailedOriginal?: boolean } = {},
 ) {
   const raw = await imageResultToBuffer(item.b64_json, item.url);
   const processWithFitMode = (fitMode: ExactFitMode) => context.exactSize && context.customWidth && context.customHeight
     ? processToExactSize(raw, { width: context.customWidth, height: context.customHeight }, "png", fitMode)
     : processToTarget(raw, context.ratio, context.quality, "png", fitMode);
+  let qualityFailedOriginalReason = "";
   const processed = await processWithFitMode(context.fitMode).catch(async (error) => {
-    if (!options.allowSafeRatioFallback || context.fitMode !== "strict_full_bleed" || !isNativeAspectRatioMismatchError(error)) throw error;
-    throw new Error(`模型返回比例不符合 ${context.outputRatioLabel}，系统已阻止裁切、拉伸、留白和磨砂补边兜底。`);
+    if (!options.allowQualityFailedOriginal || context.fitMode !== "strict_full_bleed" || !isNativeAspectRatioMismatchError(error)) throw error;
+    qualityFailedOriginalReason = `模型已生成图片，但未按 ${context.outputRatioLabel} 返回；已保留原图预览，未做裁切、拉伸或糊边。`;
+    return sharp(raw).rotate().png({ compressionLevel: 6, palette: false }).toBuffer();
   });
   const actual = await readImageMetadata(processed);
-  if (context.exactSize) assertExactPixelSize({ width: actual.width, height: actual.height }, context.outputSize);
+  if (context.exactSize && !qualityFailedOriginalReason) assertExactPixelSize({ width: actual.width, height: actual.height }, context.outputSize);
   const qualityCheck = await inspectImageQuality(processed, {
     quality: context.quality,
     ratio: context.ratio,
@@ -579,8 +581,37 @@ async function processEditResult(
     operation: context.operation,
     safeMarginPercent: editSafeMarginPercent(context),
   });
-  const checked = tightenImageToImageCompositionRisk(qualityCheck, context);
+  const checked = qualityFailedOriginalReason
+    ? {
+        ...tightenImageToImageCompositionRisk(qualityCheck, context),
+        status: "ratio_mismatch" as const,
+        label: `${actual.width}×${actual.height}｜比例未达标`,
+        issues: [qualityFailedOriginalReason, ...(qualityCheck.issues || [])],
+        actions: ["可直接预览原图；如需成品尺寸，请重试、切换图片模型，或用扩图补画处理比例差异。", ...(qualityCheck.actions || [])],
+      }
+    : tightenImageToImageCompositionRisk(qualityCheck, context);
   return { actual, processed, prompt, qualityCheck: checked };
+}
+
+function mergeEditQualityCheck<T extends {
+  status?: string;
+  label?: string;
+  issues?: string[];
+  actions?: string[];
+}>(
+  savedQualityCheck: T,
+  processQualityCheck: T,
+  context: EditResultProcessContext,
+) {
+  const checked = tightenImageToImageCompositionRisk(savedQualityCheck, context);
+  if (processQualityCheck.status !== "ratio_mismatch") return checked;
+  return {
+    ...checked,
+    status: processQualityCheck.status,
+    label: processQualityCheck.label || checked.label,
+    issues: [...new Set([...(processQualityCheck.issues || []), ...(checked.issues || [])])],
+    actions: [...new Set([...(processQualityCheck.actions || []), ...(checked.actions || [])])],
+  };
 }
 
 async function summarizeCreativeEditSourceImage(

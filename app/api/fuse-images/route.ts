@@ -10,6 +10,7 @@ import {
   isNativeAspectRatioMismatchError,
   parseDataUrl,
   processToTarget,
+  readImageMetadata,
   readPublicImageUrl,
   ratioLabel,
   resolveRatio,
@@ -174,7 +175,7 @@ export async function POST(request: Request) {
         }
         if (!final && lastRatioMismatchItem) {
           final = await processFuseResult(lastRatioMismatchItem, lastRatioMismatchItem.prompt || imagePrompt, processContext, {
-            allowSafeRatioFallback: true,
+            allowQualityFailedOriginal: true,
           });
         }
         if (!final) {
@@ -186,7 +187,7 @@ export async function POST(request: Request) {
           projectId: protectionContext.version?.projectId || taskTrace?.projectId,
           storageKind: "results",
         });
-        const qualityCheck = await inspectImageQuality(saved.path, {
+        const savedQualityCheck = await inspectImageQuality(saved.path, {
           quality,
           ratio,
           expectedSize: outputSize,
@@ -196,6 +197,7 @@ export async function POST(request: Request) {
           operation: "fuse_images",
           safeMarginPercent: 16,
         });
+        const qualityCheck = mergeFuseQualityCheck(savedQualityCheck, final.qualityCheck);
         const image = {
           id: saved.fileName,
           url: saved.url,
@@ -210,7 +212,7 @@ export async function POST(request: Request) {
           aspectRatio: outputRatioLabel,
           quality,
           generatedAt,
-          outputSize,
+          outputSize: final.actual ? { width: final.actual.width, height: final.actual.height } : outputSize,
           expectedOutputSize: outputSize,
           qualityCheck,
           fileSizeBytes: saved.fileSizeBytes,
@@ -266,13 +268,16 @@ async function processFuseResult(
   item: { b64_json?: string | null; url?: string | null },
   prompt: string,
   context: FuseResultProcessContext,
-  options: { allowSafeRatioFallback?: boolean } = {},
+  options: { allowQualityFailedOriginal?: boolean } = {},
 ) {
   const raw = await imageResultToBuffer(item.b64_json, item.url);
+  let qualityFailedOriginalReason = "";
   const processed = await processToTarget(raw, context.ratio, context.quality, "png", "strict_full_bleed").catch((error) => {
-    if (!options.allowSafeRatioFallback || !isNativeAspectRatioMismatchError(error)) throw error;
-    throw new Error(`模型返回比例不符合 ${context.outputRatioLabel}，系统已阻止裁切、拉伸、留白和磨砂补边兜底。`);
+    if (!options.allowQualityFailedOriginal || !isNativeAspectRatioMismatchError(error)) throw error;
+    qualityFailedOriginalReason = `模型已生成图片，但未按 ${context.outputRatioLabel} 返回；已保留原图预览，未做裁切、拉伸或糊边。`;
+    return sharp(raw).rotate().png({ compressionLevel: 6, palette: false }).toBuffer();
   });
+  const actual = await readImageMetadata(processed);
   const qualityCheck = await inspectImageQuality(processed, {
     quality: context.quality,
     ratio: context.ratio,
@@ -282,7 +287,27 @@ async function processFuseResult(
     operation: "fuse_images",
     safeMarginPercent: 16,
   });
-  return { processed, prompt, qualityCheck };
+  const checked = qualityFailedOriginalReason
+    ? {
+        ...qualityCheck,
+        status: "ratio_mismatch" as const,
+        label: `${actual.width}×${actual.height}｜比例未达标`,
+        issues: [qualityFailedOriginalReason, ...(qualityCheck.issues || [])],
+        actions: ["可直接预览原图；如需成品尺寸，请重试、切换图片模型，或用扩图补画处理比例差异。", ...(qualityCheck.actions || [])],
+      }
+    : qualityCheck;
+  return { actual, processed, prompt, qualityCheck: checked };
+}
+
+function mergeFuseQualityCheck<T extends { status?: string; label?: string; issues?: string[]; actions?: string[] }>(savedQualityCheck: T, processQualityCheck: T) {
+  if (processQualityCheck.status !== "ratio_mismatch") return savedQualityCheck;
+  return {
+    ...savedQualityCheck,
+    status: processQualityCheck.status,
+    label: processQualityCheck.label || savedQualityCheck.label,
+    issues: [...new Set([...(processQualityCheck.issues || []), ...(savedQualityCheck.issues || [])])],
+    actions: [...new Set([...(processQualityCheck.actions || []), ...(savedQualityCheck.actions || [])])],
+  };
 }
 
 function buildFuseNativeRatioRetryPrompt(prompt: string, ratioText: string, target: { width: number; height: number }) {
