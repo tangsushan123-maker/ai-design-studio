@@ -169,6 +169,19 @@ function countEnabledUsage(usage: BrandAssetUsage) {
 
 export function normalizeBrandAssetUsage(value: unknown): BrandAssetUsage {
   const source = value && typeof value === "object" ? (value as Partial<BrandAssetUsage>) : {};
+  if (
+    source.usePrimaryColors === true &&
+    source.useSecondaryColors === true &&
+    source.useLogo !== true &&
+    source.useIpImage !== true &&
+    source.useContact !== true &&
+    source.useQrCode !== true &&
+    source.useCopy === true &&
+    source.useForbiddenRules === true &&
+    source.useFavoriteStyle !== true
+  ) {
+    return { ...defaultBrandAssetUsage };
+  }
   return {
     usePrimaryColors: safeProfileBoolean(source.usePrimaryColors, defaultBrandAssetUsage.usePrimaryColors),
     useSecondaryColors: safeProfileBoolean(source.useSecondaryColors, defaultBrandAssetUsage.useSecondaryColors),

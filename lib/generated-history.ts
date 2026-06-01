@@ -34,6 +34,7 @@ export type GeneratedHistoryOptions = {
   includeUnowned?: boolean;
   requestIds?: string[];
   trashOnly?: boolean;
+  favoriteOnly?: boolean;
 };
 
 export async function listGeneratedImages(options: GeneratedHistoryOptions = {}) {
@@ -59,6 +60,7 @@ export async function listGeneratedImages(options: GeneratedHistoryOptions = {})
         if (ownerUserId !== options.ownerUserId && !(options.includeUnowned && !ownerUserId)) return false;
       }
       if (options.projectId && stringValue(entry.savedMetadata.projectId) !== options.projectId) return false;
+      if (options.favoriteOnly && entry.savedMetadata.favorite !== true) return false;
       if (!requestIdSet.size) return true;
       const sourceRequestId = stringValue(entry.savedMetadata.sourceRequestId);
       const sourceTaskId = stringValue(entry.savedMetadata.sourceTaskId);

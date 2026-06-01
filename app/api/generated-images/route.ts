@@ -9,7 +9,7 @@ import { readJsonWithBackup, writeJsonAtomic } from "@/lib/local-json-store";
 export const runtime = "nodejs";
 
 const generatedTrashDirName = "_trash";
-const generatedImageListMaxLimit = 100;
+const generatedImageListMaxLimit = 200;
 const generatedImagePayloadMessages = {
   updateInvalid: "更新图片请求格式不正确。",
   updateJson: "更新图片 JSON 无法解析，请刷新图片列表后重试。",
@@ -25,6 +25,7 @@ export async function GET(request: Request) {
     const offset = boundedListNumber(searchParams.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER);
     const projectId = searchParams.get("projectId") || undefined;
     const trashOnly = searchParams.get("trash") === "1" || searchParams.get("mode") === "trash";
+    const favoriteOnly = searchParams.get("favorite") === "1" || searchParams.get("mode") === "favorite";
     const requestIds = (searchParams.get("requestIds") || "")
       .split(",")
       .map((item) => item.trim())
@@ -38,6 +39,7 @@ export async function GET(request: Request) {
       includeUnowned: user.role === "owner",
       requestIds,
       trashOnly,
+      favoriteOnly,
     }));
   } catch (error) {
     return NextResponse.json({ error: generatedImageErrorMessage("读取图片列表失败", error) }, { status: 500 });

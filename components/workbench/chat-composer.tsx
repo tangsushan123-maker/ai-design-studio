@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, Camera, Check, ChevronDown, FileImage, Layers, Palette, Plus, ScanLine, ShieldCheck, Sparkles, Star, Sticker } from "lucide-react";
+import { ArrowUp, Camera, Check, ChevronDown, FileImage, Layers, Loader2, Palette, Plus, ScanLine, Search, ShieldCheck, Sparkles, Star, Sticker } from "lucide-react";
 import { type AspectRatioValue, type QualityValue } from "@/lib/design-options";
 import { defaultParamsByKind } from "@/components/workbench/workbench-config";
 import {
@@ -23,6 +23,7 @@ import type { ModelCatalogItem } from "@/lib/openai-defaults";
 export function ChatComposer({
   brandSummary,
   brandUsage,
+  copyAssistantStatus,
   effectiveModel,
   focusTick,
   favoriteStyleImages,
@@ -33,6 +34,7 @@ export function ChatComposer({
   onImageFile,
   onFavoriteStyleSelect,
   onModelChange,
+  onOpenAssistant,
   onPasteHint,
   onPromptChange,
   onQualityChange,
@@ -49,6 +51,7 @@ export function ChatComposer({
 }: {
   brandSummary: BrandAssetSummary;
   brandUsage: BrandAssetUsage;
+  copyAssistantStatus: "idle" | "loading" | "ready" | "error";
   effectiveModel: string;
   focusTick: number;
   favoriteStyleImages: ImageAsset[];
@@ -59,6 +62,7 @@ export function ChatComposer({
   onFavoriteStyleSelect: (key: string) => void;
   onImageFile: (file: File) => void;
   onModelChange: (value: string) => void;
+  onOpenAssistant: () => void;
   onPasteHint: () => void;
   onPromptChange: (value: string) => void;
   onQualityChange: (value: QualityValue) => void;
@@ -83,6 +87,7 @@ export function ChatComposer({
   const [variantMenuOpen, setVariantMenuOpen] = useState(false);
   const [brandMenuOpen, setBrandMenuOpen] = useState(false);
   const [composerExpanded, setComposerExpanded] = useState(false);
+  const [favoriteStyleQuery, setFavoriteStyleQuery] = useState("");
   const ratios: AspectRatioValue[] = adaptiveRatioOptions;
   const qualityOptions = [
     { label: "标准", description: "适合快速出图", value: "standard" as QualityValue },
@@ -110,6 +115,20 @@ export function ChatComposer({
   const selectedPromptNode = selectedNode && isComposerDrivenNode(selectedNode.data.kind) ? selectedNode : null;
   const selectedFavoriteStyleKeySet = useMemo(() => new Set(selectedFavoriteStyleKeys), [selectedFavoriteStyleKeys]);
   const selectedFavoriteStyleCount = favoriteStyleImages.filter((image) => selectedFavoriteStyleKeySet.has(imageKey(image))).length;
+  const filteredFavoriteStyleImages = useMemo(() => {
+    const query = favoriteStyleQuery.trim().toLowerCase();
+    if (!query) return favoriteStyleImages;
+    return favoriteStyleImages.filter((image) => [
+      image.fileName,
+      image.originalFileName,
+      image.resourceFileName,
+      image.mode,
+      image.prompt,
+      image.model,
+      image.materialScene,
+      image.materialCopy,
+    ].filter(Boolean).join(" ").toLowerCase().includes(query));
+  }, [favoriteStyleImages, favoriteStyleQuery]);
   const selectedPromptNodeValue = selectedPromptNode ? stringParam(selectedPromptNode.data.params.prompt) : "";
   const selectedPromptNodeDefault = selectedPromptNode ? stringParam(defaultParamsByKind[selectedPromptNode.data.kind]?.prompt) : "";
   const displayPrompt = selectedPromptNode
@@ -201,7 +220,7 @@ export function ChatComposer({
   }
 
   return (
-    <div className="pointer-events-none absolute bottom-3 left-1/2 z-30 w-[min(760px,calc(100vw-24px))] -translate-x-1/2 px-2">
+    <div className="pointer-events-none absolute bottom-3 left-1/2 z-30 w-[min(920px,calc(100vw-24px))] -translate-x-1/2 px-2">
       {!composerExpanded && !anyMenuOpen ? (
         <button
           className="apple-panel-strong pointer-events-auto mx-auto flex h-12 max-w-[min(520px,calc(100vw-32px))] items-center gap-2 rounded-full px-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.34)]"
@@ -270,9 +289,72 @@ export function ChatComposer({
               </Link>
             </div>
           ) : null}
+          {brandUsage.useFavoriteStyle ? (
+            <div className="mt-2 rounded-[16px] border border-white/10 bg-white/[0.035] p-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-white/86">
+                    <Star className="size-3.5 text-[#ffe1a0]" />
+                    <span>收藏风格库</span>
+                    <span className="text-[11px] font-medium text-white/42">{favoriteStyleImages.length} 张</span>
+                  </div>
+                  <div className="mt-0.5 text-[11px] leading-4 text-white/46">
+                    {selectedFavoriteStyleCount ? `已选 ${selectedFavoriteStyleCount}/3 张，生成时会传给模型做风格参考` : "未手动选择时，生成会自动取最近 3 张传给模型做弱参考"}
+                  </div>
+                </div>
+                <label className="flex h-8 min-w-[180px] flex-1 items-center gap-2 rounded-full border border-white/10 bg-black/18 px-2.5 text-white/54 sm:max-w-[260px]">
+                  <Search className="size-3.5 shrink-0" />
+                  <input
+                    className="min-w-0 flex-1 bg-transparent text-[12px] text-white/86 outline-none placeholder:text-white/34"
+                    onChange={(event) => setFavoriteStyleQuery(event.target.value)}
+                    placeholder="搜索收藏风格"
+                    value={favoriteStyleQuery}
+                  />
+                </label>
+              </div>
+              <div className="mt-2 rounded-[10px] border border-[#74e3c5]/12 bg-[#74e3c5]/8 px-2 py-1.5 text-[11px] leading-5 text-[#adf8e5]/72">
+                这里展示全部收藏图；点选后最多 3 张会作为 styleReference 发给模型，弱参考配色、构图和质感，不复制主体、文字和真实信息。
+              </div>
+              {favoriteStyleImages.length ? (
+                filteredFavoriteStyleImages.length ? (
+                  <div className="mt-2 grid max-h-[190px] grid-cols-5 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-8">
+                    {filteredFavoriteStyleImages.map((image) => {
+                      const key = imageKey(image);
+                      const selected = selectedFavoriteStyleKeySet.has(key);
+                      return (
+                        <button
+                          className={`group relative aspect-square overflow-hidden rounded-[10px] border transition ${selected ? "border-[#74e3c5] ring-1 ring-[#74e3c5]/60" : "border-white/10 hover:border-white/28"}`}
+                          key={key}
+                          onClick={() => onFavoriteStyleSelect(key)}
+                          title={selected ? "取消引用这张收藏图" : "引用这张收藏图"}
+                          type="button"
+                        >
+                          <Image
+                            alt={image.fileName || image.mode || "收藏图"}
+                            className="size-full object-cover"
+                            fill
+                            sizes="84px"
+                            src={image.thumbnailUrl || image.previewUrl || image.url}
+                            unoptimized
+                          />
+                          <span className={`absolute right-1 top-1 flex size-5 items-center justify-center rounded-full border text-[11px] ${selected ? "border-[#74e3c5] bg-[#74e3c5] text-[#06131f]" : "border-white/24 bg-black/42 text-white/64"}`}>
+                            {selected ? <Check className="size-3.5" /> : null}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="mt-2 rounded-[12px] border border-white/8 px-3 py-3 text-[11px] text-white/46">没有找到匹配的收藏风格。</div>
+                )
+              ) : (
+                <div className="mt-2 rounded-[12px] border border-white/8 px-3 py-3 text-[11px] leading-5 text-white/46">还没有收藏图。先在结果图或图片管理里点星标收藏。</div>
+              )}
+            </div>
+          ) : null}
         </div>
 
-        <div ref={menuAreaRef} className="flex flex-wrap items-center gap-1.5 px-3.5 pb-3 sm:flex-nowrap sm:px-4">
+        <div ref={menuAreaRef} className="flex flex-wrap items-center gap-1.5 px-3.5 pb-3 sm:px-4">
           <div className="relative shrink-0">
             <button
               className={`apple-button flex size-8 items-center justify-center rounded-full text-white/74 transition ${uploadMenuOpen ? "bg-white/[0.13] text-white" : ""}`}
@@ -325,6 +407,19 @@ export function ChatComposer({
               }}
             />
           </div>
+
+          <button
+            className="apple-button flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-[11px] font-semibold text-[#adf8e5]/82 transition hover:text-[#adf8e5]"
+            onClick={() => {
+              closeMenus();
+              onOpenAssistant();
+            }}
+            title="帮我想文案和画面内容"
+            type="button"
+          >
+            {copyAssistantStatus === "loading" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+            <span>{copyAssistantStatus === "loading" ? "整理中" : copyAssistantStatus === "ready" ? "方案已好" : copyAssistantStatus === "error" ? "重试帮我想" : "帮我想"}</span>
+          </button>
 
           <span className="ml-1 hidden h-4 w-px shrink-0 bg-white/12 sm:block" />
           <ComposerSelectButton open={ratioMenuOpen} title="切换比例" onClick={() => {
@@ -394,7 +489,7 @@ export function ChatComposer({
           <span className="ml-1 hidden h-4 w-px shrink-0 bg-white/12 sm:block" />
           <div className="relative">
             <button
-              className={`apple-button flex h-8 max-w-[124px] shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-[11px] font-semibold text-white/74 sm:max-w-[176px] ${modelMenuOpen ? "bg-white/[0.13] text-white" : ""}`}
+              className={`apple-button flex h-8 max-w-[112px] shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-[11px] font-semibold text-white/74 sm:max-w-[148px] ${modelMenuOpen ? "bg-white/[0.13] text-white" : ""}`}
               onClick={() => {
                 setModelMenuOpen((value) => !value);
                 setUploadMenuOpen(false);
@@ -457,8 +552,7 @@ export function ChatComposer({
               type="button"
             >
               <Palette className="size-3.5" />
-              <span className="hidden sm:inline">项目调用</span>
-              <span className="sm:hidden">项目</span>
+              <span>项目</span>
               <ChevronDown className="size-3.5 text-white/38" />
             </button>
             {brandMenuOpen ? (
@@ -498,38 +592,11 @@ export function ChatComposer({
                           {favoriteStyleImages.length ? (
                             <>
                               <div className="mb-2 flex items-center justify-between gap-2 text-[11px] text-white/48">
-                                <span>{selectedFavoriteStyleCount ? "按已选收藏图参考" : "未选择时自动取最近 3 张"}</span>
+                                <span>{selectedFavoriteStyleCount ? "按已选收藏图参考" : "输入框上方可查看全部收藏风格"}</span>
                                 <span>{selectedFavoriteStyleCount}/3</span>
                               </div>
                               <div className="mb-2 rounded-[10px] border border-[#74e3c5]/12 bg-[#74e3c5]/8 px-2 py-1.5 text-[11px] leading-5 text-[#adf8e5]/72">
-                                只弱参考配色、构图和质感，不复制收藏图里的主体、文字和真实信息。
-                              </div>
-                              <div className="grid grid-cols-3 gap-1.5">
-                                {favoriteStyleImages.slice(0, 9).map((image) => {
-                                  const key = imageKey(image);
-                                  const selected = selectedFavoriteStyleKeySet.has(key);
-                                  return (
-                                    <button
-                                      className={`group relative aspect-square overflow-hidden rounded-[10px] border transition ${selected ? "border-[#74e3c5] ring-1 ring-[#74e3c5]/60" : "border-white/10 hover:border-white/28"}`}
-                                      key={key}
-                                      onClick={() => onFavoriteStyleSelect(key)}
-                                      title={selected ? "取消引用这张收藏图" : "引用这张收藏图"}
-                                      type="button"
-                                    >
-                                      <Image
-                                        alt={image.fileName || image.mode || "收藏图"}
-                                        className="size-full object-cover"
-                                        fill
-                                        sizes="72px"
-                                        src={image.thumbnailUrl || image.previewUrl || image.url}
-                                        unoptimized
-                                      />
-                                      <span className={`absolute right-1 top-1 flex size-5 items-center justify-center rounded-full border text-[11px] ${selected ? "border-[#74e3c5] bg-[#74e3c5] text-[#06131f]" : "border-white/24 bg-black/42 text-white/64"}`}>
-                                        {selected ? <Check className="size-3.5" /> : null}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
+                                收藏风格已单独展示，可搜索和选择；只弱参考配色、构图和质感。
                               </div>
                             </>
                           ) : (

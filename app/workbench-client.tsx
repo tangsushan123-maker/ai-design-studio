@@ -40,6 +40,7 @@ import { formatDuration, formatFileSize, formatGeneratedAt } from "@/lib/workben
 import { IMAGE_TO_IMAGE_CREATIVE_DEFAULT_REQUEST } from "@/lib/prompt";
 import { buildCreativeBriefFallback, type CreativeBrief, type CreativeBriefInput, type CreativeDirection } from "@/lib/creative-brief";
 import { ChatComposer } from "@/components/workbench/chat-composer";
+import { CopyAssistantPanel } from "@/components/workbench/copy-assistant-panel";
 import { WORKBENCH_NODE_TYPES } from "@/components/workbench/workbench-flow-nodes";
 import {
   composerRatioForNode,
@@ -279,6 +280,7 @@ import {
 import type {
   FlowEdge,
   FlowNode,
+  BrandAssetUsage,
   GeneratedImage,
   HistoryMaskEditOptions,
   HistoryOperationOptions,
@@ -317,6 +319,20 @@ function variantCountParam(value: unknown) {
 
 function supportsComposerVariantCount(kind: NodeKind) {
   return kind === "text_to_image" || kind === "image_to_image" || kind === "resize" || kind === "outpaint";
+}
+
+function hasEnabledProjectAssetUsage(usage: BrandAssetUsage) {
+  const normalized = normalizeBrandAssetUsage(usage);
+  return Boolean(
+    normalized.usePrimaryColors ||
+    normalized.useSecondaryColors ||
+    normalized.useLogo ||
+    normalized.useIpImage ||
+    normalized.useContact ||
+    normalized.useQrCode ||
+    normalized.useCopy ||
+    normalized.useForbiddenRules
+  );
 }
 
 function rememberWorkbenchHomeState(open: boolean) {
@@ -407,6 +423,7 @@ function NodeWorkflowWorkbench({
   const [imageManagerTrashHasMore, setImageManagerTrashHasMore] = useState(false);
   const [imageManagerTrashNextOffset, setImageManagerTrashNextOffset] = useState(0);
   const [imageManagerTrashLoading, setImageManagerTrashLoading] = useState(false);
+  const [favoriteStyleLibraryLoading, setFavoriteStyleLibraryLoading] = useState(false);
   const [lastSaveDurationMs, setLastSaveDurationMs] = useState<number | null>(null);
   const [lastProjectJsonBytes, setLastProjectJsonBytes] = useState(0);
   const [projectAssets, setProjectAssets] = useState<ImageAsset[]>([]);
@@ -453,6 +470,8 @@ function NodeWorkflowWorkbench({
   const [rightPanelTabTick, setRightPanelTabTick] = useState(0);
   const [canvasFocusMode, setCanvasFocusMode] = useState(false);
   const [composerPrompt, setComposerPrompt] = useState("");
+  const [copyAssistantOpen, setCopyAssistantOpen] = useState(false);
+  const [copyAssistantStatus, setCopyAssistantStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [composerFocusTick, setComposerFocusTick] = useState(0);
   const [composerModel, setComposerModel] = useState(initialImageModelFor(initialModelInfo));
   const [composerRatio, setComposerRatio] = useState<AspectRatioValue>("auto");
@@ -553,9 +572,13 @@ function NodeWorkflowWorkbench({
     () => buildProjectLibraryContext(projectKnowledge, projectLibraries, publicStyleLibraries),
     [projectKnowledge, projectLibraries, publicStyleLibraries],
   );
+  const projectMaterialUsageActive = useMemo(
+    () => hasEnabledProjectAssetUsage(projectProfile.brandAssetUsage),
+    [projectProfile.brandAssetUsage],
+  );
   const projectContextText = useMemo(
-    () => [projectAssetText, projectReferenceContext].filter(Boolean).join("\n\n"),
-    [projectAssetText, projectReferenceContext],
+    () => projectMaterialUsageActive ? [projectAssetText, projectReferenceContext].filter(Boolean).join("\n\n") : "",
+    [projectAssetText, projectMaterialUsageActive, projectReferenceContext],
   );
   const brandAssetSummary = useMemo(
     () => summarizeBrandAssets(projectProfile, getCurrentProjectBrandAssets(projectAssets, projectKnowledge)),
@@ -573,7 +596,6 @@ function NodeWorkflowWorkbench({
       if (!key || seen.has(key) || image.trashed) continue;
       seen.add(key);
       candidates.push(image);
-      if (candidates.length >= 9) break;
     }
     return candidates;
   }, [favoriteIds, historyImages, imageManagerImages, projectAssets]);
@@ -1661,12 +1683,16 @@ function NodeWorkflowWorkbench({
     await createImageNodeFromFile(file, getViewportCenter(), "upload");
   }
 
-  async function handleCreativeStartFromIdea(promptOverride?: string) {
+  async function handleCreativeStartFromIdea(promptOverride?: string, options: { createDirectionNodes?: boolean } = {}) {
     if (creativeStartBusyRef.current || creativeStartBusy) return;
     const prompt = (promptOverride || composerPrompt).trim();
     if (!prompt) {
       setStatus("先输入一句想法，例如：做一张胃肠镜广告。");
       document.querySelector<HTMLTextAreaElement>("[data-composer-input='true']")?.focus();
+      return;
+    }
+    if (!options.createDirectionNodes) {
+      generateCopyAssistantPrompt(prompt);
       return;
     }
     creativeStartBusyRef.current = true;
@@ -1676,7 +1702,7 @@ function NodeWorkflowWorkbench({
       const brief = await requestCreativeBrief({
         mode: "idea",
         userPrompt: prompt,
-        projectContext: shouldUseProjectPromptContext(prompt) ? buildCreativeProjectContext(standaloneCreativeProjectKind()) : undefined,
+        projectContext: projectMaterialUsageActive ? buildCreativeProjectContext(standaloneCreativeProjectKind()) : undefined,
       });
       await ensureTemporaryProject(brief);
       createCreativeDirectionNodes(brief);
@@ -2243,6 +2269,68 @@ function NodeWorkflowWorkbench({
     return;
   }
 
+  function currentComposerAssistantPrompt() {
+    const selectedPromptNode = selectedNode && isComposerDrivenNode(selectedNode.data.kind) ? selectedNode : null;
+    if (!selectedPromptNode) return composerPrompt;
+    const value = stringParam(selectedPromptNode.data.params.prompt);
+    const defaultValue = stringParam(defaultParamsByKind[selectedPromptNode.data.kind]?.prompt);
+    return value.trim() && value.trim() !== defaultValue.trim() ? value : "";
+  }
+
+  function applyCopyAssistantPrompt(value: string) {
+    const prompt = value.trim();
+    if (!prompt) return;
+    const selectedTextToImageNode = selectedNode?.data.kind === "text_to_image" && !isActiveNodeStatus(selectedNode.data.status) && !nodeHasActiveTask(selectedNode.id) ? selectedNode : null;
+    const targetNode = selectedTextToImageNode || reusableTextToImageNode() || addNode("text_to_image", nextStandaloneNodePosition(), undefined, true, {
+      model: composerModel || effectiveImageModel,
+      aspectRatio: composerRatio,
+      quality: composerQuality,
+      variantCount: composerVariantCount,
+    });
+    updateNodeParam(targetNode.id, "prompt", prompt);
+    updateNodeParam(targetNode.id, "aspectRatio", composerRatio);
+    updateNodeParam(targetNode.id, "quality", composerQuality);
+    updateNodeParam(targetNode.id, "variantCount", composerVariantCount);
+    if (composerModel) updateNodeParam(targetNode.id, "model", composerModel);
+    setSelectedNodeId(targetNode.id);
+    setComposerPrompt("");
+    setComposerFocusTick((tick) => tick + 1);
+    setStatus("已把文案填入从零生成节点。现在可以连接参考图、选择素材、调整尺寸后再生成。");
+  }
+
+  function generateCopyAssistantPrompt(value: string) {
+    const prompt = value.trim();
+    if (!prompt) return;
+    const selectedTextToImageNode = selectedNode?.data.kind === "text_to_image" ? selectedNode : null;
+    if (selectedTextToImageNode) {
+      submitComposer(prompt);
+      return;
+    }
+    const reusableNode = reusableTextToImageNode();
+    if (reusableNode) {
+      updateNodeParam(reusableNode.id, "prompt", prompt);
+      updateNodeParam(reusableNode.id, "aspectRatio", composerRatio);
+      updateNodeParam(reusableNode.id, "quality", composerQuality);
+      updateNodeParam(reusableNode.id, "variantCount", composerVariantCount);
+      if (composerModel) updateNodeParam(reusableNode.id, "model", composerModel);
+      setSelectedNodeId(reusableNode.id);
+      setPendingRunNodeId(reusableNode.id);
+      setComposerPrompt("");
+      setStatus("已使用所选方案，复用现有文生图节点并开始运行。");
+      return;
+    }
+    const node = addNode("text_to_image", nextStandaloneNodePosition(), undefined, true, {
+      prompt,
+      model: composerModel || effectiveImageModel,
+      aspectRatio: composerRatio,
+      quality: composerQuality,
+      variantCount: composerVariantCount,
+    });
+    setPendingRunNodeId(node.id);
+    setComposerPrompt("");
+    setStatus("已使用所选方案，创建一个文生图节点并开始运行。");
+  }
+
   function changeComposerRatio(value: AspectRatioValue) {
     setComposerRatio(value);
     if (selectedNode?.data.kind === "text_to_image" || selectedNode?.data.kind === "image_to_image" || selectedNode?.data.kind === "fuse_images") {
@@ -2270,6 +2358,7 @@ function NodeWorkflowWorkbench({
 
   function toggleFavoriteStyleReference(key: string) {
     if (!key) return;
+    void loadFavoriteStyleLibrary();
     setProjectProfile((current) => ({ ...current, brandAssetUsage: normalizeBrandAssetUsage({ ...current.brandAssetUsage, useFavoriteStyle: true }) }));
     setSelectedFavoriteStyleKeys((current) => {
       if (current.includes(key)) return current.filter((item) => item !== key);
@@ -2552,6 +2641,10 @@ function NodeWorkflowWorkbench({
           if (shouldCreateSeparateResultNodes(node.data.kind, outputs.length)) {
             clearInlineNodeOutputs(nodeId, "completed");
             resultNodeIds = addOutputImageNodes(node, outputs);
+            if (node.data.kind === "mask_edit" && resultNodeIds[0]) {
+              setSelectedNodeId(resultNodeIds[0]);
+              setInspectorBackNodeId(node.id);
+            }
             focusCanvasOnNodes([node.id, ...resultNodeIds]);
           } else {
             nodesRef.current = applyNodeGeneratedOutputs(nodesRef.current, nodeId, outputs);
@@ -2926,6 +3019,7 @@ function NodeWorkflowWorkbench({
   }
 
   function hasSchemeDecisionAssets() {
+    if (!projectMaterialUsageActive) return false;
     const assets = currentProjectBrandAssets();
     return Boolean(
       projectProfile.organizationName.trim() ||
@@ -2979,7 +3073,7 @@ function NodeWorkflowWorkbench({
   function buildProductionProtectionContext(operation: string, sourceImages: ImageAsset[] = [], node?: FlowNode, visibleRequestText = "") {
     const projectAwareText = projectAwareRequestText(visibleRequestText);
     const allowSchemeDecision = operation === "text_to_image" || operation === "image_to_image";
-    const canUseProjectAssets = shouldUseProjectPromptContext(visibleRequestText) || (allowSchemeDecision && Boolean(schemeAssetDecisionText(visibleRequestText)));
+    const canUseProjectAssets = projectMaterialUsageActive && (shouldUseProjectPromptContext(visibleRequestText) || (allowSchemeDecision && Boolean(schemeAssetDecisionText(visibleRequestText))));
     if ((operation === "text_to_image" || operation === "image_to_image" || operation === "resize" || operation === "outpaint") && !canUseProjectAssets) {
       return {
         protectedTexts: [],
@@ -3020,7 +3114,7 @@ function NodeWorkflowWorkbench({
   function buildNodeProjectConstraintText(node: FlowNode, visibleRequestText: string) {
     const projectAwareText = projectAwareRequestText(visibleRequestText);
     return buildProjectConstraintText(
-      projectContextText,
+      projectMaterialUsageActive ? projectContextText : "",
       projectProfile,
       textProtectionMode,
       resolveLegacyTaskContextForNode(node),
@@ -3210,6 +3304,7 @@ function NodeWorkflowWorkbench({
   }
 
   async function appendBrandReferenceAssets(formData: FormData, options: { requireExplicitProjectContext?: boolean; visibleRequestText?: string; allowSchemeDecision?: boolean } = {}) {
+    if (!projectMaterialUsageActive) return 0;
     const visibleRequestText = options.visibleRequestText || "";
     const allowSchemeDecision = Boolean(options.allowSchemeDecision && hasSchemeDecisionAssets());
     if (options.requireExplicitProjectContext && !shouldUseProjectPromptContext(visibleRequestText) && !allowSchemeDecision) return 0;
@@ -3270,11 +3365,12 @@ function NodeWorkflowWorkbench({
     setStatus("AI 正在后台分析需求、参考图和素材，并生成成品图。");
     const favoriteStyleReferences = favoriteStyleReferenceImages();
     const favoriteStylePrompt = favoriteStyleReferencePrompt(favoriteStyleReferences);
-    const shouldAttachProjectContext = shouldUseProjectPromptContext(basePrompt) || hasSchemeDecisionAssets();
+    const shouldAttachProjectContext = projectMaterialUsageActive;
+    const modelPrompt = shouldAttachProjectContext ? projectAwareRequestText(prompt) : prompt;
     const brandReferences = shouldAttachProjectContext ? resolveSchemeDecisionBrandReferenceAssets(currentProjectBrandAssets()) : [];
     if (brandReferences.length || references.items.length || favoriteStyleReferences.length) {
       const formData = new FormData();
-      formData.append("prompt", [prompt, favoriteStylePrompt].filter(Boolean).join("\n\n"));
+      formData.append("prompt", [modelPrompt, favoriteStylePrompt].filter(Boolean).join("\n\n"));
       formData.append("adType", "通用设计");
       formData.append("aspectRatio", requestRatio);
       formData.append("customWidth", String(custom.width || 0));
@@ -3298,10 +3394,10 @@ function NodeWorkflowWorkbench({
       ]));
       formData.append("textMode", stringParam(params.textMode) || "ai_text_preview");
       appendTextToImageCompositionSettings(formData, params);
-      formData.append("protectionContext", JSON.stringify(buildProductionProtectionContext("text_to_image", references.items.map((item) => item.image), node, basePrompt)));
+      formData.append("protectionContext", JSON.stringify(buildProductionProtectionContext("text_to_image", references.items.map((item) => item.image), node, modelPrompt)));
       await appendTextReferenceImages(formData, references.items);
       await appendFavoriteStyleReferenceAssets(formData, favoriteStyleReferences);
-      await appendBrandReferenceAssets(formData, { requireExplicitProjectContext: true, visibleRequestText: basePrompt, allowSchemeDecision: true });
+      await appendBrandReferenceAssets(formData, { requireExplicitProjectContext: true, visibleRequestText: modelPrompt, allowSchemeDecision: true });
       const response = await fetch("/api/generate-image", { method: "POST", body: formData, signal });
       return imagesFromResponse(response);
     }
@@ -3311,7 +3407,7 @@ function NodeWorkflowWorkbench({
       signal,
       body: JSON.stringify({
         ...taskTracePayload(taskId, node, "text_to_image"),
-        prompt: [prompt, favoriteStylePrompt].filter(Boolean).join("\n\n"),
+        prompt: [modelPrompt, favoriteStylePrompt].filter(Boolean).join("\n\n"),
         adType: "通用设计",
         aspectRatio: requestRatio,
         customWidth: custom.width,
@@ -3328,7 +3424,7 @@ function NodeWorkflowWorkbench({
         cameraDistance: textToImageCameraDistance(params),
         subjectScale: textToImageSubjectScale(params),
         previewFit: textToImagePreviewFit(params),
-        protectionContext: buildProductionProtectionContext("text_to_image", [], node, basePrompt),
+        protectionContext: buildProductionProtectionContext("text_to_image", [], node, modelPrompt),
       }),
     });
     return imagesFromResponse(response);
@@ -3345,11 +3441,12 @@ function NodeWorkflowWorkbench({
     const favoriteStyleReferences = favoriteStyleReferenceImages();
     const favoriteStylePrompt = favoriteStyleReferencePrompt(favoriteStyleReferences);
     const prompt = requestText.trim();
+    const modelPrompt = projectMaterialUsageActive ? projectAwareRequestText(prompt) : prompt;
     const formData = new FormData();
     await appendImageToForm(formData, image, "image", "sourceUrl", "source.png");
-    await appendBrandReferenceAssets(formData, { requireExplicitProjectContext: true, visibleRequestText: requestText, allowSchemeDecision: true });
+    await appendBrandReferenceAssets(formData, { requireExplicitProjectContext: true, visibleRequestText: modelPrompt, allowSchemeDecision: true });
     await appendFavoriteStyleReferenceAssets(formData, favoriteStyleReferences);
-    formData.append("prompt", [prompt, favoriteStylePrompt].filter(Boolean).join("\n\n"));
+    formData.append("prompt", [modelPrompt, favoriteStylePrompt].filter(Boolean).join("\n\n"));
     formData.append("adType", "通用设计");
     formData.append("aspectRatio", requestRatio);
     formData.append("customWidth", String(customSize(params).width || 0));
@@ -3361,7 +3458,7 @@ function NodeWorkflowWorkbench({
     if (isOutpaint) formData.append("direction", stringParam(params.direction) || "四周");
     formData.append("modeLabel", label);
     appendTaskTrace(formData, taskId, node, isOutpaint ? "outpaint" : "image_to_image");
-    appendProtectionContext(formData, isOutpaint ? "outpaint" : "image_to_image", [image], node, requestText);
+    appendProtectionContext(formData, isOutpaint ? "outpaint" : "image_to_image", [image], node, modelPrompt);
     const response = await fetch("/api/edit-image", { method: "POST", body: formData, signal });
     return imagesFromResponse(response);
   }
@@ -3825,7 +3922,7 @@ function NodeWorkflowWorkbench({
   }
 
   function shouldCreateSeparateResultNodes(kind: NodeKind, outputCount = 1) {
-    return outputCount > 1 || kind === "text_to_image" || kind === "output" || kind === "png_layers";
+    return outputCount > 1 || kind === "text_to_image" || kind === "mask_edit" || kind === "output" || kind === "png_layers";
   }
 
   function restoreTaskOutputNodes(task: Pick<TaskRecord, "id" | "requestId" | "nodeId" | "nodeName" | "type">, images: ImageAsset[], options: { focus?: boolean; sourceStatus?: NodeStatus } = {}) {
@@ -3876,6 +3973,10 @@ function NodeWorkflowWorkbench({
       }
       const nodeIds = outputs.length ? addOutputImageNodes(sourceNode, outputs) : [];
       clearInlineNodeOutputs(sourceNode.id, sourceStatus);
+      if (sourceNode.data.kind === "mask_edit" && nodeIds[0] && options.focus !== false) {
+        setSelectedNodeId(nodeIds[0]);
+        setInspectorBackNodeId(sourceNode.id);
+      }
       if (nodeIds.length && options.focus !== false) focusCanvasOnNodes([sourceNode.id, ...nodeIds]);
       if (!nodeIds.length && options.focus !== false) focusCanvasOnNodes([sourceNode.id]);
       return [sourceNode.id, ...nodeIds];
@@ -4638,6 +4739,39 @@ function NodeWorkflowWorkbench({
       setStatus(error instanceof Error ? error.message : "回收站加载失败。");
     } finally {
       setImageManagerTrashLoading(false);
+    }
+  }
+
+  async function loadFavoriteStyleLibrary() {
+    if (favoriteStyleLibraryLoading) return;
+    setFavoriteStyleLibraryLoading(true);
+    try {
+      let offset = 0;
+      let hasMore = true;
+      const collected: ImageAsset[] = [];
+      while (hasMore) {
+        const params = new URLSearchParams({ mode: "favorite", limit: "200", offset: String(offset) });
+        const response = await fetch(`/api/generated-images?${params.toString()}`);
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          images?: GeneratedImage[];
+          hasMore?: boolean;
+          nextOffset?: number;
+        };
+        if (!response.ok) throw new Error(data.error || `收藏风格加载失败（HTTP ${response.status}）。`);
+        const nextImages = (data.images || []).map((image) => ({ ...image, source: "history" as const, favorite: true }));
+        collected.push(...nextImages);
+        hasMore = Boolean(data.hasMore);
+        offset = typeof data.nextOffset === "number" ? data.nextOffset : offset + nextImages.length;
+        if (!nextImages.length) break;
+      }
+      if (collected.length) {
+        setImageManagerImages((current) => mergeImages(collected, current));
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "收藏风格加载失败。");
+    } finally {
+      setFavoriteStyleLibraryLoading(false);
     }
   }
 
@@ -5883,10 +6017,33 @@ function NodeWorkflowWorkbench({
           </div>
         ) : null}
 
+        <CopyAssistantPanel
+          context={{
+            projectName,
+            organizationName: projectProfile.organizationName,
+            commonCopy: projectProfile.commonCopy,
+            styleNotes: projectProfile.styleNotes,
+            forbiddenContent: projectProfile.forbiddenContent,
+            commonSizes: projectProfile.commonSizes,
+            variantCount: composerDisplayVariantCount,
+          }}
+          initialPrompt={currentComposerAssistantPrompt()}
+          onApply={applyCopyAssistantPrompt}
+          onClose={() => setCopyAssistantOpen(false)}
+          onGenerate={(promptDraft) => {
+            setCopyAssistantOpen(false);
+            generateCopyAssistantPrompt(promptDraft);
+          }}
+          onStatusChange={setCopyAssistantStatus}
+          open={copyAssistantOpen && !canvasFocusMode}
+          ratio={composerDisplayRatio}
+        />
+
         {canvasFocusMode ? null : (
         <ChatComposer
           brandSummary={brandAssetSummary}
           brandUsage={projectProfile.brandAssetUsage}
+          copyAssistantStatus={copyAssistantStatus}
           effectiveModel={effectiveImageModel}
           favoriteStyleImages={favoriteStyleCandidates}
           focusTick={composerFocusTick}
@@ -5901,9 +6058,14 @@ function NodeWorkflowWorkbench({
           selectedFavoriteStyleKeys={selectedFavoriteStyleKeys}
           variantCount={composerDisplayVariantCount}
           onModelChange={changeComposerModel}
-          onBrandUsageChange={(usage) => setProjectProfile((current) => ({ ...current, brandAssetUsage: normalizeBrandAssetUsage(usage) }))}
+          onBrandUsageChange={(usage) => {
+            const nextUsage = normalizeBrandAssetUsage(usage);
+            if (nextUsage.useFavoriteStyle) void loadFavoriteStyleLibrary();
+            setProjectProfile((current) => ({ ...current, brandAssetUsage: nextUsage }));
+          }}
           onFavoriteStyleSelect={toggleFavoriteStyleReference}
           onImageFile={addComposerImageAsReference}
+          onOpenAssistant={() => setCopyAssistantOpen(true)}
           onPasteHint={() => setStatus("可以使用系统截图后直接 Command/Ctrl+V 粘贴，或把图片拖到画布里。")}
           onPromptChange={changeComposerPrompt}
           onQualityChange={changeComposerQuality}

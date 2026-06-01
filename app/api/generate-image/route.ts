@@ -65,10 +65,16 @@ export async function POST(request: Request) {
     const protectionContext = normalizeProtectionContext(body.protectionContext);
     const openai = getOpenAI();
     const imageModel = resolveImageModel(body.imageModel, body.model);
-    const size = getOpenAIRequestedSize(ratio, body.quality, imageModel);
     const outputSize = exactSize && body.customWidth && body.customHeight
       ? { width: body.customWidth, height: body.customHeight }
       : getTargetPixels(ratio, body.quality);
+    const size = getTextToImageRequestedSize({
+      exactSize,
+      outputSize,
+      ratio,
+      quality: body.quality,
+      imageModel,
+    });
     const outputRatioLabel = ratioLabel(body.aspectRatio, body.customWidth, body.customHeight);
     const generatedAt = new Date().toISOString();
     const referenceImages = formData ? await readReferenceImages(formData) : [];
@@ -76,6 +82,13 @@ export async function POST(request: Request) {
     const hasReferenceFiles = referenceFiles.length > 0;
     const strongReferenceMode = hasReferenceFiles && hasDirectUseReference(body.referenceImages);
     const generationProfile = textToImageGenerationProfile(body, hasReferenceFiles);
+    const preflightDesignBrief = await buildPreflightDesignBrief(openai, body, {
+      outputRatioLabel,
+      outputSize,
+      referenceCount: referenceImages.length,
+      referenceImages,
+      strongReferenceMode,
+    });
     let referenceFallbackSummary: Promise<string> | null = null;
     const getReferenceFallbackSummary = () => {
       referenceFallbackSummary ||= summarizeTextReferenceImages(openai, body, referenceImages);
@@ -97,7 +110,7 @@ export async function POST(request: Request) {
     const targetCanvasFirst = shouldUseTextToImageTargetCanvasFirst(size, outputSize);
 
     const targetCount = generationProfile.targetCount;
-    const prompts = buildPromptsFromDesignPlan(designPlan, body, targetCount, { outputRatioLabel, outputSize });
+    const prompts = buildPromptsFromDesignPlan(designPlan, body, targetCount, { outputRatioLabel, outputSize, preflightDesignBrief });
     const createImageRequestWithSize = async (requestPrompt: string, requestSize: string, requestCount = 1) => {
       if (referenceFiles.length) {
         const referencePrompt = buildDirectTextReferencePrompt(requestPrompt, body.referenceImages || [], outputRatioLabel, outputSize, strongReferenceMode);
@@ -148,7 +161,7 @@ export async function POST(request: Request) {
       try {
         return await createImageRequestWithSize(requestPrompt, size, requestCount);
       } catch (error) {
-        if (!shouldRetryImageSizeWithNativeFallback(error)) throw error;
+        if (exactSize || !shouldRetryImageSizeWithNativeFallback(error)) throw error;
         return createImageRequestWithSize(
           buildModelNativeSizeFallbackPrompt(requestPrompt, outputRatioLabel, outputSize),
           getOpenAIImageSize(ratio),
@@ -483,49 +496,79 @@ type TextToImageProcessContext = {
   protectionContext: ReturnType<typeof normalizeProtectionContext>;
 };
 
-function buildPromptsFromDesignPlan(plan: DesignPlan, body: DesignRequest, targetCount: number, context: { outputRatioLabel: string; outputSize: { width: number; height: number } }) {
+function buildPromptsFromDesignPlan(plan: DesignPlan, body: DesignRequest, targetCount: number, context: { outputRatioLabel: string; outputSize: { width: number; height: number }; preflightDesignBrief?: string }) {
   void plan;
-  return Array.from({ length: targetCount }, (_, index) => [
-    "任务：根据用户要求和输入图片自行分析，直接生成最终图片。",
-    `用户原始要求：${body.prompt}`,
-    `目标比例/尺寸：${context.outputRatioLabel}，${context.outputSize.width}×${context.outputSize.height}。`,
-    body.aspectRatio === "auto" ? "用户选择自适应：请根据内容自行判断画面比例，但最终按上面的系统目标输出。" : "用户已选择固定比例/尺寸：最终画面必须服从这个尺寸。",
-    body.textMode === "background_only" ? "用户要求无文字/底图：输出无文字背景图。" : "如果用户明确给了标题、文案、人名、电话、地址等内容，请按用户原文理解和使用；不要擅自编造用户没给的真实信息。",
-    buildPromptAssetPolicyFromProtection(body),
-    textToImageVariantDirection(index),
+  return Array.from({ length: targetCount }, () => [
+    body.prompt,
+    context.preflightDesignBrief ? `GPT 设计方案：${context.preflightDesignBrief}` : "",
   ].filter(Boolean).join("\n"));
 }
 
-function textToImageVariantDirection(index: number) {
-  const directions = [
-    "方案A：偏清晰直接、好理解、适合投放。",
-    "方案B：偏高级、有创意、有品牌感；不要只是和方案A换颜色。",
-    "方案C：强化主体记忆点和视觉冲击，构图、层级、背景处理要明显区别于前两个方案。",
-    "方案D：偏商业成品交付感，信息组织更稳、更精致，避免和前面方案同构。",
-    "方案E：偏社媒传播感，节奏更鲜明，但仍保持品牌和用户给定事实准确。",
-    "方案F：偏极简高级感，减少杂乱元素，用留白、光影和重点信息形成差异。",
-  ];
-  return directions[index] || `方案${index + 1}：必须和前面方案明显不同，但不要改变用户要求、品牌和真实信息。`;
+async function buildPreflightDesignBrief(openai: ReturnType<typeof getOpenAI>, body: DesignRequest, context: {
+  outputRatioLabel: string;
+  outputSize: { width: number; height: number };
+  referenceCount: number;
+  referenceImages: Array<{ buffer: Buffer; fileName: string; mimeType: string }>;
+  strongReferenceMode: boolean;
+}) {
+  const prompt = body.prompt.trim();
+  if (!prompt) return "";
+  const analysisPrompt = buildPreflightDesignBriefPrompt(prompt, context);
+  const response = await openai.responses.create({
+    model: getAnalysisModel(),
+    input: context.referenceImages.length
+      ? [{
+          role: "user",
+          content: [
+            { type: "input_text", text: analysisPrompt },
+            ...context.referenceImages.slice(0, 4).map((image) => ({
+              type: "input_image" as const,
+              image_url: `data:${image.mimeType || "image/png"};base64,${image.buffer.toString("base64")}`,
+              detail: "low" as const,
+            })),
+          ],
+        }] as never
+      : analysisPrompt,
+    max_output_tokens: 900,
+  }, { timeout: 30000 });
+  const brief = cleanPreflightDesignBrief(response.output_text || "");
+  if (!brief) {
+    throw new Error("GPT 没有返回画面分析方案，已停止出图。请重试或检查文本模型配置。");
+  }
+  return brief;
 }
 
-function buildPromptAssetPolicyFromProtection(body: DesignRequest) {
-  const context = normalizeProtectionContext(body.protectionContext);
-  const texts = context.protectedTexts || [];
-  const assets = context.protectedAssets || [];
-  const brandRules = context.brandProfile?.rules || [];
-  const realInfo = [
-    ...texts.map((item) => `${item.kind}：${item.text}`),
-    ...assets.map((item) => `${item.type}：${item.label}`),
-  ].slice(0, 12);
+function cleanPreflightDesignBrief(value: string) {
+  return value
+    .replace(/^```[a-z]*\s*/i, "")
+    .replace(/```$/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 700);
+}
+
+function buildPreflightDesignBriefPrompt(prompt: string, context: {
+  outputRatioLabel: string;
+  outputSize: { width: number; height: number };
+  referenceCount: number;
+  strongReferenceMode: boolean;
+}) {
   return [
-    realInfo.length
-      ? `素材库真实信息：${realInfo.join("；")}。需要使用时必须逐字/按图使用这些资料。`
-      : "",
-    brandRules.length
-      ? `素材库规则：${brandRules.slice(0, 10).join("；")}`
-      : "",
-    "禁止编造：不要自己生成不存在的电话、地址、二维码、Logo、医院/机构代码、预约热线或联系卡片。二维码不要重绘成假码；Logo不要画成乱码。",
-  ].filter(Boolean).join("\n");
+    "你是商业海报设计分析师。请先分析用户给出的需求，再输出给图片模型执行的画面内容和设计方案。",
+    "不要输出思考过程，不要 Markdown，不要 JSON。",
+    "如果用户没有给完整画面文案，你必须自己补出适合画面的中文标题、副标题、短句和内容层级；如果用户给了画面文案，则必须原文保留，不要改写、翻译或省略。",
+    "即使用户已经给了画面文案，也必须分析每句文案的含义、情绪、主次层级和适合承载它的视觉表达，再据此组织画面。",
+    "必须基于用户原文分析画面：主题情绪、目标受众、主视觉、构图层级、色彩、字体层级、留白、行业可信感和适合生成的画面元素。",
+    "不要新增用户没给的电话、地址、二维码、真实机构名、医生信息或不可验证事实。",
+    `目标尺寸：${context.outputRatioLabel}，${context.outputSize.width}×${context.outputSize.height}。`,
+    context.referenceCount
+      ? `用户连接了 ${context.referenceCount} 张参考/素材图；${context.strongReferenceMode ? "如有引用原图，优先保留真实主体。" : "只从中分析风格、构图、配色和可用元素。"}`
+      : "用户没有连接参考图。",
+    "输出 180-320 字中文方案，必须包含：可见画面文案、主视觉、版式层级、色彩风格、画面元素和避免事项。",
+    "",
+    "用户原文：",
+    prompt,
+  ].join("\n");
 }
 
 function textToImageGenerationProfile(body: DesignRequest, hasReferenceFiles = false) {
@@ -606,15 +649,14 @@ function buildDirectTextReferencePrompt(
   target: { width: number; height: number },
   strongReferenceMode = false,
 ) {
+  void ratioText;
+  void target;
+  void strongReferenceMode;
   return [
-    "任务：根据用户要求和所有输入图片自行分析，直接生成最终图片。",
-    `用户原始要求：${compactReferenceImagePrompt(prompt, 2400)}`,
-    `目标比例/尺寸：${ratioText} / ${target.width}×${target.height}。`,
-    strongReferenceMode ? "参数里标记为引用/人物/产品/主体/背景/Logo/IP 的图片，需要作为可见素材或核心依据进入结果。" : "参数里标记为参考的图片，只作为风格、构图、色彩、字体或氛围参考。",
+    compactReferenceImagePrompt(prompt, 2400),
     manifest.length
-      ? manifest.map((item, index) => `参考图${index + 1}：${item.label || item.fileName || item.id}，用途：${textReferenceRoleText(item.role)}，权重：${textReferenceWeightText(item.weight)}${item.styleReference ? "，弱参考：只学习风格、配色、构图节奏和商业质感，不复制具体主体/文字/Logo/二维码" : ""}`).join("\n")
-      : "未提供结构化角色。",
-    "如果用户给了明确文案，按用户原文理解和使用；不要擅自编造用户没给的电话、地址、二维码、Logo、人名或机构信息。",
+      ? manifest.map((item, index) => `参考图${index + 1}：${item.label || item.fileName || item.id}，用途：${textReferenceRoleText(item.role)}，权重：${textReferenceWeightText(item.weight)}${item.styleReference ? "，弱参考" : ""}`).join("\n")
+      : "",
   ].join("\n");
 }
 
@@ -696,6 +738,19 @@ function shouldUseTextToImageTargetCanvasFirst(requestedSize: string, target: { 
   const nativeRatio = Number(match[1]) / Math.max(1, Number(match[2]));
   const targetRatio = target.width / Math.max(1, target.height);
   return Math.abs(nativeRatio - targetRatio) / Math.max(0.0001, targetRatio) > 0.012;
+}
+
+function getTextToImageRequestedSize(input: {
+  exactSize: boolean;
+  outputSize: { width: number; height: number };
+  ratio: { width: number; height: number };
+  quality: DesignRequest["quality"];
+  imageModel: string;
+}) {
+  if (input.exactSize) {
+    return `${Math.max(1, Math.round(input.outputSize.width))}x${Math.max(1, Math.round(input.outputSize.height))}`;
+  }
+  return getOpenAIRequestedSize(input.ratio, input.quality, input.imageModel);
 }
 
 async function processTextToImageResult(

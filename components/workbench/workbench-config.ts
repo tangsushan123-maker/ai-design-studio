@@ -12,14 +12,14 @@ export const treeBranchVerticalGap = 280;
 export const treeResultHorizontalGap = 340;
 
 export const defaultBrandAssetUsage: BrandAssetUsage = {
-  usePrimaryColors: true,
-  useSecondaryColors: true,
+  usePrimaryColors: false,
+  useSecondaryColors: false,
   useLogo: false,
   useIpImage: false,
   useContact: false,
   useQrCode: false,
-  useCopy: true,
-  useForbiddenRules: true,
+  useCopy: false,
+  useForbiddenRules: false,
   useFavoriteStyle: false,
 };
 
