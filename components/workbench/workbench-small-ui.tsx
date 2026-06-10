@@ -1,5 +1,50 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { forwardRef, useEffect, useImperativeHandle, useRef, type ReactNode, type TextareaHTMLAttributes } from "react";
 import type { NodeStatus } from "@/components/workbench/workbench-types";
+
+type AutoResizeTextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  maxHeight?: number;
+};
+
+export const AutoResizeTextarea = forwardRef<HTMLTextAreaElement, AutoResizeTextareaProps>(function AutoResizeTextarea({
+  maxHeight = 260,
+  onInput,
+  rows = 1,
+  value,
+  ...props
+}, forwardedRef) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useImperativeHandle(forwardedRef, () => textareaRef.current as HTMLTextAreaElement, []);
+
+  useEffect(() => {
+    resizeTextarea(textareaRef.current, maxHeight);
+  }, [maxHeight, value]);
+
+  return (
+    <textarea
+      {...props}
+      ref={textareaRef}
+      rows={rows}
+      value={value}
+      onInput={(event) => {
+        resizeTextarea(event.currentTarget, maxHeight);
+        onInput?.(event);
+      }}
+    />
+  );
+});
+
+function resizeTextarea(textarea: HTMLTextAreaElement | null, maxHeight: number) {
+  if (!textarea) return;
+  textarea.style.height = "auto";
+  const borderHeight = textarea.offsetHeight - textarea.clientHeight;
+  const contentHeight = textarea.scrollHeight + Math.max(0, borderHeight);
+  const nextHeight = Math.min(contentHeight, maxHeight);
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+}
 
 export function MiniInput({ label, onChange, type = "text", value }: { label: string; onChange: (value: string) => void; type?: string; value: string }) {
   return (
@@ -30,7 +75,7 @@ export function ToolbarButton({
 }) {
   return (
     <button
-      className={`flex items-center justify-center rounded-full border transition ${
+      className={`group flex items-center justify-center rounded-full border transition ${
         tone === "danger"
           ? "apple-button-danger text-[#ffb4a8]"
           : "apple-button text-white/72"
@@ -39,8 +84,8 @@ export function ToolbarButton({
       title={label}
       type="button"
     >
-      <span className="shrink-0">{icon}</span>
-      {expanded ? <span className="min-w-0 truncate text-[12px] leading-none opacity-85">{label}</span> : null}
+      <span className="shrink-0 opacity-82 transition group-hover:opacity-100">{icon}</span>
+      {expanded ? <span className="min-w-0 truncate text-[12px] font-medium leading-none text-white/72">{label}</span> : null}
     </button>
   );
 }
@@ -143,8 +188,9 @@ export function InspectorTextarea({
   return (
     <label className="apple-surface-section block p-3">
       <span className="apple-field-label mb-1.5 block">{label}</span>
-      <textarea
+      <AutoResizeTextarea
         className="min-h-[104px] w-full resize-none bg-transparent text-[12px] leading-5 text-white/80 outline-none placeholder:text-white/28"
+        maxHeight={420}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         value={value}

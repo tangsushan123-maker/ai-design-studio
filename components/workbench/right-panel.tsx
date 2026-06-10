@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useMemo, useState } from "react";
-import { FileImage, Sparkles, X } from "lucide-react";
+import { FileImage, Images, ListChecks, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { formatDuration, formatGeneratedAt } from "@/lib/workbench-format";
 import { imageSourceSummary } from "@/lib/workbench-image-source";
 import { ImageManagerPanel } from "@/components/workbench/image-manager-panel";
@@ -27,6 +27,13 @@ import type {
   RightPanelTab,
   TaskRecord,
 } from "@/components/workbench/workbench-types";
+
+const rightPanelTabLabels: Array<[RightPanelTab, string]> = [
+  ["params", "参数"],
+  ["tasks", "任务"],
+  ["library", "当前方案"],
+  ["images", "图库"],
+];
 
 export const RightPanel = memo(function RightPanel({
   historyImages,
@@ -174,27 +181,33 @@ export const RightPanel = memo(function RightPanel({
             <X className="size-3.5" />
           </button>
         </div>
-        <div className="apple-panel grid grid-cols-4 gap-1 p-0.5">
-          {[
-            ["params", "参数"],
-            ["tasks", "任务"],
-            ["library", "当前方案"],
-            ["images", "图库"],
-          ].map(([value, label]) => (
+        <div className="apple-panel grid grid-cols-4 gap-1 p-0.5" aria-label="右侧面板切换">
+          {rightPanelTabLabels.map(([value, title]) => {
+            const Icon = {
+              params: SlidersHorizontal,
+              tasks: ListChecks,
+              library: FileImage,
+              images: Images,
+            }[value];
+            const label = value === "library" ? "方案" : title;
+            return (
             <button
               key={value}
-              className={`apple-segment flex items-center justify-center gap-1 px-1 py-1.5 text-[11px] ${tab === value ? "apple-segment-active" : ""}`}
+              className={`apple-segment flex min-w-0 items-center justify-center gap-1 px-1 py-1.5 text-[11px] font-semibold ${tab === value ? "apple-segment-active" : "text-white/62"}`}
               onClick={() => setTab(value as RightPanelTab)}
+              title={title}
               type="button"
             >
-              <span>{label}</span>
+              <Icon className={`size-3.5 shrink-0 ${tab === value ? "opacity-82" : "opacity-72"}`} />
+              <span className="min-w-0 truncate">{label}</span>
               {value === "tasks" && taskBadgeCount ? (
                 <span className={`rounded-full px-1.5 py-0.5 text-[11px] leading-none ${tab === value ? "bg-black/10 text-[#07121f]/70" : failedTaskCount ? "bg-[#ff6b5f]/18 text-[#ffb4a8]" : runningTaskCount ? "bg-[#ffd166]/18 text-[#ffe1a0]" : "bg-white/12 text-white/58"}`}>
                   {taskBadgeCount}
                 </span>
               ) : null}
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 

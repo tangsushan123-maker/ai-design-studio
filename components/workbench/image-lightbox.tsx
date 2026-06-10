@@ -220,6 +220,9 @@ export function ImageLightbox({
                   activeFilename={activePngLayerFilename}
                   result={pngLayerResult}
                   onDownloadLayer={(layer) => runAction(`下载${pngLayerDisplayName(layer)}`, () => downloadRemoteFile(layer.url, layer.filename))}
+                  onDownloadZip={() => {
+                    if (pngLayerResult.zipUrl) return runAction("打包下载 PNG 分层", () => downloadRemoteFile(pngLayerResult.zipUrl || "", pngLayerResult.zipFileName || "png-layers.zip"));
+                  }}
                   onPreviewLayer={(layer) => setActivePngLayerFilename(layer.filename)}
                   onShowComposite={() => setActivePngLayerFilename("")}
                 />

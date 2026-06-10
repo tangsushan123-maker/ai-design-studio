@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowUp, Check, Loader2, MessageCircle, RefreshCw, Sparkles, WandSparkles, X } from "lucide-react";
 import { readResponseErrorMessage, withClientTimeout } from "@/components/workbench/workbench-response";
 import { ratioOptionLabel } from "@/components/workbench/workbench-utils";
+import { AutoResizeTextarea } from "@/components/workbench/workbench-small-ui";
 import { type AspectRatioValue } from "@/lib/design-options";
 import { buildCopyAssistantImagePrompt, type CopyAssistantContext, type CopyAssistantSuggestion } from "@/lib/copy-assistant";
 
@@ -94,7 +95,7 @@ export function CopyAssistantPanel({
 
   function applySuggestion(suggestion: CopyAssistantSuggestion) {
     onApply(finalImagePrompt(suggestion, draft));
-    setMessage({ tone: "success", text: "已填入输入框，可以直接选择尺寸后生成。" });
+    setMessage({ tone: "success", text: "已把设计方案和画面文案填入输入框，可以继续加参考图或直接生成。" });
   }
 
   function generateWithSuggestion(suggestion: CopyAssistantSuggestion) {
@@ -134,10 +135,11 @@ export function CopyAssistantPanel({
             <div className="rounded-[18px] border border-white/10 bg-white/[0.045] p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="text-[12px] font-semibold text-white/82">把一句话整理成可出图方案</div>
-                <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-1 text-[10px] font-semibold text-white/44">{ratioOptionLabel(ratio)}</span>
+                <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-1 text-[11px] font-semibold text-white/48">{ratioOptionLabel(ratio)}</span>
               </div>
-              <textarea
+              <AutoResizeTextarea
                 className="min-h-[130px] w-full resize-none rounded-[16px] border border-white/10 bg-black/20 px-3 py-2.5 text-[13px] leading-5 text-white/88 outline-none placeholder:text-white/30 focus:border-[#74e3c5]/42"
+                maxHeight={420}
                 onChange={(event) => setDraft(event.target.value)}
                 placeholder="例如：医院门口灯箱，消化内镜中心，想突出专业、安心、科技感"
                 value={draft}
@@ -200,35 +202,57 @@ export function CopyAssistantPanel({
                         换
                       </button>
                     </div>
+                    {suggestion.suitableUse || suggestion.designReason ? (
+                      <div className="mt-2 grid gap-1.5">
+                        {suggestion.suitableUse ? (
+                          <div className="rounded-[12px] border border-white/8 bg-white/[0.035] px-2.5 py-2">
+                            <div className="text-[11px] font-semibold text-white/42">适合场景</div>
+                            <div className="mt-0.5 text-[11px] leading-4 text-white/58">{suggestion.suitableUse}</div>
+                          </div>
+                        ) : null}
+                        {suggestion.designReason ? (
+                          <div className="rounded-[12px] border border-[#74e3c5]/10 bg-[#74e3c5]/[0.055] px-2.5 py-2">
+                            <div className="text-[11px] font-semibold text-[#adf8e5]/62">设计判断</div>
+                            <div className="mt-0.5 text-[11px] leading-4 text-white/62">{suggestion.designReason}</div>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <label className="mt-2.5 block">
-                      <span className="mb-1.5 block text-[10px] font-semibold text-white/42">画面文案 · 可修改</span>
-                      <textarea
-                        className="max-h-[190px] min-h-[128px] w-full resize-y rounded-[14px] border border-white/10 bg-black/18 p-3 text-[12px] leading-5 text-white/78 outline-none focus:border-[#74e3c5]/42"
+                      <span className="mb-1.5 block text-[11px] font-semibold text-white/46">画面文案 · 可修改</span>
+                      <AutoResizeTextarea
+                        className="min-h-[128px] w-full resize-none rounded-[14px] border border-white/10 bg-black/18 p-3 text-[12px] leading-5 text-white/78 outline-none focus:border-[#74e3c5]/42"
+                        maxHeight={360}
                         onChange={(event) => updateSuggestion(suggestion.id, { copy: event.target.value })}
                         value={suggestion.copy}
                       />
                     </label>
                     {suggestion.visualDirection ? (
-                      <div className="mt-2 rounded-[12px] border border-white/8 bg-white/[0.035] px-2.5 py-2">
-                        <div className="text-[10px] font-semibold text-white/36">设计方案</div>
-                        <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-white/52">{suggestion.visualDirection}</div>
-                      </div>
+                      <label className="mt-2 block">
+                        <span className="mb-1.5 block text-[11px] font-semibold text-white/46">设计方案 · 会一起给模型</span>
+                        <AutoResizeTextarea
+                          className="min-h-[74px] w-full resize-none rounded-[14px] border border-white/10 bg-white/[0.035] p-2.5 text-[11px] leading-4 text-white/62 outline-none focus:border-[#74e3c5]/42"
+                          maxHeight={220}
+                          onChange={(event) => updateSuggestion(suggestion.id, { visualDirection: event.target.value })}
+                          value={suggestion.visualDirection}
+                        />
+                      </label>
                     ) : null}
                     {suggestion.missingInfo?.length ? (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {suggestion.missingInfo.slice(0, 2).map((item) => (
-                          <span className="rounded-full border border-[#ffe1a0]/14 bg-[#ffe1a0]/8 px-2 py-1 text-[10px] text-[#ffe1a0]/76" key={item}>缺 {item}</span>
+                          <span className="rounded-full border border-[#ffe1a0]/14 bg-[#ffe1a0]/8 px-2 py-1 text-[11px] text-[#ffe1a0]/76" key={item}>缺 {item}</span>
                         ))}
                       </div>
                     ) : null}
                     <div className="mt-2.5 grid grid-cols-2 gap-2">
                       <button className="apple-button flex h-9 items-center justify-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold text-white/68" onClick={() => applySuggestion(suggestion)} type="button">
                         <Check className="size-4" />
-                        填入输入框
+                        引用方案
                       </button>
                       <button className="apple-button-primary flex h-9 items-center justify-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold" onClick={() => generateWithSuggestion(suggestion)} type="button">
                         <ArrowUp className="size-4" />
-                        使用生成
+                        生成这张
                       </button>
                     </div>
                   </article>

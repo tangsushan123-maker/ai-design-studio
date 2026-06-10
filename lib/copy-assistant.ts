@@ -23,9 +23,11 @@ export type CopyAssistantSuggestion = {
   id: string;
   title: string;
   copy: string;
+  designReason: string;
   visualDirection: string;
   imagePrompt: string;
   missingInfo: string[];
+  suitableUse: string;
 };
 
 export type CopyAssistantResult = {
@@ -48,8 +50,9 @@ export function buildCopyAssistantPrompt(input: CopyAssistantInput) {
     "你是一个商业平面设计助理，帮助用户把模糊需求整理成可直接出图的设计内容。",
     "只输出合法 JSON，不要 Markdown，不要解释。",
     "输出字段固定为：suggestions, followUpQuestions。",
-    "suggestions 输出 4 个方案。每个方案字段固定为：id,title,copy,visualDirection,missingInfo。",
+    "suggestions 输出 4 个方案。每个方案字段固定为：id,title,copy,visualDirection,designReason,suitableUse,missingInfo。",
     "copy 是画面可见文案；visualDirection 简单说明这个方案的大致画面方向即可，不要写成长篇提示词。",
+    "designReason 用一句话说明为什么这个方案适合用户需求；suitableUse 用一句话说明适合的投放场景或阅读方式。",
     "不要在 copy 或 visualDirection 里写具体画面尺寸、比例、像素、高清、4K、方版、横版、竖版等描述。尺寸和清晰度由用户在界面单独选择。",
     "不要编造真实机构名称、医生资质、电话、地址、价格、二维码链接、活动日期。缺少真实信息时用 [医院名称]、[电话]、[地址] 这类占位符，并写入 missingInfo。",
     "文案要适合远距离阅读：主标题短、副标题短、卖点分组，每行尽量不超过 14 个中文字符。",
@@ -70,6 +73,8 @@ export function buildCopyAssistantPrompt(input: CopyAssistantInput) {
         title: "方案名称",
         copy: "画面上真实显示的文案",
         visualDirection: "简短画面方向",
+        designReason: "为什么适合这个需求",
+        suitableUse: "适合的使用场景",
         missingInfo: ["仍需用户补充的信息"],
       }],
       followUpQuestions: ["可选追问"],
@@ -105,6 +110,7 @@ export function normalizeCopyAssistantResult(raw: unknown): CopyAssistantResult 
 export function buildCopyAssistantImagePrompt(suggestion: CopyAssistantSuggestion, userRequest = "") {
   return [
     userRequest.trim() ? `用户需求：${userRequest.trim()}` : "",
+    suggestion.visualDirection.trim() ? `选中设计方案：\n${suggestion.visualDirection.trim()}` : "",
     suggestion.copy.trim() ? `画面文案：\n${suggestion.copy.trim()}` : "",
   ].filter(Boolean).join("\n");
 }
@@ -113,6 +119,8 @@ function normalizeSuggestion(item: unknown, index: number) {
   const source = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
   const copy = stringValue(source.copy);
   const visualDirection = stringValue(source.visualDirection);
+  const designReason = stringValue(source.designReason);
+  const suitableUse = stringValue(source.suitableUse);
   const title = stringValue(source.title) || `方案 ${index + 1}`;
   const missingInfo = Array.isArray(source.missingInfo)
     ? source.missingInfo.map(stringValue).filter(Boolean).slice(0, 6)
@@ -123,9 +131,11 @@ function normalizeSuggestion(item: unknown, index: number) {
     id: stringValue(source.id) || `option_${index + 1}`,
     title,
     copy,
+    designReason,
     visualDirection,
     imagePrompt,
     missingInfo,
+    suitableUse,
   };
 }
 

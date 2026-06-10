@@ -67,7 +67,7 @@ export function pngLayerExportModeParam(value: unknown): PngLayerExportMode {
 }
 
 export function pngLayerExportModeLabel(mode: PngLayerExportMode) {
-  return mode === "fast" ? "快速三层" : "AI三层精准";
+  return mode === "fast" ? "快速分层" : "智能分层";
 }
 
 export function referenceRemakeModeParam(value: unknown): ReferenceRemakeMode {

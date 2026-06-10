@@ -3,7 +3,7 @@
 import type { AspectRatioValue } from "@/lib/design-options";
 import { exportFormatParam, qualityEnhanceModeDescription, qualityEnhanceModeFromFitMode } from "@/components/workbench/workbench-operation-params";
 import { inferSimpleMaskEditIntent, maskQuickActions } from "@/components/workbench/mask-editing";
-import { MiniInput } from "@/components/workbench/workbench-small-ui";
+import { AutoResizeTextarea, MiniInput } from "@/components/workbench/workbench-small-ui";
 import { InlineChipRow, RatioPresetGrid } from "@/components/workbench/workbench-node-ui";
 import { resizePresets } from "@/components/workbench/workbench-config";
 import { parseTargetSize } from "@/components/workbench/workbench-utils";
@@ -75,8 +75,9 @@ export function LightboxEditPanels({
       <section className="apple-surface-section p-3">
         <div className="apple-section-title">二次优化设置</div>
         <div className="apple-caption mt-1">只写这次要改什么。</div>
-        <textarea
+        <AutoResizeTextarea
           className="apple-textarea mt-2 min-h-[84px] w-full resize-none px-3 py-2 text-[12px] leading-5 outline-none"
+          maxHeight={320}
           onChange={(event) => onOptimizePromptChange(event.target.value)}
           placeholder="例如：保持构图和人物不变，减弱过亮装饰，标题更清楚。"
           value={optimizePrompt}
@@ -111,8 +112,9 @@ export function LightboxEditPanels({
             </button>
           ))}
         </div>
-        <textarea
+        <AutoResizeTextarea
           className="apple-textarea mt-2 min-h-[84px] w-full resize-none px-3 py-2 text-[12px] leading-5 outline-none"
+          maxHeight={320}
           onChange={(event) => onMaskPromptChange(event.target.value)}
           placeholder="例如：去掉这里 / 换成蓝色科技背景 / 去掉文字并补全背景"
           value={maskPrompt}

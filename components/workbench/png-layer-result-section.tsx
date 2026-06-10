@@ -1,4 +1,4 @@
-import { ArrowDownToLine } from "lucide-react";
+import { Archive, ArrowDownToLine } from "lucide-react";
 import { formatFileSize } from "@/lib/workbench-format";
 import { ImageFrame } from "@/components/workbench/image-frame";
 import { pngLayerDisplayName, pngLayerPreviewImage } from "@/components/workbench/workbench-image-display";
@@ -7,23 +7,26 @@ import type { PngLayerExportLayer, PngLayerExportResult } from "@/components/wor
 export function PngLayerResultSection({
   activeFilename,
   onDownloadLayer,
+  onDownloadZip,
   onPreviewLayer,
   onShowComposite,
   result,
 }: {
   activeFilename: string;
   onDownloadLayer: (layer: PngLayerExportLayer) => void | Promise<void>;
+  onDownloadZip: () => void | Promise<void>;
   onPreviewLayer: (layer: PngLayerExportLayer) => void;
   onShowComposite: () => void;
   result: PngLayerExportResult;
 }) {
   const layers = [...result.layers].sort((a, b) => a.zIndex - b.zIndex);
+  const isIncomplete = result.capabilityStatus === "blocked" || result.reconstruction?.label === "分层不完整";
   return (
     <section className="apple-surface-section p-3">
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
-          <div className="apple-section-title">PNG 三层结果</div>
-          <div className="apple-caption mt-1">{result.canvasWidth} × {result.canvasHeight}px · 按需单独下载</div>
+          <div className="apple-section-title">PNG 分层结果</div>
+          <div className="apple-caption mt-1">{result.canvasWidth} × {result.canvasHeight}px · 可单张或打包下载</div>
         </div>
         <button
           className={`apple-button rounded-full px-2.5 py-1 text-[11px] ${!activeFilename ? "border-[#74e3c5]/36 text-[#adf8e5]" : ""}`}
@@ -33,6 +36,12 @@ export function PngLayerResultSection({
           成品图
         </button>
       </div>
+      {result.reconstruction ? (
+        <div className={`mb-2 rounded-[12px] border px-2.5 py-2 text-[11px] leading-5 ${!isIncomplete && result.reconstruction.score >= 92 ? "border-[#74e3c5]/24 bg-[#74e3c5]/10 text-[#b7f8e8]" : "border-[#f5c66a]/24 bg-[#f5c66a]/10 text-[#ffe2a3]"}`}>
+          <div className="font-semibold">叠加还原度 {result.reconstruction.score}% · {result.reconstruction.label}</div>
+          <div className="text-white/52">{isIncomplete ? "当前只能作为检查包，不能按完整分层交付。" : "精准模式保留原图文字和人物像素，建议放大检查边缘。"}</div>
+        </div>
+      ) : null}
       <div className="space-y-2">
         {layers.map((layer) => (
           <div
@@ -74,6 +83,12 @@ export function PngLayerResultSection({
           </div>
         ))}
       </div>
+      {result.zipUrl ? (
+        <button className="apple-button-primary mt-2 flex w-full items-center justify-center gap-1.5 px-2 py-2 text-[11px] font-semibold" onClick={() => void onDownloadZip()} type="button">
+          <Archive className="size-3.5" />
+          打包下载 ZIP
+        </button>
+      ) : null}
       {result.warnings?.length ? (
         <div className="mt-2 rounded-[12px] border border-[#f5c66a]/24 bg-[#f5c66a]/10 p-2 text-[11px] leading-5 text-[#ffe2a3]">
           {result.warnings.slice(0, 2).map((warning) => (

@@ -61,7 +61,7 @@ export function composerHelperTextForNode(node: FlowNode) {
   if (node.data.kind === "mask_edit") return "涂哪里，改哪里。";
   if (node.data.kind === "reference_remake") return "连接拍照图、截图或低清参考图，重做成干净高清版。";
   if (node.data.kind === "design_optimize") return "连接已有设计稿，内容不变，优化版式、层级和商业质感。";
-  if (node.data.kind === "png_layers") return "连接成品图后，生成背景、文字、人物三层 PNG 用于交付。";
+  if (node.data.kind === "png_layers") return "连接成品图后，默认生成背景、文字、人物 3 层，方便导入 PS 检查和微调。";
   if (node.data.kind === "output") return "下载、复制或保存结果。";
   return "";
 }
@@ -108,7 +108,7 @@ export function nodeCreationHint(type: NodeKind, fromImage: boolean) {
   if (type === "hd_redraw") return fromImage ? "已创建画质增强节点。可选择文字修复 / 图文增强 / 质感重绘，再输出 2K/4K/8K。" : "已创建画质增强节点。请先连接图片，再选择增强模式。";
   if (type === "reference_remake") return fromImage ? "已创建参考图重制节点。选择快速复刻或精准重制后运行。" : "已创建参考图重制节点。请先连接一张拍照参考图。";
   if (type === "design_optimize") return fromImage ? "已创建设计优化节点。选择优化强度后运行，可查看前后对比。" : "已创建设计优化节点。请先连接一张已有设计稿。";
-  if (type === "png_layers") return fromImage ? "已创建 PNG 三层节点。默认 AI 三层精准，运行后可预览并单独下载。" : "已创建 PNG 三层节点。请先连接成品图，再运行生成三层 PNG。";
+  if (type === "png_layers") return fromImage ? "已创建 PNG 分层节点。默认 AI 精准分层，运行后可预览并单独下载。" : "已创建 PNG 分层节点。请先连接成品图，再运行生成多层 PNG。";
   return "节点已创建。";
 }
 

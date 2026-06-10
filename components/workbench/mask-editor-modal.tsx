@@ -14,6 +14,7 @@ import {
   type MaskEditRegionType,
   type MaskEditTaskMode,
 } from "./mask-editing";
+import { AutoResizeTextarea } from "@/components/workbench/workbench-small-ui";
 
 type MaskEditorImage = {
   id: string;
@@ -405,9 +406,10 @@ export function MaskEditorModal({
           <div className="apple-surface-section p-3">
             <label className="block">
               <span className="apple-field-label mb-1 block">修改指令</span>
-              <textarea
+              <AutoResizeTextarea
                 autoFocus
                 className="apple-textarea nodrag min-h-[96px] w-full resize-none px-3 py-2 text-[12px] leading-5 outline-none"
+                maxHeight={320}
                 onKeyDown={(event) => event.stopPropagation()}
                 onMouseDown={(event) => event.stopPropagation()}
                 onChange={(event) => setPrompt(event.target.value)}

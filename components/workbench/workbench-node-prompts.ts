@@ -43,7 +43,7 @@ export function buildImageRecommendations(image: ImageAsset | null): ImageRecomm
   recommendations.push({ label: "局部 AI 修改", reason: "涂哪里改哪里，未涂抹内容保持不变。", type: "mask_edit", handle: "image" });
   recommendations.push({ label: "设计优化", reason: "识别行业和版式问题，优化层级、留白、颜色和商业质感。", type: "design_optimize", handle: "image", params: { strength: "professional", quality: "2k" } });
   recommendations.push({ label: "参考图重制", reason: "把拍照参考图重做成干净高清同风格设计稿。", type: "reference_remake", handle: "image", params: { mode: "fast", quality: "2k" } });
-  recommendations.push({ label: "PNG 三层", reason: "把当前成品图拆成背景、文字、人物三张同尺寸透明 PNG。", type: "png_layers", handle: "image", params: { mode: "ai_precise" } });
+  recommendations.push({ label: "PNG 分层", reason: "把当前成品图拆成背景、文字、人物 3 层，方便导入 PS 检查和微调。", type: "png_layers", handle: "image", params: { mode: "ai_precise" } });
   recommendations.push({ label: "AI合成", reason: "作为图1主体，再连接图2场景自然合成。", type: "fuse_images", handle: "imageA" });
   return recommendations.slice(0, 5);
 }

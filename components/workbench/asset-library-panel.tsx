@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { ProjectAssetRecord, ProjectFactCandidate, ProjectKnowledgeBase } from "@/lib/project-system";
 import { ImageFrame } from "@/components/workbench/image-frame";
+import { AutoResizeTextarea } from "@/components/workbench/workbench-small-ui";
 
 type ProjectProfile = {
   brandColors: string;
@@ -735,8 +736,9 @@ function FieldBlock({
     <label className="block">
       <div className="mb-2 text-[11px] text-white/44">{label}</div>
       {multiline ? (
-        <textarea
+        <AutoResizeTextarea
           className="apple-input min-h-[88px] w-full rounded-[18px] px-3.5 py-3 text-[12px] text-white/76 outline-none"
+          maxHeight={360}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
           value={value}

@@ -36,7 +36,9 @@ export const runtime = "nodejs";
 const textReferenceInputReadConcurrency = 4;
 const textReferenceModelMaxEdge = 1600;
 const textReferenceModelMaxBytes = 3 * 1024 * 1024;
+const documentReferenceMaxBytes = 25 * 1024 * 1024;
 type UploadedReferenceImage = { buffer: Buffer; fileName: string; mimeType: string };
+type UploadedDocumentReference = { buffer: Buffer; fileName: string; mimeType: string };
 type ReferenceImageInput = { fileKey: string; urlKey: string; fallbackFileName: string };
 
 export async function POST(request: Request) {
@@ -78,17 +80,21 @@ export async function POST(request: Request) {
     const outputRatioLabel = ratioLabel(body.aspectRatio, body.customWidth, body.customHeight);
     const generatedAt = new Date().toISOString();
     const referenceImages = formData ? await readReferenceImages(formData) : [];
+    const documentReferences = formData ? await readDocumentReferences(formData) : [];
     const referenceFiles = await Promise.all(referenceImages.map((item, index) => toFile(item.buffer, item.fileName || `text-reference-${index + 1}.png`, { type: item.mimeType })));
+    const documentFileIds = documentReferences.length ? await uploadDocumentReferences(openai, documentReferences) : [];
     const hasReferenceFiles = referenceFiles.length > 0;
     const strongReferenceMode = hasReferenceFiles && hasDirectUseReference(body.referenceImages);
     const generationProfile = textToImageGenerationProfile(body, hasReferenceFiles);
-    const preflightDesignBrief = await buildPreflightDesignBrief(openai, body, {
-      outputRatioLabel,
-      outputSize,
-      referenceCount: referenceImages.length,
-      referenceImages,
-      strongReferenceMode,
-    });
+    const preflightDesignBrief = documentFileIds.length
+      ? ""
+      : await buildPreflightDesignBrief(openai, body, {
+          outputRatioLabel,
+          outputSize,
+          referenceCount: referenceImages.length,
+          referenceImages,
+          strongReferenceMode,
+        }).catch(() => "");
     let referenceFallbackSummary: Promise<string> | null = null;
     const getReferenceFallbackSummary = () => {
       referenceFallbackSummary ||= summarizeTextReferenceImages(openai, body, referenceImages);
@@ -112,6 +118,19 @@ export async function POST(request: Request) {
     const targetCount = generationProfile.targetCount;
     const prompts = buildPromptsFromDesignPlan(designPlan, body, targetCount, { outputRatioLabel, outputSize, preflightDesignBrief });
     const createImageRequestWithSize = async (requestPrompt: string, requestSize: string, requestCount = 1) => {
+      if (documentFileIds.length) {
+        return createDocumentAwareImageRequest({
+          documentFileIds,
+          imageModel,
+          openai,
+          outputSize,
+          quality: body.quality,
+          referenceImages,
+          requestCount,
+          requestPrompt,
+          requestSize,
+        });
+      }
       if (referenceFiles.length) {
         const referencePrompt = buildDirectTextReferencePrompt(requestPrompt, body.referenceImages || [], outputRatioLabel, outputSize, strongReferenceMode);
         try {
@@ -134,7 +153,7 @@ export async function POST(request: Request) {
           const summary = await getReferenceFallbackSummary();
           const fallbackPrompt = buildReferenceUploadFallbackPrompt(referencePrompt, summary, outputRatioLabel, outputSize, strongReferenceMode);
           return runQueuedImageModelRequestWithRetry(
-            { label: `文生图/参考图摘要兜底/${imageModel}`, maxAttempts: 1 },
+            { label: `文生图/参考图摘要兜底/${imageModel}`, maxAttempts: 2, retryDelayMs: 2500 },
             () => openai.images.generate({
               model: imageModel,
               prompt: fallbackPrompt,
@@ -161,12 +180,37 @@ export async function POST(request: Request) {
       try {
         return await createImageRequestWithSize(requestPrompt, size, requestCount);
       } catch (error) {
-        if (exactSize || !shouldRetryImageSizeWithNativeFallback(error)) throw error;
-        return createImageRequestWithSize(
-          buildModelNativeSizeFallbackPrompt(requestPrompt, outputRatioLabel, outputSize),
-          getOpenAIImageSize(ratio),
-          requestCount,
-        );
+        if (!exactSize && shouldRetryImageSizeWithNativeFallback(error)) {
+          return createImageRequestWithSize(
+            buildModelNativeSizeFallbackPrompt(requestPrompt, outputRatioLabel, outputSize),
+            getOpenAIImageSize(ratio),
+            requestCount,
+          );
+        }
+        if (shouldUseTextToImageTimeoutFallback(error)) {
+          return createTimeoutFallbackImageRequest(requestPrompt, requestCount);
+        }
+        throw error;
+      }
+    };
+    const createTimeoutFallbackImageRequest = async (requestPrompt: string, requestCount = 1) => {
+      const fallbackPrompt = buildTextToImageTimeoutFallbackPrompt(requestPrompt, outputRatioLabel, outputSize);
+      return runQueuedImageModelRequestWithRetry(
+        { label: `文生图/超时保底/${imageModel}`, maxAttempts: 1 },
+        () => openai.images.generate({
+          model: imageModel,
+          prompt: fallbackPrompt,
+          size: getOpenAIImageSize(ratio) as "1024x1024",
+          quality: "medium",
+          n: requestCount,
+        }, imageRequestOptions()),
+      );
+    };
+    const createFinalFallbackImageRequest = async (requestPrompt: string) => {
+      try {
+        return await createTimeoutFallbackImageRequest(requestPrompt, 1);
+      } catch {
+        return null;
       }
     };
     let targetCanvasFilePromise: Promise<Awaited<ReturnType<typeof toFile>>> | null = null;
@@ -198,17 +242,33 @@ export async function POST(request: Request) {
     };
     const resultItems: Array<{ b64_json?: string | null; url?: string | null; prompt: string }> = [];
     let firstRequestError: unknown = null;
-    const requests = prompts.slice(0, targetCount).map((requestPrompt) =>
-      targetCanvasFirst ? createTargetCanvasRequest(requestPrompt) : createImageRequest(requestPrompt),
-    );
-    const settledResults = await Promise.allSettled(requests);
+    const initialRequestPrompts = prompts.slice(0, targetCount);
+    const initialRequestConcurrency = 1;
+    const settledResults = await mapWithConcurrency(initialRequestPrompts, initialRequestConcurrency, async (requestPrompt) => {
+      try {
+        const value = await (targetCanvasFirst ? createTargetCanvasRequest(requestPrompt) : createImageRequest(requestPrompt));
+        return { status: "fulfilled", value } as PromiseFulfilledResult<Awaited<ReturnType<typeof createImageRequest>>>;
+      } catch (reason) {
+        return { status: "rejected", reason } as PromiseRejectedResult;
+      }
+    });
     const failed = settledResults.find((result) => result.status === "rejected");
     if (failed?.status === "rejected") firstRequestError ||= failed.reason;
     appendGeneratedResultItems(resultItems, settledResults, prompts, prompts[0], targetCount);
 
     if (!resultItems.length) {
-      if (firstRequestError) throw firstRequestError;
-      return NextResponse.json({ error: "图片接口没有返回可用方案。" }, { status: 500 });
+      const fallbackResponse = await createFinalFallbackImageRequest(prompts[0]);
+      appendGeneratedResultItems(
+        resultItems,
+        fallbackResponse ? [{ status: "fulfilled", value: fallbackResponse }] : [],
+        [buildTextToImageTimeoutFallbackPrompt(prompts[0], outputRatioLabel, outputSize)],
+        prompts[0],
+        1,
+      );
+      if (!resultItems.length) {
+        if (firstRequestError) throw firstRequestError;
+        return NextResponse.json({ error: "图片接口没有返回可用方案。" }, { status: 500 });
+      }
     }
 
     const settledImages = await Promise.allSettled(
@@ -504,6 +564,75 @@ function buildPromptsFromDesignPlan(plan: DesignPlan, body: DesignRequest, targe
   ].filter(Boolean).join("\n"));
 }
 
+async function createDocumentAwareImageRequest(input: {
+  documentFileIds: string[];
+  imageModel: string;
+  openai: ReturnType<typeof getOpenAI>;
+  outputSize: { width: number; height: number };
+  quality: DesignRequest["quality"];
+  referenceImages: UploadedReferenceImage[];
+  requestCount: number;
+  requestPrompt: string;
+  requestSize: string;
+}) {
+  const results: Array<{ b64_json?: string | null; url?: string | null }> = [];
+  const count = Math.max(1, input.requestCount);
+  for (let index = 0; index < count; index += 1) {
+    const response = await runQueuedImageModelRequestWithRetry(
+      { label: `文生图/文档参考/${input.imageModel}`, maxAttempts: 2, retryDelayMs: 2500 },
+      () => input.openai.responses.create({
+        model: getAnalysisModel(),
+        input: [{
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: [
+                input.requestPrompt,
+                "",
+                "用户上传了参考文档。请直接读取并理解这些文档，将其中与当前设计任务相关的信息用于图片生成；不要等待用户确认，不要输出文档分析文字。",
+                `画布要求：${input.outputSize.width}x${input.outputSize.height}px。保持用户选择的尺寸和比例。`,
+              ].join("\n"),
+            },
+            ...input.documentFileIds.slice(0, 3).map((fileId) => ({
+              type: "input_file" as const,
+              file_id: fileId,
+            })),
+            ...input.referenceImages.slice(0, 4).map((image) => ({
+              type: "input_image" as const,
+              image_url: `data:${image.mimeType || "image/png"};base64,${image.buffer.toString("base64")}`,
+              detail: "high" as const,
+            })),
+          ],
+        }] as never,
+        tools: [{
+          type: "image_generation",
+          model: input.imageModel,
+          size: input.requestSize,
+          quality: input.quality === "standard" ? "medium" : "high",
+          output_format: "png",
+          background: "opaque",
+        }] as never,
+      }, imageRequestOptions()),
+    );
+    const image = responseImageGenerationResult(response);
+    if (image) results.push({ b64_json: image });
+  }
+  return { data: results };
+}
+
+function responseImageGenerationResult(response: { output?: unknown }) {
+  const output = Array.isArray(response.output) ? response.output : [];
+  for (const item of output) {
+    if (!item || typeof item !== "object") continue;
+    const candidate = item as { result?: unknown; type?: unknown };
+    if (candidate.type === "image_generation_call" && typeof candidate.result === "string" && candidate.result) {
+      return candidate.result;
+    }
+  }
+  return "";
+}
+
 async function buildPreflightDesignBrief(openai: ReturnType<typeof getOpenAI>, body: DesignRequest, context: {
   outputRatioLabel: string;
   outputSize: { width: number; height: number };
@@ -530,11 +659,9 @@ async function buildPreflightDesignBrief(openai: ReturnType<typeof getOpenAI>, b
         }] as never
       : analysisPrompt,
     max_output_tokens: 900,
-  }, { timeout: 30000 });
+  }, { timeout: 30000, maxRetries: 0 });
   const brief = cleanPreflightDesignBrief(response.output_text || "");
-  if (!brief) {
-    throw new Error("GPT 没有返回画面分析方案，已停止出图。请重试或检查文本模型配置。");
-  }
+  if (!brief) return "";
   return brief;
 }
 
@@ -834,6 +961,20 @@ function buildTextToImageCanvasFallbackPrompt(prompt: string, ratioText: string,
   ].join("\n");
 }
 
+function shouldUseTextToImageTimeoutFallback(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /timeout|timed out|超时|502|503|504|gateway|upstream|fetch failed|connection error|socket|econnreset|etimedout/i.test(message);
+}
+
+function buildTextToImageTimeoutFallbackPrompt(prompt: string, ratioText: string, target: { width: number; height: number }) {
+  return [
+    "Generate one usable commercial poster first. Keep it simple, complete, and readable.",
+    `User request:\n${compactRetryPrompt(prompt, 1400)}`,
+    `Target composition: ${ratioText}, final canvas ${target.width}x${target.height}.`,
+    "Use fewer elements, clear hierarchy, enough blank space, readable Chinese text if requested, no extra unknown facts.",
+  ].join("\n");
+}
+
 function buildModelNativeSizeFallbackPrompt(prompt: string, ratioText: string, target: { width: number; height: number }) {
   const core = compactRetryPrompt(prompt);
   const importantElements = importantElementsForRetry(prompt);
@@ -1028,7 +1169,7 @@ function designRequestFromFormData(formData: FormData): DesignRequest {
 function normalizeVariantCount(value: unknown) {
   const numeric = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(numeric)) return 2;
-  return Math.min(6, Math.max(2, Math.round(numeric)));
+  return Math.min(6, Math.max(1, Math.round(numeric)));
 }
 
 function parseDesignPlanField(value: FormDataEntryValue | null): DesignPlan | undefined {
@@ -1133,6 +1274,67 @@ async function readReferenceImages(formData: FormData): Promise<UploadedReferenc
     readImageInput(formData, input.fileKey, input.urlKey, input.fallbackFileName)
   ));
   return refs.filter((item): item is UploadedReferenceImage => item !== null);
+}
+
+async function readDocumentReferences(formData: FormData): Promise<UploadedDocumentReference[]> {
+  const documents: UploadedDocumentReference[] = [];
+  for (let index = 1; index <= 3; index += 1) {
+    const file = formData.get(`documentReference_${index}`);
+    if (!(file instanceof File)) continue;
+    const document = await readDocumentReferenceFile(file);
+    if (document) documents.push(document);
+  }
+  return documents;
+}
+
+async function readDocumentReferenceFile(file: File): Promise<UploadedDocumentReference | null> {
+  const fileName = file.name || "reference-document";
+  const mimeType = file.type || mimeTypeFromDocumentName(fileName);
+  if (!isSupportedDocumentReference(fileName, mimeType) || file.size > documentReferenceMaxBytes) {
+    throw new Error(`参考文档「${fileName}」格式不支持或超过 25MB。`);
+  }
+  return {
+    buffer: Buffer.from(await file.arrayBuffer()),
+    fileName,
+    mimeType,
+  };
+}
+
+async function uploadDocumentReferences(openai: ReturnType<typeof getOpenAI>, documents: UploadedDocumentReference[]) {
+  const files = await Promise.all(documents.map((document) =>
+    toFile(document.buffer, document.fileName, { type: document.mimeType || "application/octet-stream" }),
+  ));
+  const uploaded = await Promise.all(files.map((file) =>
+    openai.files.create({
+      file,
+      purpose: "user_data",
+    }),
+  ));
+  return uploaded.map((file) => file.id).filter(Boolean);
+}
+
+function isSupportedDocumentReference(fileName: string, mimeType: string) {
+  const lowerName = fileName.toLowerCase();
+  const lowerType = mimeType.toLowerCase();
+  return /\.(pdf|doc|docx|txt|md)$/.test(lowerName)
+    || [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "text/plain",
+      "text/markdown",
+      "application/octet-stream",
+    ].includes(lowerType);
+}
+
+function mimeTypeFromDocumentName(fileName: string) {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".doc")) return "application/msword";
+  if (lower.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (lower.endsWith(".md")) return "text/markdown";
+  if (lower.endsWith(".txt")) return "text/plain";
+  return "application/octet-stream";
 }
 
 async function readImageInput(formData: FormData, fileKey: string, urlKey: string, fallbackFileName: string): Promise<UploadedReferenceImage | null> {

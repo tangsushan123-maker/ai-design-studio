@@ -296,13 +296,13 @@ textarea:focus-visible {
 .apple-sidebar {
   border-color: var(--separator);
   background:
-    radial-gradient(circle at 50% 0%, rgb(255 255 255 / 0.11), transparent 34%),
+    radial-gradient(circle at 50% 0%, rgb(255 255 255 / 0.085), transparent 34%),
     var(--glass-highlight-soft),
-    linear-gradient(180deg, rgb(75 82 99 / 0.86), rgb(44 50 64 / 0.9));
+    linear-gradient(180deg, rgb(62 69 84 / 0.76), rgb(34 40 52 / 0.84));
   box-shadow:
-    inset -1px 0 0 rgb(255 255 255 / 0.08),
-    inset 1px 0 0 rgb(255 255 255 / 0.05),
-    18px 0 54px rgb(0 0 0 / 0.32);
+    inset -1px 0 0 rgb(255 255 255 / 0.065),
+    inset 1px 0 0 rgb(255 255 255 / 0.035),
+    10px 0 32px rgb(0 0 0 / 0.2);
 }
 
 .apple-drawer {
@@ -651,21 +651,21 @@ textarea:focus-visible {
 }
 
 .apple-node-card {
-  border: 1px solid rgb(255 255 255 / 0.14);
+  border: 1px solid rgb(255 255 255 / 0.125);
   background:
-    radial-gradient(circle at 18% 0%, rgb(255 255 255 / 0.11), transparent 42%),
+    radial-gradient(circle at 18% 0%, rgb(255 255 255 / 0.08), transparent 42%),
     var(--glass-highlight-soft),
-    rgb(54 61 76 / 0.66);
+    rgb(48 55 70 / 0.62);
   box-shadow:
-    0 10px 26px rgb(0 0 0 / 0.26),
-    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 8px 22px rgb(0 0 0 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.105),
     inset 0 -1px 0 rgb(255 255 255 / 0.025);
 }
 
 .apple-node-card.is-selected {
   border-color: rgb(10 132 255 / 0.74);
   box-shadow:
-    0 18px 44px rgb(0 0 0 / 0.44),
+    0 16px 38px rgb(0 0 0 / 0.34),
     0 0 0 1.5px rgb(10 132 255 / 0.2),
     0 0 24px rgb(10 132 255 / 0.13),
     inset 0 1px 0 rgb(255 255 255 / 0.12);
@@ -674,7 +674,7 @@ textarea:focus-visible {
 .apple-node-card.is-input-selected {
   border-color: rgb(100 210 180 / 0.72);
   box-shadow:
-    0 18px 44px rgb(0 0 0 / 0.44),
+    0 16px 38px rgb(0 0 0 / 0.34),
     0 0 0 1.5px rgb(100 210 180 / 0.17),
     0 0 24px rgb(100 210 180 / 0.12),
     inset 0 1px 0 rgb(255 255 255 / 0.12);
@@ -683,7 +683,7 @@ textarea:focus-visible {
 .apple-node-card.is-danger {
   border-color: rgb(255 69 58 / 0.7);
   box-shadow:
-    0 18px 44px rgb(0 0 0 / 0.44),
+    0 16px 38px rgb(0 0 0 / 0.34),
     0 0 0 1.5px rgb(255 69 58 / 0.15),
     inset 0 1px 0 rgb(255 255 255 / 0.11);
 }
@@ -752,12 +752,14 @@ textarea:focus-visible {
   margin-left: 12px;
   margin-bottom: 14px;
   overflow: hidden;
-  border: 1px solid var(--separator);
-  border-radius: 14px;
+  border: 1px solid rgb(255 255 255 / 0.105);
+  border-radius: 13px;
   background:
     var(--glass-highlight-soft),
-    rgb(42 45 52 / 0.78);
-  box-shadow: var(--shadow-soft);
+    rgb(30 34 42 / 0.66);
+  box-shadow:
+    0 10px 26px rgb(0 0 0 / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.08);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 }
@@ -776,13 +778,18 @@ textarea:focus-visible {
   margin-left: 12px;
   margin-bottom: 112px;
   overflow: hidden;
-  border: 1px solid var(--separator);
-  border-radius: 14px;
+  border: 1px solid rgb(255 255 255 / 0.095);
+  border-radius: 13px;
   background:
     var(--glass-highlight-soft),
-    rgb(42 45 52 / 0.76);
+    rgb(30 34 42 / 0.52);
+  opacity: 0.78;
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+}
+
+.node-workflow-flow .react-flow__minimap:hover {
+  opacity: 0.96;
 }
 
 .node-workflow-flow .workflow-edge .react-flow__edge-path {
@@ -863,11 +870,20 @@ textarea:focus-visible {
 
 .theme-toggle-workbench {
   top: auto;
-  right: 16px;
-  bottom: 128px;
-  width: 38px;
+  right: 18px;
+  bottom: 18px;
+  width: 36px;
+  min-height: 36px;
   justify-content: center;
   padding: 0;
+  opacity: 0.76;
+  box-shadow:
+    0 10px 28px rgb(0 0 0 / 0.22),
+    var(--glass-hairline);
+}
+
+.theme-toggle-workbench:hover:not(:disabled) {
+  opacity: 1;
 }
 
 .theme-toggle-workbench .theme-toggle-label {
@@ -1468,13 +1484,13 @@ textarea:focus-visible {
 
 .apple-sidebar .account-menu__panel {
   position: fixed;
-  left: 64px;
+  left: 58px;
   top: clamp(154px, 25vh, 230px);
   bottom: auto;
 }
 
 .apple-sidebar .account-menu__panel--expanded {
-  left: 112px;
+  left: 102px;
   top: clamp(154px, 25vh, 230px);
   bottom: auto;
 }

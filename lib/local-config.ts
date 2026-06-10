@@ -88,6 +88,19 @@ export function getConfigUser() {
   return configUserStorage.getStore() || null;
 }
 
+type ModelCapabilityLike = {
+  capabilities?: readonly string[];
+  testStatus?: ModelCatalogItem["testStatus"];
+};
+
+function modelHasCapability(item: ModelCapabilityLike, capability: ModelCapability) {
+  return Array.isArray(item.capabilities) && item.capabilities.includes(capability);
+}
+
+function modelPassedForCapability(item: ModelCapabilityLike, capability: ModelCapability) {
+  return modelHasCapability(item, capability) && item.testStatus === "passed";
+}
+
 export function readLocalConfig(): Partial<LocalOpenAIConfig> {
   try {
     return normalizeLocalConfig(readActiveLocalConfig());
@@ -161,6 +174,7 @@ export function getOpenAIConfig(): ResolvedOpenAIConfig {
   const textModel = visibleModelOrFallback(rawTextModel, modelsCache, "text");
   const imageModel = visibleModelOrFallback(rawImageModel, modelsCache, "image");
   const videoModel = visibleModelOrFallback(rawVideoModel, modelsCache, "video");
+  const hasPassedImageModel = modelsCache.some((item) => modelPassedForCapability(item, "image"));
   const source = local.openaiApiKey || local.apiBaseUrl || local.providerSiteUrl || local.textModel || local.imageModel || local.videoModel || local.providerId ? "config.local.json" : apiKey ? "env" : "default";
 
   return {
@@ -185,7 +199,7 @@ export function getOpenAIConfig(): ResolvedOpenAIConfig {
     supportsModelsList: local.supportsModelsList ?? false,
     supportsResponses: local.supportsResponses ?? (wireApi === "responses"),
     supportsChatCompletions: local.supportsChatCompletions ?? (wireApi === "chat_completions"),
-    supportsImageGeneration: local.supportsImageGeneration ?? false,
+    supportsImageGeneration: Boolean(local.supportsImageGeneration || hasPassedImageModel),
     lastTestedAt: local.lastTestedAt || "",
     isDefault: local.isDefault ?? true,
     source,
@@ -287,6 +301,7 @@ export async function updateModelCache(modelsCache: ModelCatalogItem[]) {
 export async function upsertModelCacheItem(item: ModelCatalogItem) {
   const current = getOpenAIConfig();
   const models = upsertModel(current.modelsCache, item);
+  const passedImageModel = modelPassedForCapability(item, "image");
   return saveLocalConfig({
     apiKey: current.apiKey,
     providerName: current.providerName,
@@ -306,7 +321,7 @@ export async function upsertModelCacheItem(item: ModelCatalogItem) {
     supportsModelsList: current.supportsModelsList,
     supportsResponses: current.supportsResponses,
     supportsChatCompletions: current.supportsChatCompletions,
-    supportsImageGeneration: current.supportsImageGeneration,
+    supportsImageGeneration: current.supportsImageGeneration || passedImageModel,
     lastTestedAt: current.lastTestedAt,
     isDefault: current.isDefault,
   });

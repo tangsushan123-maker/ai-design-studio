@@ -575,6 +575,13 @@ describe("API error hygiene", () => {
     assert.equal(apiError.message.includes("没有可用订阅"), true);
     assert.equal(apiError.message.includes("模型不可用"), false);
   });
+
+  it("treats provider connection errors as retryable upstream instability", () => {
+    const apiError = toApiError(new Error("Connection error."), "fallback");
+
+    assert.equal(apiError.status, 502);
+    assert.equal(apiError.message.includes("上游模型超时"), true);
+  });
 });
 
 describe("Settings model management", () => {
@@ -1113,6 +1120,19 @@ describe("Controlled local mask editing", () => {
     assert.equal(routeSource.includes("这类无变化结果不会再作为成功结果保存。"), true);
     assert.equal(routeSource.includes("Task: Local cleanup and background reconstruction."), true);
     assert.equal(routeSource.includes("Task: Local object replacement."), true);
+    assert.equal(routeSource.includes("isAdditiveMaskEditRequest"), true);
+    assert.equal(routeSource.includes("Task: Local additive object placement."), true);
+    assert.equal(routeSource.includes("Additive placement mode"), true);
+    assert.equal(routeSource.includes("treat the user's mask as a placement anchor"), true);
+    assert.equal(routeSource.includes("The final image must visibly contain the requested new element"), true);
+    assert.equal(routeSource.includes("compact but clearly visible"), true);
+    assert.equal(routeSource.includes("placementAnchorPrompt"), true);
+    assert.equal(routeSource.includes("Original user placement anchor before expansion"), true);
+    assert.equal(routeSource.includes("use it as the intended center/nearby position"), true);
+    assert.equal(routeSource.includes("additivePlacementSizeHint"), true);
+    assert.equal(routeSource.includes("minimumAdditivePlacementMaskPixels"), true);
+    assert.equal(routeSource.includes("additivePlacementExpandRadius"), true);
+    assert.equal(routeSource.includes("Adding the requested element inside the editable area is allowed"), true);
     assert.equal(routeSource.includes("Task: Remove text inside the masked area."), true);
     assert.equal(routeSource.includes("Do not replace old text with different text"), true);
     assert.equal(routeSource.includes("Generative fill rule: edit only the masked area"), true);
@@ -1127,6 +1147,8 @@ describe("Controlled local mask editing", () => {
     assert.equal(maskUiSource.includes('prompt: "去掉这里并补全背景"'), true);
     assert.equal(maskUiSource.includes("去掉文字"), true);
     assert.equal(maskUiSource.includes("替换成新内容"), true);
+    assert.equal(maskUiSource.includes("添加元素"), true);
+    assert.equal(maskUiSource.includes("在涂抹位置附近添加："), true);
     assert.equal(maskUiSource.includes("局部高清修复"), true);
     assert.equal(maskUiSource.includes("局部换背景"), true);
     assert.equal(maskUiSource.includes("快捷指令"), true);
@@ -1214,40 +1236,67 @@ describe("PNG three-layer export", () => {
 
     assert.equal(routeSource.includes("01_background.png"), true);
     assert.equal(routeSource.includes("02_text.png"), true);
+    assert.equal(routeSource.includes("03_subject.png"), false);
+    assert.equal(routeSource.includes("04_auxiliary.png"), false);
     assert.equal(routeSource.includes("03_person.png"), true);
+    assert.equal(routeSource.includes("04_person_only.png"), true);
+    assert.equal(routeSource.includes("04_product.png"), false);
+    assert.equal(routeSource.includes("05_main_visual.png"), false);
+    assert.equal(routeSource.includes("06_auxiliary.png"), false);
     assert.equal(routeSource.includes("Create the clean background layer for a 3-layer PNG export."), true);
     assert.equal(routeSource.includes("Create a full-canvas text-only visual layer from the input design."), true);
+    assert.equal(routeSource.includes('if (input.mode === "ai_precise" && auxiliaryLayers.length)'), false);
+    assert.equal(routeSource.includes("Keep only standalone layout text intended as editable poster copy"), false);
+    assert.equal(routeSource.includes("Do not extract product packaging text"), false);
+    assert.equal(routeSource.includes("title backplates, underlines"), false);
+    assert.equal(routeSource.includes("未输出可交付文字层"), false);
+    assert.equal(routeSource.includes("createLocalTextLikeLayer"), false);
+    assert.equal(routeSource.includes("filterLikelyTextComponents"), false);
+    assert.equal(routeSource.includes("pngLayerEditModelCandidates"), false);
+    assert.equal(routeSource.includes('["gpt-image-1", primary]'), false);
+    assert.equal(routeSource.includes("supportsConfigurableImageInputFidelity(model)"), false);
+    assert.equal(routeSource.includes("Optional local alignment should never invalidate successfully generated AI layers."), false);
+    assert.equal(routeSource.includes("isValidLayerBox"), false);
     assert.equal(routeSource.includes("chroma magenta background (#ff00ff)"), true);
     assert.equal(routeSource.includes("ensureUsefulTextLayer"), true);
     assert.equal(routeSource.includes("keyOutChromaBackground"), true);
+    assert.equal(routeSource.includes("createAiVisualTransparentLayer"), false);
     assert.equal(routeSource.includes("createAiPersonVisualTransparentLayer"), true);
+    assert.equal(routeSource.includes("createAiPersonOnlyTransparentLayer"), true);
     assert.equal(routeSource.includes("cleanTransparentLayerMatte"), true);
-    assert.equal(routeSource.includes("AI-generated person-only visual layer"), true);
-    assert.equal(routeSource.includes("The person itself is an image layer"), true);
-    assert.equal(routeSource.includes("Every non-person design element must be pure #ff00ff"), true);
-    assert.equal(routeSource.includes("generate a clean natural continuation"), true);
-    assert.equal(routeSource.includes("background, text, and person"), true);
-    assert.equal(routeSource.includes("same-canvas transparent PNGs"), true);
-    assert.equal(routeSource.includes("foreground graphic covers part of the person"), true);
-    assert.equal(routeSource.includes("project_layers/layers.json"), false);
-    assert.equal(routeSource.includes("project_layers/quality_report.json"), false);
+    assert.equal(routeSource.includes('input_fidelity: "high"'), false);
+    assert.equal(routeSource.includes("Create a full-canvas non-text foreground visual layer from the input design."), true);
+    assert.equal(routeSource.includes("person / IP / product / main visual"), true);
+    assert.equal(routeSource.includes("Text belongs only to 02_text.png"), true);
+    assert.equal(routeSource.includes("Reconstruct the hidden areas naturally"), true);
+    assert.equal(routeSource.includes("badge shape, card shape, button shape, title backplate"), true);
+    assert.equal(routeSource.includes("keep the shape, border, glow, icon, and material"), true);
+    assert.equal(routeSource.includes("remove only the readable text glyphs"), true);
+    assert.equal(routeSource.includes("person/IP-character-only layer"), true);
+    assert.equal(routeSource.includes("not participate in composite"), false);
+    assert.equal(routeSource.includes("不参与成品叠加预览"), true);
+    assert.equal(routeSource.includes("layers.json"), true);
+    assert.equal(routeSource.includes("quality_report.json"), true);
     assert.equal(routeSource.includes("postprocessLayerPackage"), false);
     assert.equal(routeSource.includes("shouldUsePositionLockedTextLayer"), false);
-    assert.equal(routeSource.includes("extractSourcePixelsByLightMask"), false);
+    assert.equal(routeSource.includes("extractSourcePixelsByAlphaMask"), false);
     assert.equal(routeSource.includes("TEXT MATTE"), false);
     assert.equal(routeSource.includes("lockBackgroundOutsideRemovalMask"), false);
-    assert.equal(routeSource.includes("inspectLayerPackageReconstruction"), false);
+    assert.equal(routeSource.includes("inspectLayerPackageReconstruction"), true);
+    assert.equal(routeSource.includes("分层不完整"), true);
+    assert.equal(routeSource.includes("PNG 分层包已保存，但未得到可用前景层"), true);
+    assert.equal(routeSource.includes("opaquePixelRatio"), true);
     assert.equal(routeSource.includes("背景层使用 AI 独立生成"), false);
     assert.equal(routeSource.includes("背景层已锁定非文字/人物区域"), false);
     assert.equal(routeSource.includes("文字层已切换为位置锁定重建"), false);
-    assert.equal(routeSource.includes("Keep the original text positions"), true);
-    assert.equal(routeSource.includes("Use the exact same full canvas size and keep the person in the same visual area"), true);
+    assert.equal(routeSource.includes("Keep original text positions"), true);
+    assert.equal(routeSource.includes("Keep original position, size, proportion, crop, color"), true);
     assert.equal(routeSource.includes("getGeneratedProjectRelativeDir"), true);
     assert.equal(routeSource.includes('getGeneratedProjectRelativeDir(taskTrace?.projectId, "layer-packs")'), true);
-    assert.equal(routeSource.includes("buildStoredZip"), false);
-    assert.equal(routeSource.includes("zipFileSizeBytes"), false);
-    assert.equal(routeSource.includes("zipFileName"), false);
-    assert.equal(routeSource.includes("zipUrl"), false);
+    assert.equal(routeSource.includes("buildStoredZip"), true);
+    assert.equal(routeSource.includes("zipFileSizeBytes"), true);
+    assert.equal(routeSource.includes("zipFileName"), true);
+    assert.equal(routeSource.includes("zipUrl"), true);
     assert.equal(routeSource.includes("normalizeLayerPng"), true);
     assert.equal(routeSource.includes("ensureAlpha()"), true);
     assert.equal(routeSource.includes("canvasWidth"), true);
@@ -1263,7 +1312,7 @@ describe("PNG three-layer export", () => {
     assert.equal(routeSource.includes("keyOutCornerBackground"), true);
     assert.equal(routeSource.includes("04_decoration.png"), false);
     assert.equal(routeSource.includes("07_title_text.png"), false);
-    assert.equal(routeSource.includes("PNG 三层已生成"), true);
+    assert.equal(routeSource.includes("PNG 分层已生成"), true);
     assert.equal(routeSource.includes("pngLayerExport: layerResult"), true);
     assert.equal(routeSource.includes("fileSizeBytes: png.byteLength"), true);
     assert.equal(routeSource.includes("layerStat"), false);
@@ -1272,27 +1321,28 @@ describe("PNG three-layer export", () => {
     assert.equal(ledgerSource.includes("pngLayerExport: objectValue(source.pngLayerExport)"), true);
 
     assert.equal(workbenchSource.includes("PNG 分层导出节点"), true);
-    assert.equal(workbenchPreviewSource.includes("AI三层精准"), true);
-    assert.equal(workbenchPreviewSource.includes("快速三层"), true);
-    assert.equal(workbenchPreviewSource.includes('InspectorSection title="PNG 三层"'), true);
-    assert.equal(workbenchSource.includes("PNG 三层结果"), true);
-    assert.equal(workbenchSource.includes("按需单独下载"), true);
+    assert.equal(workbenchPreviewSource.includes("智能分层"), true);
+    assert.equal(workbenchPreviewSource.includes("快速分层"), true);
+    assert.equal(workbenchPreviewSource.includes('InspectorSection title="智能分层交付"'), true);
+    assert.equal(workbenchPreviewSource.includes("默认输出背景、文字、人物 3 层。"), true);
+    assert.equal(workbenchSource.includes("PNG 分层结果"), true);
+    assert.equal(workbenchSource.includes("可单张或打包下载"), true);
     assert.equal(workbenchSource.includes("pngLayerDisplayName"), true);
+    assert.equal(routeSource.includes("单独人物层"), true);
     assert.equal(workbenchSource.includes("pngLayerPreviewImage"), true);
-    assert.equal(workbenchSource.includes("预览三层"), true);
+    assert.equal(workbenchSource.includes("预览分层"), true);
     assert.equal(workbenchSource.includes("按需下载单层 PNG"), true);
     assert.equal(workbenchSource.includes('useState<PngLayerExportMode>("ai_precise")'), false);
-    assert.equal(workbenchSource.includes("导出 PNG 分层 ZIP"), false);
-    assert.equal(workbenchSource.includes("下载 ZIP"), false);
+    assert.equal(workbenchSource.includes("打包下载 ZIP"), true);
     assert.equal(workbenchSource.includes("PngLayerStackPreview"), false);
     assert.equal(workbenchSource.includes("PngLayerExportPanel"), false);
     assert.equal(workbenchPreviewSource.includes("warnings?: string[]"), true);
-    assert.equal(workbenchSource.includes("层兜底"), true);
+    assert.equal(workbenchSource.includes("分层不完整"), true);
     assert.equal(workbenchSource.includes('"png_layers"'), true);
     assert.equal(workbenchSource.includes("executePngLayers"), true);
     assert.equal(workbenchSource.includes("PNG 分层导出节点"), true);
     assert.equal(workbenchSource.includes("/api/export-png-layers"), true);
-    assert.equal(workbenchSource.includes("生成 ZIP"), false);
+    assert.equal(workbenchSource.includes("pngLayerHintsForImage"), true);
   });
 });
 
@@ -1435,6 +1485,12 @@ describe("Text-to-image references", () => {
     assert.equal(promptSource.includes("任务：生成一张成熟、可提案的中文商业设计图。"), true);
     assert.equal(promptSource.includes("用户需求："), true);
     assert.equal(routeSource.includes("buildDirectTextReferencePrompt"), true);
+    assert.equal(routeSource.includes("initialRequestConcurrency"), true);
+    assert.equal(routeSource.includes("const initialRequestConcurrency = 1"), true);
+    assert.equal(routeSource.includes("文生图/超时保底/${imageModel}`"), true);
+    assert.equal(routeSource.includes("buildTextToImageTimeoutFallbackPrompt"), true);
+    assert.equal(routeSource.includes("文生图/参考图摘要兜底/${imageModel}`"), true);
+    assert.equal(routeSource.includes("maxAttempts: 2, retryDelayMs: 2500"), true);
     assert.equal(routeSource.includes("compactReferenceImagePrompt(prompt, 2400)"), true);
     assert.equal(routeSource.includes("buildPreflightDesignBriefPrompt"), true);
     assert.equal(routeSource.includes("必须基于用户原文分析画面"), true);
@@ -1442,7 +1498,9 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("如果用户给了画面文案，则必须原文保留"), true);
     assert.equal(routeSource.includes("即使用户已经给了画面文案，也必须分析每句文案的含义、情绪、主次层级和适合承载它的视觉表达"), true);
     assert.equal(routeSource.includes("可见画面文案、主视觉、版式层级、色彩风格、画面元素和避免事项"), true);
-    assert.equal(routeSource.includes("GPT 没有返回画面分析方案，已停止出图"), true);
+    assert.equal(routeSource.includes("}).catch(() => \"\")"), true);
+    assert.equal(routeSource.includes("maxRetries: 0"), true);
+    assert.equal(routeSource.includes("GPT 没有返回画面分析方案，已停止出图"), false);
     assert.equal(routeSource.includes("GPT 设计方案：${context.preflightDesignBrief}"), true);
     assert.equal(routeSource.includes("任务：根据用户要求和所有输入图片自行分析，直接生成最终图片。"), false);
     assert.equal(routeSource.includes("参数里标记为引用/人物/产品/主体/背景/Logo/IP 的图片，需要作为可见素材或核心依据进入结果。"), false);
@@ -1615,7 +1673,8 @@ describe("Text-to-image references", () => {
     assert.equal(routeSource.includes("getTextToImageRequestedSize"), true);
     assert.equal(routeSource.includes("if (input.exactSize)"), true);
     assert.equal(routeSource.includes("Math.round(input.outputSize.width)"), true);
-    assert.equal(routeSource.includes("if (exactSize || !shouldRetryImageSizeWithNativeFallback(error)) throw error;"), true);
+    assert.equal(routeSource.includes("if (!exactSize && shouldRetryImageSizeWithNativeFallback(error))"), true);
+    assert.equal(routeSource.includes("if (shouldUseTextToImageTimeoutFallback(error))"), true);
     assert.equal(routeSource.includes("shouldRetryImageSizeWithNativeFallback"), true);
     assert.equal(routeSource.includes("buildModelNativeSizeFallbackPrompt"), true);
     assert.equal(routeSource.includes("getOpenAIImageSize(ratio)"), true);
@@ -1698,6 +1757,25 @@ describe("Text-to-image references", () => {
     assert.equal(workbenchSource.includes("shouldForbidInventedContact"), true);
     assert.equal(workbenchSource.includes("用户只要求品牌、Logo 或 IP 时，只放对应素材"), true);
     assert.equal(workbenchSource.includes("【素材策略】电话/地址/Logo/二维码/IP只能用项目真实素材；缺失不编造。"), true);
+  });
+
+  it("sends uploaded reference documents directly to the model without persisting browser File objects", async () => {
+    const [routeSource, workbenchSource, inspectorSource, projectHelperSource] = await Promise.all([
+      readFile(new URL("../app/api/generate-image/route.ts", import.meta.url), "utf8"),
+      readWorkbenchSource(),
+      readFile(new URL("../components/workbench/node-inspector-panel.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../components/workbench/workbench-project-helpers.ts", import.meta.url), "utf8"),
+    ]);
+
+    assert.equal(routeSource.includes("createDocumentAwareImageRequest"), true);
+    assert.equal(routeSource.includes('formData.get(`documentReference_${index}`)'), true);
+    assert.equal(routeSource.includes('purpose: "user_data"'), true);
+    assert.equal(routeSource.includes('type: "input_file" as const'), true);
+    assert.equal(workbenchSource.includes("appendTextDocumentReferences(formData, documentFiles)"), true);
+    assert.equal(inspectorSource.includes("参考文档"), true);
+    assert.equal(inspectorSource.includes("上传后会直接发送给模型作为参考资料，不在本地拆解文档内容。"), true);
+    assert.equal(projectHelperSource.includes("delete params.documentFiles"), true);
+    assert.equal(projectHelperSource.includes("delete params.documentFileNames"), true);
   });
 });
 
@@ -1813,7 +1891,7 @@ describe("Workflow canvas performance", () => {
     assert.equal(workbenchSource.includes("apple-button px-2 py-1.5 text-[10px]"), false);
     assert.equal(workbenchSource.includes("text-[10px] leading-4"), false);
     assert.equal(workbenchSource.includes("text-[9px] leading-3"), false);
-    assert.equal(workbenchSource.includes("PNG 三层结果"), true);
+    assert.equal(workbenchSource.includes("PNG 分层结果"), true);
     assert.equal(workbenchSource.includes("mt-2 rounded-[12px] border border-[#f5c66a]/24 bg-[#f5c66a]/10 p-2 text-[11px] leading-5"), true);
 
     assert.equal(globalsSource.includes(".node-workflow-flow.is-performance-mode .apple-node-card"), true);
@@ -1982,6 +2060,7 @@ describe("Project stability and task tracing", () => {
     assert.equal(ledgerSource.includes("serverProcessId"), true);
     assert.equal(ledgerSource.includes("stale_heartbeat"), true);
     assert.equal(ledgerSource.includes("model_timeout"), true);
+    assert.equal(ledgerSource.includes("connection error"), true);
     assert.equal(ledgerSource.includes("rate_limited"), true);
     assert.equal(ledgerSource.includes("auth_or_billing"), true);
     assert.equal(ledgerSource.includes("任务所在后台进程已重启"), true);
@@ -2030,6 +2109,11 @@ describe("Project stability and task tracing", () => {
     assert.equal(workbenchSource.includes("data.outputs"), true);
     assert.equal(workbenchSource.includes("data.image"), true);
     assert.equal(workbenchSource.includes("backendTaskSyncKey"), true);
+    assert.equal(workbenchSource.includes("activeCanvasTaskNodeIdsKey"), true);
+    assert.equal(workbenchSource.includes("discoverBackendTaskRuns"), true);
+    assert.equal(workbenchSource.includes("serverTaskRunMatchesDiscovery"), true);
+    assert.equal(workbenchSource.includes("discoveryOnly: true"), true);
+    assert.equal(workbenchSource.includes("taskRunDiscoveryIntervalMs = 3500"), true);
     assert.equal(workbenchSource.includes("dismissedTaskStorageKey"), true);
     assert.equal(workbenchSource.includes("dismissedImageStorageKey"), true);
     assert.equal(workbenchSource.includes("filterDismissedRestoredNodes"), true);
@@ -2633,6 +2717,7 @@ describe("Design optimization", () => {
     assert.equal(workbenchSource.includes("designComparisonModeParam"), true);
     assert.equal(workbenchSource.includes('label="对比"'), false);
     assert.equal(workbenchSource.includes("compareBefore"), true);
+    assert.equal(workbenchSource.includes('kind === "design_optimize" || kind === "output"'), true);
     assert.equal(routeSource.includes("taskTraceFromFormData(formData, \"design_optimize\""), true);
     assert.equal(routeSource.includes("recordTaskRunStarted"), true);
     assert.equal(routeSource.includes("recordTaskRunFinished"), true);
@@ -2644,10 +2729,14 @@ describe("Design optimization", () => {
     assert.equal(routeSource.includes("方案 1 · 专业设计优化"), true);
     assert.equal(routeSource.includes("方案 2 · 画面排版设计"), true);
     assert.equal(routeSource.includes("createDesignOptimizationOutput"), true);
-    assert.equal(routeSource.includes("任务：设计优化。请自行分析输入图并直接输出优化后的最终图片。"), true);
-    assert.equal(routeSource.includes("模型分析参考："), true);
+    assert.equal(routeSource.includes("任务：设计优化。请直接根据输入图生成优化后的最终设计图。"), true);
+    assert.equal(routeSource.includes("你必须先在内部完整分析输入图"), true);
+    assert.equal(routeSource.includes("系统辅助分析，仅作弱参考，必须以输入图片实际内容为准"), true);
+    assert.equal(routeSource.includes("方案 1 执行方向：专业设计优化"), true);
+    assert.equal(routeSource.includes("方案 2 执行方向：画面排版设计"), true);
     assert.equal(routeSource.includes("必须像设计总监一样给出可执行优化建议"), true);
-    assert.equal(routeSource.includes('input.strength === "conservative" ? "high"'), true);
+    assert.equal(routeSource.includes("designOptimizationInputFidelity"), true);
+    assert.equal(routeSource.includes('variant.key === "professional" && strength === "professional"'), true);
     assert.equal(routeSource.includes("industryPromptFor"), true);
     assert.equal(routeSource.includes("designTypePromptFor"), true);
     assert.equal(routeSource.includes("scenePromptFor"), true);
@@ -2670,6 +2759,6 @@ describe("Design optimization", () => {
     assert.equal(routeSource.includes("government/public-service"), true);
     assert.equal(routeSource.includes("nodeOperation: \"design_optimize\""), true);
     assert.equal(routeSource.includes("sourceCompareUrl"), true);
-    assert.equal(routeSource.includes("只输出优化后的最终设计图"), true);
+    assert.equal(routeSource.includes("不要输出对比图、评分卡、分析说明页"), true);
   });
 });

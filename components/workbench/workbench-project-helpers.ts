@@ -86,10 +86,14 @@ export function projectSnapshotStorageKey(projectId: string) {
 }
 
 function sanitizeProjectNode(node: FlowNode): FlowNode {
+  const params = { ...(node.data.params || {}) };
+  delete params.documentFiles;
+  delete params.documentFileNames;
   return {
     ...node,
     data: {
       ...node.data,
+      params,
       onRun: undefined,
       onDelete: undefined,
       onParamChange: undefined,

@@ -348,7 +348,7 @@ function classifyTaskRunFailure(error: unknown) {
   if (/任务所在后台进程已重启|server.*restart|进程已重启/i.test(message)) {
     return { category: "server_restarted", label: "后台重启中断。", message, retryable: true };
   }
-  if (/timeout|timed out|超时|504|gateway timeout|bad gateway|fetch failed|network|socket|econnreset|etimedout|upstream/i.test(message)) {
+  if (/timeout|timed out|超时|504|gateway timeout|bad gateway|fetch failed|network|socket|econnreset|etimedout|upstream|connection error/i.test(message)) {
     return { category: "model_timeout", label: "模型超时或上游网络不稳定。", message, retryable: true };
   }
   if (/rate limit|429|too many requests|限流|quota|no available compatible accounts/i.test(message)) {

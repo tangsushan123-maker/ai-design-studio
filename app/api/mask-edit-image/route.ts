@@ -46,6 +46,7 @@ type PreparedMask = {
   expandRadius: number;
   featherRadius: number;
   bbox: MaskBoundingBox | null;
+  anchorBbox: MaskBoundingBox | null;
 };
 
 type MaskEditQualityReport = {
@@ -120,6 +121,7 @@ export async function POST(request: Request) {
     const clientMaskPixelCount = Math.max(0, Number(formData.get("maskPixelCount") || 0) || 0);
     const clientMaskCoverage = clamp(Number(formData.get("maskCoverage") || 0) || 0, 0, 1);
     const protectionContext = parseProtectionContext(formData.get("protectionContext"));
+    const additivePlacement = isAdditiveMaskEditRequest(taskMode, promptText);
 
     if (!promptText.trim()) {
       await recordTaskRunFailed(taskTrace, "局部修改必须填写修改要求。");
@@ -172,6 +174,7 @@ export async function POST(request: Request) {
       edgeBlend,
       taskMode,
       regionType,
+      additivePlacement,
       clientMaskCoverage,
       clientMaskPixelCount,
     });
@@ -195,6 +198,8 @@ export async function POST(request: Request) {
       outputSize,
       protectionContext,
       maskComponents: preparedMask.components,
+      placementAnchor: preparedMask.anchorBbox,
+      additivePlacement,
     });
 
     const openai = getOpenAI();
@@ -260,6 +265,7 @@ export async function POST(request: Request) {
         edgeBlend: activeEdgeBlend,
         taskMode,
         regionType,
+        additivePlacement,
         clientMaskCoverage,
         clientMaskPixelCount,
       });
@@ -272,6 +278,8 @@ export async function POST(request: Request) {
         outputSize,
         protectionContext,
         maskComponents: activeMask.components,
+        placementAnchor: activeMask.anchorBbox,
+        additivePlacement,
         retryLevel: 1,
       });
       attempt = await runAttempt(activeMask, activePrompt, activeProtectionStrength);
@@ -459,6 +467,14 @@ function requiresSpecificInstruction(mode: MaskTaskMode) {
   return mode === "replace" || mode === "text_replace" || mode === "text_repair";
 }
 
+function isAdditiveMaskEditRequest(mode: MaskTaskMode, prompt: string) {
+  if (mode !== "replace") return false;
+  const text = prompt.trim().toLowerCase();
+  if (!text) return false;
+  if (/不要添加|不要加|不添加|禁止添加|do not add|without adding/.test(text)) return false;
+  return /添加|新增|加上|加入|放上|放入|摆上|插入|贴上|增添|补一个|加一个|add|insert|place/.test(text);
+}
+
 function validateMaskCoverage(mask: PreparedMask, mode: MaskTaskMode, regionType: MaskRegionType) {
   if (!mask.bbox || mask.coverage <= 0) {
     if (mask.rawPixels <= 0 || mask.candidateName === "empty") {
@@ -481,6 +497,7 @@ async function prepareControlledMask(
     edgeBlend: MaskEdgeBlend;
     taskMode?: MaskTaskMode;
     regionType?: MaskRegionType;
+    additivePlacement?: boolean;
     clientMaskCoverage?: number;
     clientMaskPixelCount?: number;
   },
@@ -496,9 +513,12 @@ async function prepareControlledMask(
   const editablePixels = candidate.count;
 
   const minSide = Math.min(target.width, target.height);
-  const expandRadius = maskExpandRadius(options.protectionStrength, minSide);
-  const featherRadius = maskFeatherRadius(options.edgeBlend, minSide);
-  const minPixels = minimumUsableMaskPixels(target, options.taskMode || "cleanup", options.regionType || "auto");
+  const expandRadius = options.additivePlacement ? additivePlacementExpandRadius(minSide) : maskExpandRadius(options.protectionStrength, minSide);
+  const featherRadius = options.additivePlacement ? maskFeatherRadius("strong", minSide) : maskFeatherRadius(options.edgeBlend, minSide);
+  let minPixels = minimumUsableMaskPixels(target, options.taskMode || "cleanup", options.regionType || "auto");
+  if (options.additivePlacement) {
+    minPixels = Math.max(minPixels, minimumAdditivePlacementMaskPixels(target, options.regionType || "auto"));
+  }
   const rawPixels = countMaskPixels(raw, 8);
   let cleaned = await maskSharp(raw, target)
     .blur(Math.max(0.4, minSide * 0.0009))
@@ -513,6 +533,8 @@ async function prepareControlledMask(
   if (shouldUseRawMaskAfterCleanup(rawPixels, cleanedPixels, minPixels)) {
     cleaned = raw;
   }
+  const anchorAlpha = cleanedPixels > 0 ? cleaned : raw;
+  const anchorBbox = maskBoundingBox(anchorAlpha, target, 8);
   let binaryAlpha = await maskSharp(cleaned, target)
     .blur(expandRadius)
     .threshold(8)
@@ -563,6 +585,7 @@ async function prepareControlledMask(
     expandRadius,
     featherRadius,
     bbox,
+    anchorBbox,
   };
 }
 
@@ -900,6 +923,21 @@ function maskExpandRadius(strength: MaskProtectionStrength, minSide: number) {
   return Math.max(6, Math.min(18, Math.round(11 * scale)));
 }
 
+function additivePlacementExpandRadius(minSide: number) {
+  const scale = Math.max(1, minSide / 1000);
+  return Math.max(22, Math.min(72, Math.round(38 * scale)));
+}
+
+function minimumAdditivePlacementMaskPixels(target: { width: number; height: number }, regionType: MaskRegionType) {
+  const pixelCount = target.width * target.height;
+  const minSide = Math.min(target.width, target.height);
+  const baseRatio = regionType === "product" ? 0.026 : regionType === "decoration" ? 0.012 : 0.018;
+  const diameterRatio = regionType === "product" ? 0.18 : regionType === "decoration" ? 0.12 : 0.15;
+  const minDiameter = Math.max(72, Math.min(minSide * 0.34, minSide * diameterRatio));
+  const circlePixels = Math.PI * Math.pow(minDiameter / 2, 2);
+  return Math.round(Math.min(pixelCount * 0.055, Math.max(pixelCount * baseRatio, circlePixels)));
+}
+
 function maskFeatherRadius(edgeBlend: MaskEdgeBlend, minSide: number) {
   const scale = Math.max(1, minSide / 1000);
   if (edgeBlend === "weak") return Math.max(4, Math.min(10, Math.round(6 * scale)));
@@ -1146,12 +1184,13 @@ async function inspectMaskEditQuality(
     issues.push("mask 外区域发生变化。");
     suggestions.push("请检查强制合成逻辑，重新用原图像素覆盖 mask 外区域。");
   }
-  const weakRequiredInteriorChange =
-    insideDiffMean < 1.4 ||
-    (insideDiffMean < 3.2 && insideChangedPixelRatio < 0.018);
+  const additiveRequest = isAdditiveMaskEditRequest(options.taskMode, options.userPrompt);
+  const weakRequiredInteriorChange = additiveRequest
+    ? insideDiffMean < 4.8 || (insideDiffMean < 8 && insideChangedPixelRatio < 0.035)
+    : insideDiffMean < 1.4 || (insideDiffMean < 3.2 && insideChangedPixelRatio < 0.018);
   if (requiresVisibleInteriorChange(options.taskMode, options.userPrompt) && weakRequiredInteriorChange) {
     issues.push("mask 内区域几乎没有变化。");
-    suggestions.push("系统会扩大 mask 并强化清理提示重试；如果仍失败，请把要去掉的物体、阴影和边缘完整涂满。");
+    suggestions.push(additiveRequest ? "系统会强化“必须可见新增元素”的提示重试；如果仍失败，请扩大放置区域或把新增元素描述得更具体。" : "系统会扩大 mask 并强化清理提示重试；如果仍失败，请把要去掉的物体、阴影和边缘完整涂满。");
   }
   if (requiresVisibleInteriorChange(options.taskMode, options.userPrompt) && weakComponents.length) {
     issues.push(`第 ${weakComponents.map((component) => component.index).join("、")} 个涂抹区域几乎没有变化。`);
@@ -1359,21 +1398,27 @@ function buildControlledMaskEditPrompt(input: {
   outputSize: { width: number; height: number };
   protectionContext: ProtectionContext;
   maskComponents: MaskComponent[];
+  placementAnchor?: MaskBoundingBox | null;
+  additivePlacement?: boolean;
   retryLevel?: number;
 }) {
-  const taskLine = maskTaskInstruction(input.taskMode, input.userPrompt);
+  const taskLine = maskTaskInstruction(input.taskMode, input.userPrompt, Boolean(input.additivePlacement));
   return [
     taskLine,
     "",
     input.retryLevel
       ? "Retry instruction: the previous attempt looked almost unchanged. Complete the requested edit in every masked region."
       : "",
+    input.additivePlacement
+      ? "Additive placement mode: treat the user's mask as a placement anchor and preferred area, not as the exact final object silhouette. First analyze the whole source image, then add a complete matching element near that anchor inside the expanded editable area."
+      : "",
+    input.additivePlacement ? placementAnchorPrompt(input.placementAnchor, input.outputSize, input.regionType, input.userPrompt) : "",
     "Generative fill rule: edit only the masked area. Treat the white mask as the user's selected region.",
     "Preserve the unmasked area exactly; it will be pasted back from the original image by the system.",
     "Align the new masked content with surrounding pixels: color, texture, lighting, perspective, grain, and edge continuity.",
     "Mask priority: if text, brand-like marks, logo-like marks, stains, objects, or decorations are inside the mask and the user asks to remove/clean them, remove them from the mask; do not protect or restore masked typography.",
     maskComponentPrompt(input.maskComponents, input.outputSize, input.taskMode),
-    maskRegionInstruction(input.regionType, input.taskMode),
+    maskRegionInstruction(input.regionType, input.taskMode, Boolean(input.additivePlacement)),
     maskEdgeInstruction(input.edgeBlend),
     `Output size must stay ${input.outputSize.width}x${input.outputSize.height}.`,
     buildMaskEditProtectionPrompt(input.protectionContext, input.taskMode),
@@ -1381,6 +1426,33 @@ function buildControlledMaskEditPrompt(input: {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function placementAnchorPrompt(anchor: MaskBoundingBox | null | undefined, target: { width: number; height: number }, regionType: MaskRegionType, userPrompt: string) {
+  if (!anchor) return "";
+  const centerX = ((anchor.left + anchor.right + 1) / 2) / Math.max(1, target.width);
+  const centerY = ((anchor.top + anchor.bottom + 1) / 2) / Math.max(1, target.height);
+  const widthPercent = (anchor.width / Math.max(1, target.width)) * 100;
+  const heightPercent = (anchor.height / Math.max(1, target.height)) * 100;
+  const areaPercent = ((anchor.width * anchor.height) / Math.max(1, target.width * target.height)) * 100;
+  const smallAnchor = areaPercent < 0.35 || Math.min(widthPercent, heightPercent) < 3;
+  const sizeHint = additivePlacementSizeHint(regionType, userPrompt);
+  return [
+    `Original user placement anchor before expansion: ${maskPositionLabel(centerX, centerY)}, center ${Math.round(centerX * 100)}% x ${Math.round(centerY * 100)}% of the canvas, anchor box about ${widthPercent.toFixed(1)}% x ${heightPercent.toFixed(1)}%.`,
+    smallAnchor
+      ? "The anchor is very small; use it as the intended center/nearby position, not as the desired final object size."
+      : "Use the anchor box as the user's intended placement area and keep the new element visually centered around it unless the request says otherwise.",
+    sizeHint,
+  ].filter(Boolean).join("\n");
+}
+
+function additivePlacementSizeHint(regionType: MaskRegionType, userPrompt: string) {
+  const text = userPrompt.toLowerCase();
+  if (/小|小号|一点|tiny|small/.test(text)) return "User asked for a small addition. Keep the new element compact but clearly visible.";
+  if (/大|大号|明显|突出|large|big|prominent/.test(text)) return "User asked for a prominent addition. Make it visibly clear while staying inside the expanded editable area.";
+  if (regionType === "product") return "Suggested default size: product/object additions should be clearly visible but not dominate the poster, roughly 16%-28% of the shorter canvas side when space allows.";
+  if (regionType === "decoration") return "Suggested default size: decoration/icon/sticker additions should stay compact, roughly 7%-14% of the shorter canvas side when space allows.";
+  return "Suggested default size: choose a natural medium size for the design context, roughly 10%-20% of the shorter canvas side when space allows.";
 }
 
 function maskComponentPrompt(components: MaskComponent[], target: { width: number; height: number }, mode: MaskTaskMode) {
@@ -1445,8 +1517,18 @@ function limitedProtectionItems<T>(items: T[] | undefined, predicate: (item: T) 
   return selected;
 }
 
-function maskTaskInstruction(mode: MaskTaskMode, userPrompt: string) {
+function maskTaskInstruction(mode: MaskTaskMode, userPrompt: string, additivePlacement = false) {
   const request = userPrompt.trim();
+  if (mode === "replace" && additivePlacement) {
+    return [
+      "Task: Local additive object placement.",
+      `Add the requested element near the user's selected position: ${request}.`,
+      "The final image must visibly contain the requested new element. A nearly unchanged result is a failed edit.",
+      "Use the original image as the design context. Choose suitable size, placement, perspective, visual weight, lighting, shadow direction, material, color temperature, and commercial design style.",
+      "Fit the complete new element inside the editable area; if the anchor is small, keep the addition compact but still clearly visible instead of cropping it or hiding it.",
+      "Do not invent brand text, fake labels, fake logos, or fake QR codes.",
+    ].join("\n");
+  }
   if (mode === "replace") {
     return [
       "Task: Local object replacement.",
@@ -1501,8 +1583,9 @@ function maskTaskInstruction(mode: MaskTaskMode, userPrompt: string) {
   ].join("\n");
 }
 
-function maskRegionInstruction(region: MaskRegionType, mode: MaskTaskMode) {
+function maskRegionInstruction(region: MaskRegionType, mode: MaskTaskMode, additivePlacement = false) {
   const common = "Region rule:";
+  if (additivePlacement && mode === "replace") return `${common} Adding the requested element inside the editable area is allowed even when the region type is uncertain. Use the region only as placement context; protect text, faces, logos, QR codes, products, and main subjects outside the mask.`;
   if (region === "background") return `${common} The mask is background. Repaint only texture, light, space, and gradient. Do not add text, logo, people, products, or main subject.`;
   if (region === "text") return `${common} The mask contains text. Use only the selected text task mode. Remove all masked text-like marks when this is a removal task. Do not invent text or render random characters.`;
   if (region === "face") return `${common} The mask touches a face. Preserve identity, facial structure, age, expression, hairstyle, and skin tone. Only minor cleanup or lighting enhancement is allowed.`;

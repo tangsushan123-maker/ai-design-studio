@@ -20,6 +20,7 @@ export type PngLayerExportLayer = {
   fileSizeBytes: number;
   hasAlpha: boolean;
   transparentPixelRatio: number;
+  opaquePixelRatio?: number;
 };
 
 export type PngLayerExportMode = "fast" | "ai_precise";
@@ -31,6 +32,17 @@ export type PngLayerExportResult = {
   layerCount: number;
   layers: PngLayerExportLayer[];
   durationMs: number;
+  capabilityStatus?: "ready" | "needs_review" | "blocked";
+  compositeUrl?: string;
+  reconstruction?: {
+    score: number;
+    label: string;
+    textCheck: string;
+    edgeCheck: string;
+  };
+  zipFileName?: string;
+  zipFileSizeBytes?: number;
+  zipUrl?: string;
   warnings?: string[];
   message: string;
 };

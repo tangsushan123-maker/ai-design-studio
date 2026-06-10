@@ -197,7 +197,7 @@ import {
   maskEditorInitialMaskUrl,
   resolveNodeRenderLevel,
 } from "@/components/workbench/workbench-node-ui";
-import { appendDataUrlToForm, appendImageToForm, imageFromSingleResponse, imageSourcePayloadForPngLayerExport, imagesFromResponse } from "@/components/workbench/workbench-image-requests";
+import { appendDataUrlToForm, appendImageToForm, imageFromSingleResponse, imageSourcePayloadForPngLayerExport, imagesFromResponse, pngLayerHintsForImage } from "@/components/workbench/workbench-image-requests";
 import { copyImageToClipboard, copyTextToClipboard } from "@/components/workbench/workbench-file-actions";
 import { readResponseErrorMessage, responseErrorMessage, withClientTimeout } from "@/components/workbench/workbench-response";
 import {
@@ -311,10 +311,29 @@ const workbenchHomeOpenStorageKey = "ai-design-workbench-home-open-v1";
 const canvasMinZoom = 0.18;
 const canvasMaxZoom = 4;
 const canvasFitMaxZoom = 1.15;
+const taskRunDiscoveryIntervalMs = 3500;
+const taskRunDiscoveryRecentMs = 30 * 60 * 1000;
+
+type ServerTaskRunDiscoveryOptions = {
+  discoveryOnly?: boolean;
+  canvasNodeIds?: string[];
+  recentWindowMs?: number;
+};
+
+function serverTaskRunMatchesDiscovery(run: ServerTaskRunRecord, options: ServerTaskRunDiscoveryOptions) {
+  if (!options.discoveryOnly) return true;
+  if (run.state === "active" || run.state === "waiting") return true;
+  const canvasNodeIds = new Set(options.canvasNodeIds || []);
+  if (run.nodeId && canvasNodeIds.has(run.nodeId)) return true;
+  const extended = run as ServerTaskRunRecord & { startedAt?: string };
+  const updatedAt = Date.parse(run.updatedAt || run.endedAt || extended.startedAt || "");
+  return Number.isFinite(updatedAt) && Date.now() - updatedAt <= (options.recentWindowMs || taskRunDiscoveryRecentMs);
+}
+
 function variantCountParam(value: unknown) {
   const numeric = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(numeric)) return 2;
-  return Math.min(6, Math.max(2, Math.round(numeric)));
+  return Math.min(6, Math.max(1, Math.round(numeric)));
 }
 
 function supportsComposerVariantCount(kind: NodeKind) {
@@ -1125,6 +1144,14 @@ function NodeWorkflowWorkbench({
       .map((task) => task.nodeId)),
     [projectId, tasks],
   );
+  const activeCanvasTaskNodeIdsKey = useMemo(
+    () => nodes
+      .filter((node) => isActiveNodeStatus(node.data.status))
+      .map((node) => node.id)
+      .sort()
+      .join(","),
+    [nodes],
+  );
 
   useEffect(() => {
     if (!runningNodeIds.size) return;
@@ -1152,6 +1179,32 @@ function NodeWorkflowWorkbench({
     // This effect only mirrors active task state onto nodes; cache writer reads refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, runningNodeIds, setNodes, tasks]);
+
+  useEffect(() => {
+    if (!projectBootReady || !projectId) return;
+    const shouldDiscoverServerTasks = Boolean(activeCanvasTaskNodeIdsKey || (rightPanelOpen && !backendTaskSyncKey));
+    if (!shouldDiscoverServerTasks) return;
+    const canvasNodeIds = activeCanvasTaskNodeIdsKey.split(",").filter(Boolean);
+    let disposed = false;
+
+    async function discoverBackendTaskRuns() {
+      if (disposed || activeProjectIdRef.current !== projectId) return;
+      await mergeServerTaskRunsIntoProject(projectId, projectName, {
+        discoveryOnly: true,
+        canvasNodeIds,
+        recentWindowMs: taskRunDiscoveryRecentMs,
+      });
+    }
+
+    void discoverBackendTaskRuns();
+    const timer = window.setInterval(discoverBackendTaskRuns, taskRunDiscoveryIntervalMs);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+    // This discovers server-side task runs even when the browser task list is empty after restore/cache drift.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCanvasTaskNodeIdsKey, backendTaskSyncKey, projectBootReady, projectId, projectName, rightPanelOpen]);
 
   useEffect(() => {
     if (!backendTaskSyncKey) return;
@@ -3173,15 +3226,16 @@ function NodeWorkflowWorkbench({
     return data.runs?.find((run) => run.requestId === requestId) || null;
   }
 
-  async function mergeServerTaskRunsIntoProject(taskProjectId: string, taskProjectName: string) {
+  async function mergeServerTaskRunsIntoProject(taskProjectId: string, taskProjectName: string, options: ServerTaskRunDiscoveryOptions = {}) {
     if (!taskProjectId) return;
     const params = new URLSearchParams({ projectId: taskProjectId });
     const response = await fetch(`/api/task-runs?${params.toString()}`).catch(() => null);
     if (!response?.ok) return;
     const data = (await response.json().catch(() => ({}))) as { runs?: ServerTaskRunRecord[] };
+    const candidateRuns = (data.runs || []).filter((run) => serverTaskRunMatchesDiscovery(run, options));
     const serverTasks = filterDismissedProjectTasks(
       taskProjectId,
-      restoreProjectTasks((data.runs || [])
+      restoreProjectTasks(candidateRuns
         .map((run) => taskRecordFromServerRun(run, taskProjectId, taskProjectName))
         .filter((task): task is TaskRecord => Boolean(task))),
     );
@@ -3358,6 +3412,7 @@ function NodeWorkflowWorkbench({
     const params = node.data.params;
     const basePrompt = stringParam(params.prompt);
     const references = resolveTextReferenceInputs(node);
+    const documentFiles = textToImageDocumentFiles(params.documentFiles);
     const requestRatio = ratioParam(params.aspectRatio);
     const custom = customSize(params);
     const prompt = basePrompt.trim();
@@ -3368,7 +3423,7 @@ function NodeWorkflowWorkbench({
     const shouldAttachProjectContext = projectMaterialUsageActive;
     const modelPrompt = shouldAttachProjectContext ? projectAwareRequestText(prompt) : prompt;
     const brandReferences = shouldAttachProjectContext ? resolveSchemeDecisionBrandReferenceAssets(currentProjectBrandAssets()) : [];
-    if (brandReferences.length || references.items.length || favoriteStyleReferences.length) {
+    if (brandReferences.length || references.items.length || favoriteStyleReferences.length || documentFiles.length) {
       const formData = new FormData();
       formData.append("prompt", [modelPrompt, favoriteStylePrompt].filter(Boolean).join("\n\n"));
       formData.append("adType", "通用设计");
@@ -3394,6 +3449,7 @@ function NodeWorkflowWorkbench({
       ]));
       formData.append("textMode", stringParam(params.textMode) || "ai_text_preview");
       appendTextToImageCompositionSettings(formData, params);
+      appendTextDocumentReferences(formData, documentFiles);
       formData.append("protectionContext", JSON.stringify(buildProductionProtectionContext("text_to_image", references.items.map((item) => item.image), node, modelPrompt)));
       await appendTextReferenceImages(formData, references.items);
       await appendFavoriteStyleReferenceAssets(formData, favoriteStyleReferences);
@@ -3685,6 +3741,7 @@ function NodeWorkflowWorkbench({
         ...taskTracePayload(taskId, node, "png_layers"),
         ...sourcePayload,
         fileName: image.fileName || image.id || "design.png",
+        layers: pngLayerHintsForImage(image),
         mode,
         imageModel: activeImageModelForNode(node, stringParam(params.model)),
         model: activeImageModelForNode(node, stringParam(params.model)),
@@ -3715,22 +3772,22 @@ function NodeWorkflowWorkbench({
       fileSizeBytes: layerFileSizeBytes,
       projectId,
       nodeOperation: "png_layers",
-      materialType: "PNG三层",
+      materialType: "PNG分层",
       targetSize: `${result.canvasWidth}×${result.canvasHeight}`,
       pngLayerExport: result,
       qualityCheck: {
-        status: result.warnings?.length ? "composition_risk" : "passed",
-        label: result.warnings?.length ? `${result.layerCount} 层 PNG 已生成，${result.warnings.length} 层兜底` : `${result.layerCount} 层 PNG 已生成`,
+        status: result.capabilityStatus === "blocked" || result.reconstruction?.label === "分层不完整" ? "composition_risk" : result.warnings?.length ? "composition_risk" : "passed",
+        label: result.reconstruction?.label === "分层不完整" ? `${result.layerCount} 层 PNG 已保存，分层不完整` : result.warnings?.length ? `${result.layerCount} 层 PNG 已生成，${result.warnings.length} 条复查` : `${result.layerCount} 层 PNG 已生成`,
         issues: result.warnings || [],
-        actions: ["预览三层", "按需下载单层 PNG"],
+        actions: ["预览分层", "按需下载单层 PNG", "打包下载 ZIP"],
         width: result.canvasWidth,
         height: result.canvasHeight,
         targetWidth: result.canvasWidth,
         targetHeight: result.canvasHeight,
         format: "png",
         fileSizeBytes: layerFileSizeBytes,
-        deliverability: "ready",
-        deliverabilityLabel: "三层 PNG 可单独下载",
+        deliverability: result.capabilityStatus === "blocked" || result.reconstruction?.label === "分层不完整" ? "needs_review" : "ready",
+        deliverabilityLabel: result.reconstruction?.label === "分层不完整" ? "分层不完整，需复查" : `分层 PNG 可交付 · 叠加还原度 ${result.reconstruction?.score ?? "待复查"}%`,
       },
     } satisfies ImageAsset];
   }
@@ -3817,6 +3874,16 @@ function NodeWorkflowWorkbench({
     for (const [index, item] of references.entries()) {
       await appendImageToForm(formData, item.image, `referenceImage_${index + 1}`, `referenceImageUrl_${index + 1}`, item.image.fileName || `reference-${index + 1}.png`);
     }
+  }
+
+  function appendTextDocumentReferences(formData: FormData, files: File[]) {
+    files.slice(0, 3).forEach((file, index) => {
+      formData.append(`documentReference_${index + 1}`, file);
+    });
+  }
+
+  function textToImageDocumentFiles(value: unknown): File[] {
+    return Array.isArray(value) ? value.filter((item): item is File => item instanceof File) : [];
   }
 
   function focusCanvasOnNodes(nodeIds: string[]) {
@@ -3922,7 +3989,7 @@ function NodeWorkflowWorkbench({
   }
 
   function shouldCreateSeparateResultNodes(kind: NodeKind, outputCount = 1) {
-    return outputCount > 1 || kind === "text_to_image" || kind === "mask_edit" || kind === "output" || kind === "png_layers";
+    return outputCount > 1 || kind === "text_to_image" || kind === "mask_edit" || kind === "design_optimize" || kind === "output" || kind === "png_layers";
   }
 
   function restoreTaskOutputNodes(task: Pick<TaskRecord, "id" | "requestId" | "nodeId" | "nodeName" | "type">, images: ImageAsset[], options: { focus?: boolean; sourceStatus?: NodeStatus } = {}) {
@@ -5573,11 +5640,11 @@ function NodeWorkflowWorkbench({
       {canvasFocusMode ? null : (
         <aside
           className={`apple-sidebar z-20 flex shrink-0 flex-col items-center gap-1.5 px-1.5 py-3 transition-[width] duration-200 ${
-            leftRailOpen ? "w-[104px]" : "w-[54px]"
+            leftRailOpen ? "w-[94px]" : "w-[48px]"
           }`}
         >
           <button
-            className="apple-button mb-1.5 flex size-8 items-center justify-center rounded-full text-white/66"
+            className="apple-button mb-1 flex size-8 items-center justify-center rounded-full text-white/58"
             onClick={() => setLeftRailOpen((value) => !value)}
             title={leftRailOpen ? "收起左栏" : "展开左栏"}
             type="button"
@@ -5585,7 +5652,7 @@ function NodeWorkflowWorkbench({
             <ChevronRight className={`size-4 transition ${leftRailOpen ? "rotate-180" : ""}`} />
           </button>
           <button
-            className={`apple-button-primary mb-0.5 flex items-center justify-center gap-1.5 rounded-full px-2 text-[#07121f] ${
+            className={`apple-button-primary mb-1 flex items-center justify-center gap-1.5 rounded-full px-2 text-[#07121f] shadow-[0_12px_34px_rgba(116,227,197,0.18)] ${
               leftRailOpen ? "h-9 w-full" : "size-9"
             }`}
             onClick={() => setNodeMenuOpen((value) => !value)}
@@ -5753,7 +5820,7 @@ function NodeWorkflowWorkbench({
 
         {canvasFocusMode ? null : (
         <header className="pointer-events-none absolute left-4 right-4 top-4 z-20 flex items-start justify-between gap-3">
-          <div className="pointer-events-auto w-[min(184px,calc(100vw-220px))]">
+          <div className="pointer-events-auto w-[min(214px,calc(100vw-220px))]">
             <div
               className="apple-panel flex h-9 items-center gap-1.5 rounded-full px-2.5"
               title={`${projectName} · ${saveStateLabel(projectSaveState, Boolean(saveQueuedRef.current))} · ${imageModelStatus.label} · 节点 ${nodes.length} · 图片 ${projectImageCount}${lastProjectJsonBytes ? ` · 项目 ${formatFileSize(lastProjectJsonBytes)} / 建议低于 ${formatFileSize(projectCapacityJsonWarningBytes)}` : ""}${lastSaveDurationMs ? ` · 保存 ${formatDuration(lastSaveDurationMs)}` : ""}`}
@@ -5810,17 +5877,18 @@ function NodeWorkflowWorkbench({
               </div>
             ) : null}
             </div>
-            <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
-            <button
-              className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium text-[#ffb4a8] disabled:opacity-45"
-              disabled={!nodes.length}
-              onClick={clearCanvas}
-              title={nodes.length ? "清空当前画布，保留任务记录和图片库文件" : "当前画布为空"}
-              type="button"
-            >
-              <Trash2 className="size-3.5" />
-              清空画布
-            </button>
+            <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-black/12 p-1 shadow-[0_14px_42px_rgba(0,0,0,0.2)] backdrop-blur-2xl">
+            {nodes.length ? (
+              <button
+                className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium text-[#ffb4a8]/72"
+                onClick={clearCanvas}
+                title="清空当前画布，保留任务记录和图片库文件"
+                type="button"
+              >
+                <Trash2 className="size-3.5" />
+                清空画布
+              </button>
+            ) : null}
             {projectKind === "temporary" ? (
               <button
                 className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium"
@@ -5842,7 +5910,7 @@ function NodeWorkflowWorkbench({
               </button>
             ) : null}
             <button
-              className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium"
+              className="apple-button-primary flex h-8 shrink-0 items-center gap-1.5 px-3.5 text-[11px] font-semibold"
               disabled={projectSaveState === "saving"}
               onClick={() => void saveProject({ manual: true })}
               type="button"
@@ -5853,18 +5921,56 @@ function NodeWorkflowWorkbench({
             <button
               className="apple-button flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-[11px] font-medium"
               onClick={() => setRightPanelOpen((value) => !value)}
+              title={rightPanelOpen ? "收起任务和图库侧栏" : "打开任务和图库侧栏"}
               type="button"
             >
               <Folder className="size-3.5" />
-              {rightPanelOpen ? "收起" : "侧栏"}
+              {rightPanelOpen ? "收起" : "任务图库"}
             </button>
           </div>
         </header>
         )}
 
+        {!canvasFocusMode && !nodes.length ? (
+          <div className="pointer-events-none absolute inset-x-0 top-[22%] z-10 flex justify-center px-4">
+            <div className="flex max-w-[520px] flex-col items-center gap-3 text-center">
+              <div className="text-[13px] font-semibold text-white/50">开始设计</div>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  className="apple-button-primary pointer-events-auto flex h-9 items-center gap-1.5 px-3.5 text-[12px] font-semibold"
+                  onClick={focusComposerInput}
+                  type="button"
+                >
+                  <MessageCircle className="size-3.5" />
+                  输入需求
+                </button>
+                <button
+                  className="apple-button pointer-events-auto flex h-9 items-center gap-1.5 px-3 text-[12px] font-semibold text-white/68"
+                  onClick={() => setNodeMenuOpen((value) => !value)}
+                  type="button"
+                >
+                  <Plus className="size-3.5" />
+                  添加节点
+                </button>
+                <button
+                  className="apple-button pointer-events-auto flex h-9 items-center gap-1.5 px-3 text-[12px] font-semibold text-white/68"
+                  onClick={() => {
+                    setAssetPanelOpen(true);
+                    setProjectPanelOpen(false);
+                  }}
+                  type="button"
+                >
+                  <Images className="size-3.5" />
+                  素材库
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {nodeMenuOpen && !isPerformanceMode ? (
           <NodeMenu
-            x={leftRailOpen ? 126 : 70}
+            x={leftRailOpen ? 114 : 62}
             y={82}
             onClose={() => setNodeMenuOpen(false)}
             onSelect={(type) => {

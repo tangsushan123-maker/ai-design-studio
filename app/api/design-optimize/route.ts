@@ -212,16 +212,22 @@ function buildDesignOptimizationPrompt(input: {
   variant: DesignOptimizationVariant;
 }) {
   return [
-    "任务：设计优化。请自行分析输入图并直接输出优化后的最终图片。",
+    "任务：设计优化。请直接根据输入图生成优化后的最终设计图。",
+    "你必须先在内部完整分析输入图：行业、用途、核心文案、主视觉、人物/产品、版式结构、信息层级、颜色、背景、留白、视觉焦点和当前问题。不要把分析文字画到图里。",
     input.sourcePrompt ? `用户原始要求：${input.sourcePrompt}` : "用户没有额外要求，请根据输入图片自行分析并优化。",
     `目标画布：${input.outputSize.width}×${input.outputSize.height}，保持原图比例。`,
     `优化强度：${designStrengthLabel(input.strength)}。`,
-    `当前方案：${input.variant.branchLabel}。${input.variant.focus}`,
-    "模型分析参考：",
+    `当前方案：${input.variant.branchLabel}。`,
+    input.variant.focus,
+    "执行要求：",
+    "保留原图核心主题、真实人物/产品/品牌识别度和主要可见文案含义；不要编造电话、地址、二维码、Logo、医生/机构资质或未知真实信息。",
+    "根据画面本身进行专业设计修改：优化标题层级、主体位置、卖点分组、留白、安全边距、背景空间、色彩对比、光影质感和商业完成度。",
+    "不要只是高清修复、滤镜、换颜色或轻微锐化；必须让优化后的画面看起来经过专业设计调整。",
+    "不要输出对比图、评分卡、分析说明页、提示词文字或任何软件界面，只输出最终成品图。",
+    "系统辅助分析，仅作弱参考，必须以输入图片实际内容为准：",
     `行业/类型/场景：${input.analysis.industry} / ${input.analysis.design_type} / ${input.analysis.scene}`,
     `原稿问题：${(input.analysis.diagnosis || []).join(" | ") || "请根据图片自行判断"}`,
     `优化方向：${(input.analysis.strategy || []).join(" | ") || "请根据图片自行优化版式、层级、质感和可读性"}`,
-    "只输出优化后的最终设计图，不要画出对比图、评分卡、分析文本或说明页。",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -233,9 +239,9 @@ function designOptimizationVariants(): DesignOptimizationVariant[] {
       branchLabel: "方案 1 · 专业设计优化",
       mode: "设计优化 · 专业设计修改",
       focus: [
-        "A direction: professional design modification.",
-        "Improve the design like a senior commercial designer: cleaner hierarchy, stronger title dominance, better color contrast, more premium lighting/material texture, better subject/product polish, more mature visual details.",
-        "Keep the original composition logic recognizable, but make the final artwork clearly more professional and commercially polished.",
+        "方案 1 执行方向：专业设计优化。",
+        "保持原图大结构和主体识别度，让客户一眼看出是同一张设计的专业升级版。",
+        "重点优化标题主次、文字间距、信息分组、对齐、留白、色彩对比、主体光影、边缘质感和商业高级感。",
       ].join(" "),
     },
     {
@@ -244,9 +250,9 @@ function designOptimizationVariants(): DesignOptimizationVariant[] {
       branchLabel: "方案 2 · 画面排版设计",
       mode: "设计优化 · 画面排版设计",
       focus: [
-        "B direction: layout and composition redesign.",
-        "Prioritize picture structure, layout rhythm, text grouping, visual flow, margins, safe zones, subject placement, and information block arrangement.",
-        "This variant must not just change colors. Rebuild the page layout more visibly while preserving the same core information, subject, brand recognition, and industry.",
+        "方案 2 执行方向：画面排版设计。",
+        "在保留核心内容、主体和行业识别的前提下，更明显地重新组织版式。",
+        "重点调整视觉动线、主体位置、标题区、卖点区、背景空间、信息块节奏和安全边距；不能只是换颜色。",
       ].join(" "),
     },
   ];
@@ -377,7 +383,7 @@ async function createDesignOptimizationImage(input: {
       quality: input.quality === "standard" ? "medium" : "high",
       output_format: "png",
       background: "opaque",
-      ...(supportsConfigurableImageInputFidelity(input.imageModel) ? { input_fidelity: input.strength === "conservative" ? "high" as const : "low" as const } : {}),
+      ...(supportsConfigurableImageInputFidelity(input.imageModel) ? { input_fidelity: designOptimizationInputFidelity(input.strength, input.variant) } : {}),
       n: 1,
     }, imageRequestOptions()),
   );
@@ -386,13 +392,19 @@ async function createDesignOptimizationImage(input: {
   return item;
 }
 
+function designOptimizationInputFidelity(strength: DesignOptimizationStrength, variant: DesignOptimizationVariant) {
+  if (strength === "conservative") return "high" as const;
+  if (variant.key === "professional" && strength === "professional") return "high" as const;
+  return "low" as const;
+}
+
 function buildBasePrompt() {
   return [
     "Professional design optimization task.",
     "Improve an existing finished design while preserving its core information, main subject, brand recognition, and intended communication goal.",
     "Optimize visual hierarchy, typography spacing, alignment, margins, color harmony, focal point, readability, subject texture, lighting, and conversion path.",
     "This is not image enhancement, not upscaling, and not a subtle retouch. The optimized design must be visibly better and clearly different in layout quality, hierarchy, spacing, and commercial polish.",
-    "Use the design director analysis below as the execution plan. The image model must implement those optimization suggestions directly.",
+    "First analyze the input image internally, then execute a professional design modification directly in the final image.",
     "Keep the original visible copy meaning, brand/person/product identity, and industry, but redraw the design as a refined commercial layout when strength allows it.",
     "If the original draft is already clean, still improve composition, title dominance, information grouping, contrast, breathing room, background depth, and visual focus.",
     "The result should look like a mature commercial design refinement, not a random redesign and not simple upscaling.",

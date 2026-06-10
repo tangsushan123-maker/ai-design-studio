@@ -15,6 +15,7 @@ import {
 } from "@/components/workbench/workbench-composer-helpers";
 import { imageModelProductHint, preferredAutoImageModelId } from "@/components/workbench/workbench-models";
 import { RatioGlyph } from "@/components/workbench/workbench-node-ui";
+import { AutoResizeTextarea } from "@/components/workbench/workbench-small-ui";
 import { imageKey } from "@/components/workbench/workbench-image-collection";
 import { adaptiveRatioOptions, firstSupportedImageFile, ratioOptionLabel, stringParam } from "@/components/workbench/workbench-utils";
 import type { BrandAssetSummary, BrandAssetUsage, FlowNode, ImageAsset } from "@/components/workbench/workbench-types";
@@ -80,6 +81,8 @@ export function ChatComposer({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const menuAreaRef = useRef<HTMLDivElement | null>(null);
+  const composerPanelRef = useRef<HTMLDivElement | null>(null);
+  const initialFocusTickRef = useRef(focusTick);
   const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [ratioMenuOpen, setRatioMenuOpen] = useState(false);
@@ -151,13 +154,18 @@ export function ChatComposer({
       : selectedPromptNode
         ? composerHelper || "请补齐这个节点需要的输入"
         : "请输入提示词";
-  const variantOptions = [2, 3, 4, 5, 6];
+  const variantOptions = [1, 2, 3, 4, 5, 6];
   const anyMenuOpen = uploadMenuOpen || modelMenuOpen || ratioMenuOpen || qualityMenuOpen || variantMenuOpen || brandMenuOpen;
   const apiSetupMessage = !hasKey
     ? "还没有配置 API Key，配置后才能生成图片。"
     : !effectiveModel
       ? "Key 已配置，但还没有通过测试的图片模型。"
       : "";
+  const compactComposerLabel = displayPrompt.trim()
+    ? displayPrompt.trim()
+    : selectedPromptNode
+      ? composerTitle
+      : "输入需求";
 
   function closeMenus() {
     setUploadMenuOpen(false);
@@ -171,6 +179,15 @@ export function ChatComposer({
   function expandComposer() {
     setComposerExpanded(true);
     window.setTimeout(() => textareaRef.current?.focus(), 30);
+  }
+
+  function collapseComposerWhenIdle() {
+    window.setTimeout(() => {
+      const activeElement = document.activeElement;
+      if (activeElement && composerPanelRef.current?.contains(activeElement)) return;
+      if (uploadMenuOpen || modelMenuOpen || ratioMenuOpen || qualityMenuOpen || variantMenuOpen || brandMenuOpen) return;
+      setComposerExpanded(false);
+    }, 180);
   }
 
   useEffect(() => {
@@ -191,6 +208,17 @@ export function ChatComposer({
   }, [anyMenuOpen]);
 
   useEffect(() => {
+    if (!composerExpanded || anyMenuOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      if (event.target instanceof globalThis.Node && composerPanelRef.current?.contains(event.target)) return;
+      setComposerExpanded(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [anyMenuOpen, composerExpanded]);
+
+  useEffect(() => {
+    if (focusTick === initialFocusTickRef.current) return;
     const timer = window.setTimeout(() => {
       setComposerExpanded(true);
     }, 0);
@@ -223,23 +251,28 @@ export function ChatComposer({
     <div className="pointer-events-none absolute bottom-3 left-1/2 z-30 w-[min(920px,calc(100vw-24px))] -translate-x-1/2 px-2">
       {!composerExpanded && !anyMenuOpen ? (
         <button
-          className="apple-panel-strong pointer-events-auto mx-auto flex h-12 max-w-[min(520px,calc(100vw-32px))] items-center gap-2 rounded-full px-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.34)]"
+          className="apple-panel-strong pointer-events-auto mx-auto flex h-12 max-w-[min(456px,calc(100vw-32px))] items-center gap-1.5 rounded-full px-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.32)]"
           onClick={expandComposer}
           type="button"
         >
           <Plus className="size-4 shrink-0 text-white/62" />
           <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-white/74">
-            输入需求，生成设计方案
+            {compactComposerLabel}
           </span>
-          <span className="apple-pill hidden shrink-0 px-2 py-1 text-[11px] text-white/58 sm:inline">{ratioOptionLabel(ratio)}</span>
-          <span className="apple-pill shrink-0 px-2 py-1 text-[11px] text-white/58">{variantCount}方案</span>
+          <span className="apple-pill hidden shrink-0 px-2 py-1 text-[11px] font-semibold text-white/52 sm:inline">
+            {ratio === "auto" ? "尺寸自适应" : ratioOptionLabel(ratio)}
+          </span>
+          <span className="apple-pill shrink-0 px-2 py-1 text-[11px] font-semibold text-white/52">{variantCount} 个方案</span>
           <span className="apple-button-primary flex size-8 shrink-0 items-center justify-center">
             <ArrowUp className="size-4" />
           </span>
         </button>
       ) : (
       <div
+        ref={composerPanelRef}
         className="apple-panel-strong pointer-events-auto relative overflow-visible"
+        onBlur={collapseComposerWhenIdle}
+        onFocus={() => setComposerExpanded(true)}
         onDragOver={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -268,10 +301,11 @@ export function ChatComposer({
               收起
             </button>
           </div>
-          <textarea
+          <AutoResizeTextarea
             ref={textareaRef}
             data-composer-input="true"
-            className="mt-1.5 max-h-[96px] min-h-[42px] w-full resize-none bg-transparent text-[14px] leading-5 text-white/92 outline-none placeholder:text-white/34 focus-visible:shadow-none"
+            className="mt-1.5 min-h-[42px] w-full resize-none bg-transparent text-[14px] leading-5 text-white/92 outline-none placeholder:text-white/34 focus-visible:shadow-none"
+            maxHeight={360}
             onChange={(event) => onPromptChange(event.target.value)}
             onKeyDown={(event) => {
               if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;

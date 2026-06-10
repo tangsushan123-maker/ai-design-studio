@@ -63,7 +63,7 @@ export const quickActions: Array<{ label: string; description: string; group: st
   { label: "扩图补画", description: "补全边缘，扩成新画幅", group: "换尺寸/扩图", type: "outpaint", handle: "image" },
   { label: "局部修改", description: "涂抹哪里就改哪里", group: "局部处理", type: "mask_edit", handle: "image" },
   { label: "高清/画质增强", description: "修文字、增强质感到 2K/4K", group: "交付处理", type: "hd_redraw", handle: "image" },
-  { label: "PNG 分层交付", description: "拆背景、文字、人物三层", group: "交付处理", type: "png_layers", handle: "image" },
+  { label: "PNG 分层交付", description: "拆背景、文字、人物，便于 PS 微调", group: "交付处理", type: "png_layers", handle: "image" },
   { label: "两图合成", description: "把另一个主体放进场景", group: "更多", type: "fuse_images", handle: "imageA" },
 ];
 

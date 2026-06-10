@@ -14,6 +14,7 @@ export const maskQuickActions: Array<{
   { label: "去掉补背景", mode: "cleanup", prompt: "去掉这里并补全背景", protection: "strict", region: "auto", edge: "weak" },
   { label: "去掉文字", mode: "text_remove", prompt: "去掉文字并补全背景", protection: "strict", region: "text", edge: "weak" },
   { label: "替换成新内容", mode: "replace", prompt: "替换成新内容：", protection: "standard", region: "auto", edge: "standard" },
+  { label: "添加元素", mode: "replace", prompt: "在涂抹位置附近添加：", protection: "standard", region: "auto", edge: "standard" },
   { label: "局部高清修复", mode: "enhance", prompt: "局部高清修复，提升清晰度和细节，不改变内容", protection: "strict", edge: "weak" },
   { label: "局部颜色调整", mode: "enhance", prompt: "只调整涂抹区域的颜色、明度、饱和度和色温", protection: "strict", edge: "weak" },
   { label: "局部换背景", mode: "replace", prompt: "把涂抹区域换成新的背景，并与周围自然融合", protection: "standard", region: "background", edge: "standard" },
@@ -62,8 +63,10 @@ export function inferSimpleMaskEditIntent(
   const isFaceArea = includesAny([/人脸|脸|五官|表情|头像/]);
   const isProductArea = includesAny([/产品|商品|包装|瓶|盒|设备|器械/]);
   const isBackgroundArea = includesAny([/背景|天空|墙面|地面|蓝天|场景/]);
+  const isDecorationArea = includesAny([/图标|装饰|贴纸|标签|按钮|角标|badge|icon|sticker/]);
   const asksRemove = includesAny([/去掉|去除|删除|移除|清除|抹掉|擦掉|不要|补全背景|去水印|去杂物|remove|delete|clean/]);
   const asksReplace = includesAny([/换成|替换|改成|变成|换背景|replace|change into/]);
+  const asksAdd = includesAny([/添加|新增|加上|加入|放上|放入|摆上|插入|贴上|add|insert|place/]);
   const asksTextReplace = isTextArea && includesAny([/替换文字|文字改成|改成.*字|换成.*字|写成|换文案/]);
   const asksEnhance = includesAny([/高清|清晰|修复|锐化|增强|质感|光影|高光|阴影|细节|去噪|enhance|repair/]);
   const asksColor = includesAny([/颜色|调色|变色|饱和度|明度|色温|蓝色|红色|绿色|黑色|白色|黄色|紫色|color/]);
@@ -76,11 +79,12 @@ export function inferSimpleMaskEditIntent(
   else if (isFaceArea) regionType = "face";
   else if (isProductArea) regionType = "product";
   else if (isBackgroundArea) regionType = "background";
+  else if (isDecorationArea) regionType = "decoration";
 
   let taskMode = fallback.taskMode ? maskEditTaskModeParam(fallback.taskMode) : "cleanup";
   if (asksTextReplace) taskMode = "text_replace";
   else if (isTextArea && asksRemove) taskMode = "text_remove";
-  else if (asksReplace) taskMode = "replace";
+  else if (asksReplace || asksAdd) taskMode = "replace";
   else if (asksEnhance || asksColor) taskMode = "enhance";
   else if (asksStyleBlend) taskMode = "style_blend";
   else if (asksRemove) taskMode = "cleanup";

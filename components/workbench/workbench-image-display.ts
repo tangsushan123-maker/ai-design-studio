@@ -52,6 +52,11 @@ export function pngLayerPreviewImage(layer: PngLayerExportLayer) {
 export function pngLayerDisplayName(layer: Pick<PngLayerExportLayer, "filename" | "kind" | "name">) {
   if (layer.kind === "background" || layer.filename.includes("background")) return "背景层";
   if (layer.kind === "text" || layer.filename.includes("text")) return "文字层";
-  if (layer.kind === "person" || layer.kind === "subject" || layer.filename.includes("person") || layer.filename.includes("subject")) return "人物层";
+  if (layer.kind === "subject" || layer.filename.includes("subject")) return "主体层";
+  if (layer.kind === "person_only" || layer.filename.includes("person_only")) return "单独人物层";
+  if (layer.kind === "person" || layer.filename.includes("person")) return "人物层";
+  if (layer.kind === "product" || layer.filename.includes("product")) return "产品层";
+  if (layer.kind === "main_visual" || layer.filename.includes("main_visual")) return "图片主视觉层";
+  if (layer.kind === "auxiliary" || layer.filename.includes("auxiliary")) return "辅助元素层";
   return layer.name || layer.filename;
 }

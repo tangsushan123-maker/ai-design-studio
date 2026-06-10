@@ -31,7 +31,7 @@ export function taskProgressLabel(task: TaskRecord, stage: NonNullable<TaskRecor
     const kind = taskKindFromLabel(task.type);
     if (kind === "upscale_4k") return "AI 画质增强 → 原比例 2K/4K 输出 → 文字/Logo保护 → 质检，通常 2-7 分钟";
     if (kind === "hd_redraw") return "官方 GPT Image 高保真编辑 → 原生高清输出 → 质检，通常 2-7 分钟；复杂图会更久";
-    if (kind === "png_layers") return "AI 正在拆背景、文字、人物三层，通常 2-6 分钟；完成后可预览并单独下载";
+    if (kind === "png_layers") return "AI 正在按 PS 交付逻辑拆分背景、文字、人物 3 层，通常 2-5 分钟；完成后可预览并单独下载";
     if (kind === "reference_remake") return "AI 正在分析参考图并重制高清设计，通常 2-6 分钟；精准模式会再重建真实文字";
     if (kind === "design_optimize") return "AI 正在识别行业与版式问题，并生成优化后设计，通常 2-6 分钟；完成后可前后对比";
     if (kind === "resize" || kind === "outpaint") return "正在按目标比例重排，通常 5-12 分钟；完成后会核验是否裁切";
@@ -80,7 +80,7 @@ export function outputNodeTitle(image: ImageAsset, index: number) {
   if (image.nodeOperation === "upscale_4k") return "画质增强结果";
   if (image.nodeOperation === "reference_remake" || image.mode?.includes("参考图重制")) return "参考图重制结果";
   if (image.nodeOperation === "design_optimize" || image.mode?.includes("设计优化")) return "设计优化结果";
-  if (image.nodeOperation === "png_layers" || image.pngLayerExport) return "PNG三层";
+  if (image.nodeOperation === "png_layers" || image.pngLayerExport) return "PNG分层";
   return `方案${chineseNumber(image.variant || index + 1)}`;
 }
 
@@ -91,7 +91,7 @@ export function imageNodeTitle(image: ImageAsset, fallback: string) {
   if (image.nodeOperation === "upscale_4k") return "画质增强结果";
   if (image.nodeOperation === "reference_remake" || image.mode?.includes("参考图重制")) return "参考图重制结果";
   if (image.nodeOperation === "design_optimize" || image.mode?.includes("设计优化")) return "设计优化结果";
-  if (image.nodeOperation === "png_layers" || image.pngLayerExport) return "PNG三层";
+  if (image.nodeOperation === "png_layers" || image.pngLayerExport) return "PNG分层";
   const variant = image.variant || variantNumberFromLabel(image.branchLabel || fallback);
   return variant ? `方案${chineseNumber(variant)}` : fallback;
 }

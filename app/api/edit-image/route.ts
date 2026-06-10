@@ -760,7 +760,7 @@ function editVariantDirection(index: number) {
 function normalizeVariantCount(value: unknown) {
   const numeric = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(numeric)) return 2;
-  return Math.min(6, Math.max(2, Math.round(numeric)));
+  return Math.min(6, Math.max(1, Math.round(numeric)));
 }
 
 function buildEditModelNativeSizeFallbackPrompt(prompt: string, ratioText: string, target: PixelSize) {

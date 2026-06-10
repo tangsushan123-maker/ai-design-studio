@@ -71,6 +71,7 @@ type ImageManagerNode<TImage extends ImageManagerImage> = {
 };
 
 type ImageManagerFilter = "全部" | "收藏" | "回收站";
+type ImageManagerViewMode = "large" | "compact";
 
 const imageManagerFilters: ImageManagerFilter[] = ["全部", "收藏", "回收站"];
 
@@ -120,6 +121,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
   onToggleFavorite: (image: TImage) => void | Promise<unknown>;
 }) {
   const [filter, setFilter] = useState<ImageManagerFilter>("全部");
+  const [viewMode, setViewMode] = useState<ImageManagerViewMode>("compact");
   const [query, setQuery] = useState("");
   const [copyingKey, setCopyingKey] = useState("");
   const [favoritingKey, setFavoritingKey] = useState("");
@@ -293,27 +295,47 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
 
   return (
     <div className="space-y-3">
-      <div className="apple-panel sticky top-0 z-10 rounded-[18px] p-2">
-        <div className="mb-2 flex items-center justify-between gap-2 px-1">
-          <div className="text-[13px] font-semibold text-white/82">项目图片</div>
-          <div className="apple-count-badge px-2 py-1 text-[11px]">{filteredRows.length}/{managedRows.length}</div>
+      <div className="apple-panel sticky top-0 z-10 rounded-[18px] p-2.5">
+        <div className="mb-2 flex items-start justify-between gap-2 px-0.5">
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-white/86">项目图片</div>
+            <div className="mt-0.5 text-[11px] leading-4 text-white/42">收藏图需单独删除，回收站可彻底删除本地文件。</div>
+          </div>
+          <div className="apple-count-badge shrink-0 px-2 py-1 text-[11px]">{filteredRows.length}/{managedRows.length}</div>
         </div>
-        <div className="grid grid-cols-3 gap-1">
-          {imageManagerFilters.map((item) => (
-            <button
-              className={`apple-segment min-w-0 truncate px-1.5 py-1.5 text-[11px] transition ${filter === item ? "apple-segment-active" : ""}`}
-              key={item}
-              onClick={() => {
-                setFilter(item);
-                clearSelected();
-              }}
-              type="button"
-            >
-              {item}
-            </button>
-          ))}
+        <div className="mb-2 grid grid-cols-[1fr_auto] items-center gap-2">
+          <div className="grid grid-cols-3 gap-1">
+            {imageManagerFilters.map((item) => (
+              <button
+                className={`apple-segment min-w-0 truncate px-1.5 py-1.5 text-[11px] transition ${filter === item ? "apple-segment-active" : ""}`}
+                key={item}
+                onClick={() => {
+                  setFilter(item);
+                  clearSelected();
+                }}
+                type="button"
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 rounded-full border border-white/10 bg-white/[0.045] p-0.5">
+            {[
+              ["large", "大图"],
+              ["compact", "紧凑"],
+            ].map(([value, label]) => (
+              <button
+                className={`rounded-full px-2 py-1 text-[11px] font-semibold transition ${viewMode === value ? "bg-white text-[#07121f]" : "text-white/46 hover:bg-white/[0.08] hover:text-white/72"}`}
+                key={value}
+                onClick={() => setViewMode(value as ImageManagerViewMode)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-        <label className="mt-1.5 flex h-8 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.05] px-2.5 text-[11px] text-white/58 focus-within:border-[#8fa7ff]/40 focus-within:bg-white/[0.075]">
+        <label className="flex h-8 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.05] px-2.5 text-[11px] text-white/58 focus-within:border-[#8fa7ff]/40 focus-within:bg-white/[0.075]">
           <Search className="size-3.5 shrink-0 text-white/38" />
           <input
             className="min-w-0 flex-1 bg-transparent text-white/72 outline-none placeholder:text-white/30"
@@ -338,7 +360,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
             </button>
           ) : null}
         </label>
-        <div className="mt-1.5 flex items-center gap-1.5">
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
           <button
             className="apple-button flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 px-2 text-[11px] text-white/70 disabled:opacity-45"
             disabled={!selectableRows.length || Boolean(batchActionKey)}
@@ -397,64 +419,65 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className={viewMode === "large" ? "grid grid-cols-1 gap-2.5" : "grid grid-cols-2 gap-2"}>
         {filteredRows.map(({ image, protection }) => {
           const title = imageManagerTitle(image);
           const meta = imageManagerMeta(image, nodeOperationLabel);
           const key = imageManagerKey(image);
+          const previewHeight = viewMode === "large" ? 176 : 114;
           return (
-          <article className={`apple-surface-section group relative min-w-0 overflow-hidden p-1.5 ${protection.isTrashed ? "opacity-[0.78] grayscale-[0.28]" : ""}`} key={key}>
-            <button className="relative block w-full overflow-hidden rounded-[14px] text-left" onClick={() => onPreview(image)} title={`${title}${meta ? ` · ${meta}` : ""}`} type="button">
+          <article className={`apple-surface-section group relative min-w-0 overflow-hidden ${viewMode === "large" ? "p-1.5" : "p-1"} ${protection.isTrashed ? "opacity-[0.78] grayscale-[0.28]" : ""}`} key={key}>
+            <button className="relative block w-full overflow-hidden rounded-[13px] text-left" onClick={() => onPreview(image)} title={`${title}${meta ? ` · ${meta}` : ""}`} type="button">
               <ImageFrame
                 alt={title}
-                className="rounded-[14px] border-white/8"
+                className="rounded-[13px] border-white/8"
                 fit="contain"
                 image={image}
                 preserveRatio={false}
                 showCheckerboard={shouldShowCheckerboard(image)}
-                style={{ height: 126 }}
+                style={{ height: previewHeight }}
                 variant="thumbnail"
               />
-              <span className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1">
+              <span className="pointer-events-none absolute left-1.5 top-1.5 flex flex-wrap gap-1">
                 {image.favorite ? (
-                  <span className="flex size-6 items-center justify-center rounded-full border border-[#ffe1a0]/38 bg-black/58 text-[#ffe1a0] backdrop-blur-md">
-                    <Star className="size-3.5 fill-current" />
+                  <span className="flex size-5 items-center justify-center rounded-full border border-[#ffe1a0]/34 bg-black/52 text-[#ffe1a0] backdrop-blur-md">
+                    <Star className="size-3 fill-current" />
                   </span>
                 ) : null}
                 {protection.protected && !protection.isTrashed ? (
-                  <span className="flex size-6 items-center justify-center rounded-full border border-white/18 bg-black/58 text-white/78 backdrop-blur-md" title="受保护，不能批量删除">
-                    <LockKeyhole className="size-3.5" />
+                  <span className="flex size-5 items-center justify-center rounded-full border border-white/16 bg-black/52 text-white/72 backdrop-blur-md" title="受保护，不能批量删除">
+                    <LockKeyhole className="size-3" />
                   </span>
                 ) : null}
                 {protection.isTrashed ? (
-                  <span className="rounded-full border border-[#ffb4a8]/28 bg-black/62 px-2 py-1 text-[11px] font-semibold leading-none text-[#ffcabf] backdrop-blur-md">回收站</span>
+                  <span className="rounded-full border border-[#ffb4a8]/28 bg-black/62 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-[#ffcabf] backdrop-blur-md">回收站</span>
                 ) : null}
               </span>
-              <span className="pointer-events-none absolute inset-x-0 bottom-0 block bg-gradient-to-t from-black/78 via-black/38 to-transparent px-2 pb-2 pt-6">
-                <span className="block truncate text-[11px] font-semibold leading-4 text-white/86">{title}</span>
-                {meta ? <span className="block truncate text-[11px] leading-4 text-white/50">{meta}</span> : null}
+              <span className="pointer-events-none absolute inset-x-0 bottom-0 block bg-gradient-to-t from-black/78 via-black/34 to-transparent px-2 pb-1.5 pt-7">
+                <span className="block truncate text-[11px] font-semibold leading-4 text-white/82">{imageManagerDisplayTitle(image, nodeOperationLabel)}</span>
+                {meta ? <span className="block truncate text-[11px] leading-4 text-white/45">{meta}</span> : null}
               </span>
             </button>
             <button
               aria-label={selectedKeys.has(imageManagerKey(image)) ? "取消选择图片" : "选择图片"}
-              className={`absolute right-3 top-3 flex size-6 items-center justify-center rounded-full border text-white transition ${
+              className={`absolute right-2 top-2 flex size-5 items-center justify-center rounded-full border text-white transition ${
                 selectedKeys.has(imageManagerKey(image))
                   ? "border-[#74e3c5]/70 bg-[#74e3c5]/24 text-[#adf8e5]"
-                  : "border-white/18 bg-[#101723]/70 text-white/48 hover:text-white/80"
+                  : "border-white/14 bg-[#101723]/62 text-white/40 hover:text-white/76"
               }`}
               disabled={!canBatchDeleteImage(protection)}
               onClick={() => toggleImageSelected(image)}
               title={canBatchDeleteImage(protection) ? "选择图片" : protection.isFavorite ? "收藏图需单独删除，不能批量删除" : "正在使用，不能批量删除"}
               type="button"
             >
-              {selectedKeys.has(key) ? <Check className="size-3.5" /> : null}
+              {selectedKeys.has(key) ? <Check className="size-3" /> : null}
             </button>
 
-            <div className="mt-1.5 grid grid-cols-3 gap-1 opacity-75 transition group-hover:opacity-100 group-focus-within:opacity-100">
+            <div className="mt-1 flex items-center justify-between gap-1 opacity-72 transition group-hover:opacity-100 group-focus-within:opacity-100">
               {protection.isTrashed ? (
                 <button
                   aria-label={rowActionKey === `恢复图片:${imageManagerKey(image)}` ? "恢复中" : "恢复"}
-                  className="apple-button col-span-2 flex h-8 min-w-0 items-center justify-center gap-1 text-[11px] text-[#adf8e5] disabled:opacity-45"
+                  className="apple-button flex h-7 min-w-0 flex-1 items-center justify-center gap-1 px-1.5 text-[11px] text-[#adf8e5] disabled:opacity-45"
                   disabled={Boolean(rowActionKey)}
                   onClick={() => void runRowAction("恢复图片", image, () => onRestore(image))}
                   title={rowActionKey === `恢复图片:${imageManagerKey(image)}` ? "恢复中" : "恢复"}
@@ -466,27 +489,25 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
               ) : (
                 <button
                   aria-label={image.favorite ? "取消收藏" : "收藏"}
-                  className={`apple-button flex h-8 min-w-0 items-center justify-center gap-1 px-1.5 text-[11px] disabled:opacity-45 ${image.favorite ? "text-[#ffe1a0]" : ""}`}
+                  className={`apple-button flex size-7 shrink-0 items-center justify-center p-0 disabled:opacity-45 ${image.favorite ? "text-[#ffe1a0]" : ""}`}
                   disabled={Boolean(favoritingKey)}
                   onClick={() => void toggleFavorite(image)}
                   title={favoritingKey === imageManagerKey(image) ? (image.favorite ? "取消中" : "收藏中") : image.favorite ? "已收藏" : "收藏"}
                   type="button"
                 >
                   <Star className={`size-3.5 ${favoritingKey === imageManagerKey(image) ? "animate-pulse" : ""} ${image.favorite ? "fill-current" : ""}`} />
-                  <span className="hidden truncate min-[420px]:inline">{image.favorite ? "已藏" : "收藏"}</span>
                 </button>
               )}
               {!protection.isTrashed ? (
                 <button
                   aria-label={copyingKey === imageManagerKey(image) ? "复制中" : "复制"}
-                  className="apple-button flex h-8 min-w-0 items-center justify-center gap-1 px-1.5 text-[11px] disabled:opacity-45"
+                  className="apple-button flex size-7 shrink-0 items-center justify-center p-0 disabled:opacity-45"
                   disabled={Boolean(copyingKey)}
                   onClick={() => void copyImage(image)}
                   title={copyingKey === imageManagerKey(image) ? "复制中" : "复制"}
                   type="button"
                 >
                   {copyingKey === imageManagerKey(image) ? <RefreshCcw className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}
-                  <span className="hidden truncate min-[420px]:inline">复制</span>
                 </button>
               ) : null}
               <button
@@ -497,7 +518,7 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
                       ? "确认删除"
                       : protection.isTrashed ? "彻底删除" : "删除"
                 }
-                className="apple-button flex h-8 min-w-0 items-center justify-center gap-1 px-1.5 text-[11px] text-[#ffb4a8] disabled:cursor-not-allowed disabled:text-white/28"
+                className="apple-button flex size-7 shrink-0 items-center justify-center p-0 text-[#ffb4a8] disabled:cursor-not-allowed disabled:text-white/28"
                 disabled={Boolean(rowActionKey) || !canDeleteSingleImage(protection)}
                 onClick={() => void runConfirmedRowAction(protection.isTrashed ? "彻底删除图片" : "删除图片", image, () => protection.isTrashed ? onPermanentDelete(image) : onDelete(image))}
                 title={
@@ -510,7 +531,6 @@ function ImageManagerPanelComponent<TImage extends ImageManagerImage, TNode exte
                 type="button"
               >
                 {rowActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}` ? <RefreshCcw className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                <span className="hidden truncate min-[420px]:inline">{confirmActionKey === `${protection.isTrashed ? "彻底删除图片" : "删除图片"}:${imageManagerKey(image)}` ? "确认" : "删除"}</span>
               </button>
             </div>
           </article>
@@ -579,6 +599,13 @@ function isOnlyFavoriteProtected(protection: ImageDeletionProtection) {
 
 function imageManagerTitle(image: ImageManagerImage) {
   return image.fileName?.split("/").pop() || image.id || "图片";
+}
+
+function imageManagerDisplayTitle(image: ImageManagerImage, nodeOperationLabel: (value?: string) => string) {
+  const source = image.nodeOperation || image.mode || image.sourceNodeKind;
+  if (source) return nodeOperationLabel(source);
+  if (image.materialType) return image.materialType;
+  return "项目图片";
 }
 
 function imageManagerMeta(image: ImageManagerImage, nodeOperationLabel: (value?: string) => string) {

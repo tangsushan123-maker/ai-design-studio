@@ -29,6 +29,7 @@ import {
   SettingsResultLine,
   SettingsStatusBanner,
   SettingsStatusRow,
+  SettingsMiniMetric,
 } from "@/components/settings/settings-status-ui";
 import { DetectionSummary, SetupChecklist, type DetectionResult } from "@/components/settings/settings-diagnostics";
 import { ModelGroup } from "@/components/settings/settings-model-group";
@@ -140,6 +141,8 @@ export default function SettingsPage() {
   const [lastModelTest, setLastModelTest] = useState<ModelTestResponse | null>(null);
   const [serverHealth, setServerHealth] = useState<SettingsHealthResponse | null>(null);
   const [savedAt, setSavedAt] = useState("");
+  const [activeSettings, setActiveSettings] = useState<SettingsResponse | null>(null);
+  const [configDraftDirty, setConfigDraftDirty] = useState(false);
   const authRequired = /请先登录|登录已过期/.test(status.message);
   const isBusy = status.type === "loading";
   const formDisabled = isBusy || authRequired;
@@ -171,6 +174,12 @@ export default function SettingsPage() {
   }, [effectiveProvider.models, groupedModels.image]);
   const generatedBaseUrl = useMemo(() => inferApiUrl(providerSiteUrl || apiBaseUrl, effectiveProvider), [apiBaseUrl, effectiveProvider, providerSiteUrl]);
   const displayedApiBaseUrl = advancedUrl ? normalizeApiUrl(apiBaseUrl, effectiveProvider) : generatedBaseUrl;
+  const activeProvider = useMemo(() => {
+    if (!activeSettings) return null;
+    const providerSite = activeSettings.providerSiteUrl || activeSettings.websiteUrl || "";
+    return findProviderPreset(inferProviderId(activeSettings.providerId || customProvider.id, providerSite, activeSettings.apiBaseUrl || "", customProvider.id));
+  }, [activeSettings]);
+  const hasUnsavedConfigDraft = configDraftDirty;
 
   useEffect(() => {
     fetch("/api/settings")
@@ -194,6 +203,7 @@ export default function SettingsPage() {
   }
 
   function markConfigDirty(message = "已修改，需重新检测") {
+    setConfigDraftDirty(true);
     setDetectionResult(null);
     setLastModelTest(null);
     setSupportsModelsList(false);
@@ -227,6 +237,8 @@ export default function SettingsPage() {
     setSupportsChatCompletions(Boolean(data.supportsChatCompletions));
     setSupportsImageGeneration(Boolean(data.supportsImageGeneration));
     setLastTestedAt(data.lastTestedAt || "");
+    setActiveSettings(data);
+    setConfigDraftDirty(false);
   }
 
   function selectProvider(nextProviderId: string) {
@@ -249,6 +261,7 @@ export default function SettingsPage() {
     setLastTestedAt("");
     setDetectionResult(null);
     setDraft({ id: provider.textModel || "", label: provider.textModel || "", capability: "text" });
+    setConfigDraftDirty(true);
     setStatus({ type: "idle", message: provider.shortLabel });
   }
 
@@ -345,6 +358,7 @@ export default function SettingsPage() {
       setSupportsChatCompletions(Boolean(data.supportsChatCompletions));
       setSupportsImageGeneration(Boolean(data.supportsImageGeneration));
       setLastTestedAt(data.lastTestedAt || "");
+      setConfigDraftDirty(!data.saved);
       if (data.saved) {
         setApiKey("");
         await reloadSettings();
@@ -757,6 +771,31 @@ export default function SettingsPage() {
               </div>
             </SettingsPanel>
 
+            <SettingsPanel title="当前启用配置">
+              <div className="space-y-3">
+                <div className={`rounded-[14px] border px-3 py-2 text-[12px] leading-5 ${
+                  hasUnsavedConfigDraft
+                    ? "border-[#ffd166]/20 bg-[#ffd166]/10 text-[#ffe1a3]"
+                    : "border-[#74e3c5]/18 bg-[#74e3c5]/10 text-[#adf8e5]"
+                }`}>
+                  {hasUnsavedConfigDraft ? "页面有未保存修改。首页生成仍使用下面这套已启用配置。" : "首页生成正在使用下面这套配置。"}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <SettingsMiniMetric label="供应商" ok={Boolean(activeSettings?.providerId)} value={activeSettings?.providerLabel || activeSettings?.providerName || activeProvider?.shortLabel || "未启用"} />
+                  <SettingsMiniMetric label="图片权限" ok={Boolean(activeSettings?.supportsImageGeneration)} value={activeSettings?.supportsImageGeneration ? "已通过" : "未通过"} />
+                </div>
+                <div className="overflow-hidden rounded-[14px] border border-white/10 bg-white/[0.045]">
+                  <ActiveConfigLine label="API 地址" value={activeSettings?.apiBaseUrl || "未保存"} />
+                  <ActiveConfigLine label="Key" value={healthKeyLabel(serverHealth, activeSettings?.maskedApiKey || maskedApiKey)} />
+                  <ActiveConfigLine label="文本模型" value={activeSettings?.textModel || "未选择"} />
+                  <ActiveConfigLine label="图片模型" value={activeSettings?.imageModel || "未选择"} />
+                </div>
+                <div className="apple-caption rounded-[12px] border border-white/10 bg-white/[0.04] px-3 py-2 text-white/44">
+                  {savedAt ? `刚保存 ${savedAt}` : activeSettings?.lastTestedAt ? `上次检测 ${new Date(activeSettings.lastTestedAt).toLocaleString("zh-CN")}` : "保存并启用后才会影响首页生成"}
+                </div>
+              </div>
+            </SettingsPanel>
+
             <SetupChecklist
               hasKey={Boolean(maskedApiKey || apiKey.trim())}
               hasProvider={Boolean(displayedApiBaseUrl)}
@@ -831,5 +870,14 @@ export default function SettingsPage() {
         </section>
       </section>
     </main>
+  );
+}
+
+function ActiveConfigLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2 border-b border-white/8 px-3 py-2.5 last:border-b-0">
+      <span className="text-[11px] leading-5 text-white/42">{label}</span>
+      <span className="min-w-0 break-words text-right text-[12px] font-medium leading-5 text-white/74">{value}</span>
+    </div>
   );
 }

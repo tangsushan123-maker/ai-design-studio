@@ -40,6 +40,46 @@ export async function imageSourcePayloadForPngLayerExport(image: ImageAsset) {
   return { imageData: await blobToDataUrl(source) };
 }
 
+export function pngLayerHintsForImage(image: ImageAsset) {
+  const textLayers = Array.isArray(image.referenceRemake?.textLayers) ? image.referenceRemake.textLayers : [];
+  const analysisLayers = image.designOptimization?.analysis && typeof image.designOptimization.analysis === "object"
+    ? (image.designOptimization.analysis as { layers?: unknown[] }).layers
+    : [];
+  return [...textLayers, ...(Array.isArray(analysisLayers) ? analysisLayers : [])]
+    .map((item, index) => normalizePngLayerHint(item, index))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+}
+
+function normalizePngLayerHint(value: unknown, index: number) {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const box = source.bbox && typeof source.bbox === "object" ? source.bbox as Record<string, unknown> : source;
+  const kind = String(source.kind || source.type || (source.text ? "text" : "")).toLowerCase();
+  const normalizedKind = /text|title|copy/.test(kind)
+    ? "text"
+    : /person|portrait|subject|doctor|human|product|packaging|main.?visual|hero/.test(kind)
+      ? "subject"
+      : /auxiliary|decoration|ornament|icon|logo|qr/.test(kind)
+        ? "auxiliary"
+        : "";
+  if (!normalizedKind) return null;
+  const x = Number(box.x ?? box.left);
+  const y = Number(box.y ?? box.top);
+  const width = Number(box.width ?? box.w);
+  const height = Number(box.height ?? box.h);
+  if (![x, y, width, height].every(Number.isFinite)) return null;
+  return {
+    id: String(source.id || `hint_${index + 1}`),
+    kind: normalizedKind,
+    label: String(source.label || source.text || normalizedKind),
+    text: normalizedKind === "text" ? String(source.text || source.content || source.label || "") : undefined,
+    x,
+    y,
+    width,
+    height,
+  };
+}
+
 export async function appendDataUrlToForm(formData: FormData, dataUrl: string, fileKey: string, fallbackName: string) {
   const file = await dataUrlToFile(dataUrl);
   const extension = file.type === "image/jpeg" ? "jpg" : file.type.replace("image/", "") || "png";

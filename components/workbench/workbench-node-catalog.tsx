@@ -34,6 +34,6 @@ export const nodeCatalog: WorkbenchNodeCatalogItem[] = [
   { type: "hd_redraw", label: "高清/画质增强", description: "修文字、增强质感，输出 2K/4K。", icon: <RefreshCcw className="size-4" /> },
   { type: "reference_remake", label: "复刻参考图", description: "把拍照图、截图、低清参考图重制清楚。", icon: <ScanLine className="size-4" /> },
   { type: "design_optimize", label: "优化已有设计", description: "内容不变，优化版式、层级和商业质感。", icon: <Palette className="size-4" /> },
-  { type: "png_layers", label: "PNG 分层交付", description: "成品图拆成背景、文字、人物三层 PNG。", icon: <Layers className="size-4" /> },
+  { type: "png_layers", label: "PNG 分层交付", description: "成品图拆成可用于 PS 的多层 PNG。", icon: <Layers className="size-4" /> },
   { type: "output", label: "输出", description: "旧项目兼容：结果图现在可直接预览、下载和管理。", icon: <ArrowDownToLine className="size-4" />, hiddenFromAddMenu: true },
 ];

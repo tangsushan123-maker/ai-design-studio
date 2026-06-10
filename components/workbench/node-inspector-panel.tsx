@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Brush, Layers, RefreshCcw, Sparkles } from "lucide-react";
+import { ArrowLeft, Brush, FileText, Layers, RefreshCcw, Sparkles, X } from "lucide-react";
 import { findSizePresetByLabel } from "@/lib/size-presets";
 import { NodeErrorNotice } from "@/components/workbench/node-error-notice";
 import { SmartRecommendations } from "@/components/workbench/smart-recommendations";
@@ -117,6 +117,7 @@ export function NodeInspectorPanel({
   const promptLivesInComposer = hasPrompt && isComposerDrivenNode(node.data.kind);
   const modelLivesInComposer = hasModel && isComposerDrivenNode(node.data.kind);
   const textReferenceItems = node.data.kind === "text_to_image" ? textReferenceNodeItems(node.data) : [];
+  const documentFiles = node.data.kind === "text_to_image" ? textToImageDocumentFiles(params.documentFiles) : [];
   const nodeId = node.id;
   const qualityEnhanceImage = (node.data.image || node.data.output || null) as ImageAsset | null;
   const qualityEnhanceTargets = qualityEnhanceTargetOptionsForImage(qualityEnhanceImage, stringParam(params.model) || imageModel);
@@ -206,6 +207,58 @@ export function NodeInspectorPanel({
             <InlineChipRow label="镜头" value={textToImageCameraDistance(params)} options={["近景", "中景", "远景", "自动"]} onChange={(value) => onParamChange(node.id, "cameraDistance", value)} />
             <InlineChipRow label="主体" value={textToImageSubjectScale(params)} options={["大", "中", "小"]} onChange={(value) => onParamChange(node.id, "subjectScale", value)} />
           </InspectorAdvancedSection>
+        </InspectorSection>
+      ) : null}
+
+      {node.data.kind === "text_to_image" ? (
+        <InspectorSection title="参考文档" hint={documentFiles.length ? `${documentFiles.length}/3` : "可选"}>
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-[14px] border border-dashed border-white/16 bg-white/[0.035] px-3 py-3 text-[11px] font-semibold text-white/68 transition hover:border-[#74e3c5]/36 hover:text-[#adf8e5]">
+            <FileText className="size-3.5" />
+            上传 PDF / Word / TXT
+            <input
+              accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+              className="hidden"
+              multiple
+              onChange={(event) => {
+                const files = Array.from(event.target.files || []).filter(isSupportedDocumentReferenceFile);
+                if (!files.length) return;
+                const next = [...documentFiles, ...files].slice(0, 3);
+                onParamChange(node.id, "documentFiles", next);
+                onParamChange(node.id, "documentFileNames", next.map((file) => file.name));
+                event.currentTarget.value = "";
+              }}
+              type="file"
+            />
+          </label>
+          {documentFiles.length ? (
+            <div className="space-y-1.5">
+              {documentFiles.map((file, index) => (
+                <div className="flex items-center gap-2 rounded-[12px] border border-white/10 bg-black/18 px-2.5 py-2" key={`${file.name}-${file.size}-${index}`}>
+                  <FileText className="size-3.5 shrink-0 text-[#74e3c5]" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[11px] font-semibold text-white/74">{file.name}</div>
+                    <div className="text-[11px] text-white/40">{formatDocumentFileSize(file.size)}</div>
+                  </div>
+                  <button
+                    className="apple-button flex size-7 items-center justify-center rounded-full p-0"
+                    onClick={() => {
+                      const next = documentFiles.filter((_, itemIndex) => itemIndex !== index);
+                      onParamChange(node.id, "documentFiles", next);
+                      onParamChange(node.id, "documentFileNames", next.map((item) => item.name));
+                    }}
+                    title="移除"
+                    type="button"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[12px] border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] leading-5 text-white/48">
+              上传后会直接发送给模型作为参考资料，不在本地拆解文档内容。
+            </div>
+          )}
         </InspectorSection>
       ) : null}
 
@@ -375,13 +428,14 @@ export function NodeInspectorPanel({
       ) : null}
 
       {node.data.kind === "png_layers" ? (
-        <InspectorSection title="PNG 三层">
+        <InspectorSection title="智能分层交付">
           <InlineChipRow
             label="模式"
             value={pngLayerExportModeLabel(pngLayerExportModeParam(params.mode))}
-            options={["AI三层精准", "快速三层"]}
-            onChange={(value) => onParamChange(node.id, "mode", value === "快速三层" ? "fast" : "ai_precise")}
+            options={["智能分层", "快速分层"]}
+            onChange={(value) => onParamChange(node.id, "mode", value === "快速分层" ? "fast" : "ai_precise")}
           />
+          <div className="apple-caption">默认输出背景、文字、人物 3 层。</div>
         </InspectorSection>
       ) : null}
 
@@ -415,4 +469,28 @@ export function NodeInspectorPanel({
       ) : null}
     </div>
   );
+}
+
+function textToImageDocumentFiles(value: unknown): File[] {
+  return Array.isArray(value) ? value.filter((item): item is File => item instanceof File) : [];
+}
+
+function isSupportedDocumentReferenceFile(file: File) {
+  const name = file.name.toLowerCase();
+  const type = file.type.toLowerCase();
+  if (file.size > 25 * 1024 * 1024) return false;
+  return /\.(pdf|doc|docx|txt|md)$/.test(name)
+    || [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "text/plain",
+      "text/markdown",
+    ].includes(type);
+}
+
+function formatDocumentFileSize(size: number) {
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+  return `${size} B`;
 }

@@ -45,7 +45,7 @@ export const emptyTaskDraft: WorkbenchTaskDraft = {
 export function taskDraftVariantCount(draft: WorkbenchTaskDraft, template: WorkbenchTaskTemplate) {
   const count = Number(draft.variantCount || template.variantCount);
   if (!Number.isFinite(count)) return template.variantCount;
-  return Math.min(6, Math.max(2, Math.round(count)));
+  return Math.min(6, Math.max(1, Math.round(count)));
 }
 
 export const workbenchTaskTemplates: WorkbenchTaskTemplate[] = [

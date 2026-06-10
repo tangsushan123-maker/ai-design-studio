@@ -66,7 +66,7 @@ export function CompactOutputSummary({ images }: { images: ImageAsset[] }) {
     const layerBytes = firstImage.pngLayerExport.layers.reduce((sum, layer) => sum + (layer.fileSizeBytes || 0), 0);
     return (
       <div className="flex min-w-0 items-baseline gap-1.5 px-0.5 py-0.5">
-        <div className="shrink-0 truncate text-[11px] font-semibold text-white/86">PNG三层</div>
+        <div className="shrink-0 truncate text-[11px] font-semibold text-white/86">PNG分层</div>
         <div className="apple-caption min-w-0 truncate text-[11px]">
           {firstImage.pngLayerExport.layerCount} 层 · {formatFileSize(layerBytes)}
         </div>

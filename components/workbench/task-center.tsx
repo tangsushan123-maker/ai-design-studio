@@ -163,6 +163,7 @@ export function TaskCenter({
     const statusText = taskStatusText(task, stuck, stageLabel, visibleResult, machinePhase);
     const progressText = taskProgressText(task, stuck, outputsCount, stageLabel, visibleResult, machinePhase);
     const recoveryHint = taskRecoveryHint(task, stuck, visibleResult);
+    const failureDiagnosis = taskFailureDiagnosis(task, visibleResult);
     const showDetailedTiming = task.status === "running" || task.status === "saving" || stuck;
     const timingChips = taskTimingChips(task, now, formatDuration);
 
@@ -243,6 +244,15 @@ export function TaskCenter({
             {task.error ? (
               <div className="mt-1 line-clamp-2 rounded-[10px] border border-[#ff6b5f]/12 bg-[#ff6b5f]/8 px-2 py-1 text-[11px] leading-5 text-[#ffb4a8]">
                 {friendlyDisplayError(task.error)}
+              </div>
+            ) : null}
+            {failureDiagnosis ? (
+              <div className={`mt-2 rounded-[12px] border px-2.5 py-2 text-[11px] leading-5 ${failureDiagnosis.tone === "danger" ? "border-[#ff6b5f]/18 bg-[#ff6b5f]/10 text-[#ffc1b8]" : "border-[#ffd166]/18 bg-[#ffd166]/10 text-[#ffe1a3]"}`}>
+                <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                  <span className="rounded-full border border-current/20 bg-white/[0.06] px-2 py-0.5 text-[11px] font-semibold leading-4">{failureDiagnosis.label}</span>
+                  <span className="min-w-0 flex-1 truncate text-white/54">{failureDiagnosis.detail}</span>
+                </div>
+                <span className="font-semibold">建议：</span>{failureDiagnosis.action}
               </div>
             ) : null}
             {recoveryHint ? (
@@ -597,13 +607,8 @@ function taskRecoveryHint(task: TaskCenterTask, stuck: boolean, visibleResult = 
     return { text: "已有部分图片结果。先预览可用图；如果缺图或质量不稳，再点“重试”补生成。", tone: "warning" };
   }
   if (task.status === "failed") {
-    const message = task.error || task.progressLabel || "";
-    if (/API|key|401|403|quota|余额|billing|permission/i.test(message)) {
-      return { text: "失败多半与 API Key、额度或模型权限有关。先到设置页测试模型，再回来重试。", tone: "danger" };
-    }
-    if (/timeout|超时|network|fetch|ECONN|socket/i.test(message)) {
-      return { text: "像是网络或服务端超时。可以直接重试；如果连续失败，降低质量或减少参考图后再生成。", tone: "warning" };
-    }
+    const diagnosis = taskFailureDiagnosis(task, visibleResult);
+    if (diagnosis) return null;
     return { text: "任务失败。建议先重试一次；仍失败时，缩短提示词、降低质量或换一个图片模型。", tone: "danger" };
   }
   if (stuck) {
@@ -616,6 +621,74 @@ function taskRecoveryHint(task: TaskCenterTask, stuck: boolean, visibleResult = 
     return { text: "任务完成但没有拿到图片结果。建议重试，并检查模型是否支持当前操作。", tone: "warning" };
   }
   return null;
+}
+
+function taskFailureDiagnosis(task: TaskCenterTask, visibleResult = taskHasVisibleResult(task)): { label: string; detail: string; action: string; tone: "warning" | "danger" } | null {
+  if (visibleResult || taskIsPartialSuccess(task) || task.status !== "failed") return null;
+  const message = `${task.error || ""} ${task.progressLabel || ""}`.trim();
+  if (!message) return null;
+  if (/image generation is not enabled|not enabled for this group|图片生成.*未开通|没有图片权限|permission|权限|403/i.test(message)) {
+    return {
+      label: "图片权限未开通",
+      detail: "当前 Key 或账号组没有通过图片生成权限。",
+      action: "到 API 设置测试图片模型；换一个已通过的图片模型，或联系中转站开通图片权限。",
+      tone: "danger",
+    };
+  }
+  if (/401|unauthorized|invalid api key|incorrect api key|key|密钥|登录已过期|请先登录/i.test(message)) {
+    return {
+      label: "Key / 登录异常",
+      detail: "请求没有通过身份校验。",
+      action: "重新登录，并在 API 设置里保存并测试 Key；测试通过后再重试当前任务。",
+      tone: "danger",
+    };
+  }
+  if (/quota|balance|billing|余额|额度|欠费|insufficient/i.test(message)) {
+    return {
+      label: "额度不足",
+      detail: "模型服务拒绝继续生成。",
+      action: "检查中转站余额、套餐或频率限制；恢复额度后直接重试即可。",
+      tone: "danger",
+    };
+  }
+  if (/model.*not.*exist|model.*not.*found|unsupported model|does not support|模型不存在|模型不可用|模型.*不支持|invalid model/i.test(message)) {
+    return {
+      label: "模型名不支持",
+      detail: "当前选择的模型没有被接口识别。",
+      action: "在 API 设置里重新检测模型列表，选择测试通过的图片模型作为默认模型。",
+      tone: "danger",
+    };
+  }
+  if (/timeout|timed out|超时|connection error|fetch failed|network|upstream|bad gateway|gateway|502|503|504|ECONN|socket/i.test(message)) {
+    return {
+      label: "上游超时",
+      detail: "模型或中转站响应太慢，中途断开。",
+      action: "先直接重试；连续失败时把方案数量降到 1-2 个、减少参考图，或切换更稳定的图片模型。",
+      tone: "warning",
+    };
+  }
+  if (/比例|裁切|原生比例|画布|ratio|aspect/i.test(message)) {
+    return {
+      label: "比例未通过",
+      detail: "模型返回的图片比例不符合目标画布。",
+      action: "保留当前结果预览，必要时重试；如果经常发生，换常见比例或减少“必须贴边”的画面要求。",
+      tone: "warning",
+    };
+  }
+  if (/prompt|提示词|内容太少|信息不完整|还缺|请输入/i.test(message)) {
+    return {
+      label: "需求信息不足",
+      detail: "输入内容不足以稳定生成。",
+      action: "补充用途、主体、必须文字、风格和禁忌信息，再重新运行。",
+      tone: "warning",
+    };
+  }
+  return {
+    label: "生成失败",
+    detail: "暂未识别到明确类型。",
+    action: "先重试一次；仍失败时去 API 设置测试图片模型，并减少参考图或降低质量。",
+    tone: "danger",
+  };
 }
 
 function taskMachinePhase(task: TaskCenterTask, stuck: boolean, visibleResult = taskHasVisibleResult(task)): TaskMachinePhase {

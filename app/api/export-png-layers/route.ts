@@ -15,7 +15,7 @@ import { withCurrentConfigUser } from "@/lib/request-config-user";
 export const runtime = "nodejs";
 
 type ExportMode = "fast" | "ai_precise";
-type InputLayerKind = "background" | "subject" | "text" | "logo" | "qr" | "decoration";
+type InputLayerKind = "background" | "subject" | "person" | "product" | "main_visual" | "auxiliary" | "text" | "logo" | "qr" | "decoration";
 
 type InputLayer = {
   id?: string;
@@ -57,6 +57,7 @@ type LayerManifestItem = {
   fileSizeBytes: number;
   hasAlpha: boolean;
   transparentPixelRatio: number;
+  opaquePixelRatio: number;
 };
 
 type ExportLayerSpec = {
@@ -66,6 +67,7 @@ type ExportLayerSpec = {
   note: string;
   render: () => Promise<Buffer>;
   fallback?: () => Promise<Buffer>;
+  zIndex?: number;
   opacity?: number;
   blendMode?: LayerManifestItem["blendMode"];
   visible?: boolean;
@@ -118,6 +120,7 @@ export async function POST(request: Request) {
       mode,
     });
     const manifest: LayerManifestItem[] = [];
+    const renderedLayers: Buffer[] = [];
     const warnings: string[] = [];
 
     for (let index = 0; index < specs.length; index += 1) {
@@ -131,11 +134,12 @@ export async function POST(request: Request) {
       }
       const layerPath = path.join(absoluteRoot, spec.filename);
       await writeFile(layerPath, png);
+      renderedLayers.push(png);
       const url = getGeneratedUrl(path.join(relativeRoot, spec.filename));
       manifest.push({
         filename: spec.filename,
         name: spec.name,
-        zIndex: index + 1,
+        zIndex: spec.zIndex ?? index + 1,
         canvasWidth,
         canvasHeight,
         x: 0,
@@ -149,11 +153,98 @@ export async function POST(request: Request) {
         fileSizeBytes: png.byteLength,
         hasAlpha: validation.hasAlpha,
         transparentPixelRatio: validation.transparentPixelRatio,
+        opaquePixelRatio: validation.opaquePixelRatio,
       });
     }
 
+    const backgroundLayerIndex = manifest.findIndex((layer) => layer.kind === "background");
+    const foregroundMaskLayers = manifest
+      .map((layer, index) => ({ layer, png: renderedLayers[index] }))
+      .filter((item) => item.layer.kind !== "background" && item.png);
+    if (mode === "ai_precise" && backgroundLayerIndex >= 0 && renderedLayers[backgroundLayerIndex] && foregroundMaskLayers.length) {
+      const cleanedBackground = await removeForegroundMasksFromBackground({
+        backgroundPng: renderedLayers[backgroundLayerIndex],
+        maskPngs: foregroundMaskLayers.map((item) => item.png),
+        width: canvasWidth,
+        height: canvasHeight,
+      });
+      const validation = await inspectLayerPng(cleanedBackground, canvasWidth, canvasHeight);
+      const layer = manifest[backgroundLayerIndex];
+      const layerPath = path.join(absoluteRoot, layer.filename);
+      await writeFile(layerPath, cleanedBackground);
+      renderedLayers[backgroundLayerIndex] = cleanedBackground;
+      layer.fileSizeBytes = cleanedBackground.byteLength;
+      layer.hasAlpha = validation.hasAlpha;
+      layer.transparentPixelRatio = validation.transparentPixelRatio;
+      layer.opaquePixelRatio = validation.opaquePixelRatio;
+      layer.note = `${layer.note} 已用文字层和人物层遮罩做本地背景残留清理，减少合成时重复文字/人物。`;
+    }
+
+    for (let index = manifest.length - 1; index >= 0; index -= 1) {
+      const layer = manifest[index];
+      if (layer.kind === "background" || layer.opaquePixelRatio > 0.0002) continue;
+      manifest.splice(index, 1);
+      renderedLayers.splice(index, 1);
+    }
+
     const safeBaseName = sanitizeFileBase(body.fileName || "design");
+    const foregroundLayers = manifest.filter((layer) => layer.kind !== "background");
+    const usefulForegroundLayers = foregroundLayers.filter((layer) => layer.opaquePixelRatio > 0.0002);
+    const hasUsefulForegroundLayers = usefulForegroundLayers.length > 0;
+    const textLayer = manifest.find((layer) => layer.kind === "text");
+    if (!textLayer && mode === "ai_precise") {
+      warnings.push("模型没有返回可用文字层：如果原图有文字，请复查文字是否被误归到其他层或没有分离出来。");
+    }
+    if (!hasUsefulForegroundLayers) {
+      warnings.push("未识别到可用的前景图层：当前结果主要来自背景层，请复查模型是否正确拆分文字和人物。");
+    }
+    const compositeLayerBuffers = manifest
+      .map((layer, index) => ({ layer, png: renderedLayers[index] }))
+      .filter((item): item is { layer: LayerManifestItem; png: Buffer } => Boolean(item.png))
+      .filter((item) => item.layer.visible !== false)
+      .sort((a, b) => a.layer.zIndex - b.layer.zIndex)
+      .map((item) => item.png);
+    const compositePng = await compositePngLayers(compositeLayerBuffers, canvasWidth, canvasHeight);
+    const compositeFilename = "00_composite_preview.png";
+    await writeFile(path.join(absoluteRoot, compositeFilename), compositePng);
+    const compositeUrl = getGeneratedUrl(path.join(relativeRoot, compositeFilename));
+    const reconstruction = await inspectLayerPackageReconstruction(basePng, compositePng, canvasWidth, canvasHeight, hasUsefulForegroundLayers);
+    if (!hasUsefulForegroundLayers) {
+      warnings.push("建议使用已配置 API Key 的智能分层，或先做参考图重制/设计分析，让系统获得文字和人物区域。");
+    } else if (reconstruction.score < 92) {
+      warnings.push(`叠加还原度 ${reconstruction.score}%，建议放大检查文字、人物边缘，并按需使用快速分层或手动精修。`);
+    }
+    const normalizedWarnings = compactLayerWarnings(warnings);
+    const qualityReport = {
+      reconstruction,
+      warnings: normalizedWarnings,
+      mode,
+      canvasWidth,
+      canvasHeight,
+      generatedAt: new Date().toISOString(),
+    };
+    const manifestFilename = "layers.json";
+    const reportFilename = "quality_report.json";
+    const manifestJson = Buffer.from(JSON.stringify({ canvasWidth, canvasHeight, layers: manifest }, null, 2));
+    const reportJson = Buffer.from(JSON.stringify(qualityReport, null, 2));
+    await writeFile(path.join(absoluteRoot, manifestFilename), manifestJson);
+    await writeFile(path.join(absoluteRoot, reportFilename), reportJson);
+    const zipFileName = `${safeBaseName}-png-layers-${mode}.zip`;
+    const zip = buildStoredZip([
+      ...manifest.map((layer, index) => ({ filename: layer.filename, content: renderedLayers[index] })),
+      { filename: compositeFilename, content: compositePng },
+      { filename: manifestFilename, content: manifestJson },
+      { filename: reportFilename, content: reportJson },
+    ]);
+    await writeFile(path.join(absoluteRoot, zipFileName), zip);
+    const zipUrl = getGeneratedUrl(path.join(relativeRoot, zipFileName));
     const layerFileSizeBytes = manifest.reduce((sum, layer) => sum + (layer.fileSizeBytes || 0), 0);
+    const capabilityStatus = normalizedWarnings.length || !hasUsefulForegroundLayers || reconstruction.score < 92 ? "needs_review" : "ready";
+    const completionMessage = !hasUsefulForegroundLayers
+      ? "PNG 分层包已保存，但未得到可用前景层，不能按完整分层交付。"
+      : normalizedWarnings.length
+        ? `PNG 分层已生成 ${manifest.length} 层，存在 ${normalizedWarnings.length} 条复查提示。`
+        : `PNG 分层已生成 ${manifest.length} 层，叠加还原检查通过。`;
     const layerResult = {
       mode,
       canvasWidth,
@@ -161,8 +252,14 @@ export async function POST(request: Request) {
       layerCount: manifest.length,
       layers: manifest,
       durationMs: Date.now() - startedAt,
-      warnings,
-      message: warnings.length ? `PNG 三层已生成，${warnings.length} 层使用兜底。` : "PNG 三层已生成。",
+      capabilityStatus,
+      warnings: normalizedWarnings,
+      compositeUrl,
+      reconstruction,
+      zipFileName,
+      zipFileSizeBytes: zip.byteLength,
+      zipUrl,
+      message: completionMessage,
     };
     const layerOutput = {
       id: packId,
@@ -174,7 +271,7 @@ export async function POST(request: Request) {
       outputSize: { width: canvasWidth, height: canvasHeight },
       fileSizeBytes: layerFileSizeBytes,
       nodeOperation: "png_layers",
-      materialType: "PNG三层",
+      materialType: "PNG分层",
       targetSize: `${canvasWidth}×${canvasHeight}`,
       projectId: taskTrace?.projectId,
       generatedAt: new Date().toISOString(),
@@ -183,7 +280,7 @@ export async function POST(request: Request) {
 
     await recordTaskRunFinished(taskTrace, {
       model: imageModel,
-      message: warnings.length ? `PNG 三层完成，${warnings.length} 层使用兜底。` : "PNG 三层完成，三张单层 PNG 已保存。",
+      message: completionMessage,
       outputs: [layerOutput],
     });
     return NextResponse.json({
@@ -239,6 +336,14 @@ function normalizeExportMode(value: unknown): ExportMode {
   return value === "fast" ? "fast" : "ai_precise";
 }
 
+function compactLayerWarnings(warnings: string[]) {
+  const output: string[] = [];
+  for (const warning of warnings) {
+    if (!output.includes(warning)) output.push(warning);
+  }
+  return output;
+}
+
 function normalizeInputLayers(layers: InputLayer[], canvasWidth: number, canvasHeight: number) {
   return layers
     .filter((layer) => layer && layer.kind)
@@ -263,7 +368,7 @@ function buildExportLayerSpecs(input: {
   mode: ExportMode;
 }): ExportLayerSpec[] {
   const textLayers = input.layers.filter((layer) => layer.kind === "text" && layer.text);
-  const subjectLayers = input.layers.filter((layer) => layer.kind === "subject");
+  const subjectLayers = input.layers.filter((layer) => ["subject", "person", "product", "main_visual"].includes(layer.kind || ""));
   const cleanupRects = [...textLayers, ...subjectLayers]
     .map((layer) => rectFromLayer(layer, input.canvasWidth, input.canvasHeight, input.mode === "ai_precise" ? 16 : 10))
     .filter((rect): rect is PixelRect => Boolean(rect));
@@ -273,6 +378,7 @@ function buildExportLayerSpecs(input: {
       filename: "01_background.png",
       name: "背景层",
       kind: "background",
+      zIndex: 1,
       note: input.mode === "ai_precise" ? "AI 三层分包：去除文字和人物后补全干净背景，保留非文字设计氛围。" : "快速背景层：只清理可识别文字/人物占位区域。",
       fallback: () => createCleanBackgroundLayer(input.baseRaw, input.canvasWidth, input.canvasHeight, cleanupRects, input.mode),
       render: () => input.mode === "ai_precise"
@@ -298,7 +404,8 @@ function buildExportLayerSpecs(input: {
       filename: "02_text.png",
       name: "文字层",
       kind: "text",
-      note: input.mode === "ai_precise" ? "AI 三层分包：只提取所有可见文字像素，透明背景，同画布位置不偏移。" : "快速模式使用可编辑文字数据重建透明文字层。",
+      zIndex: 3,
+      note: input.mode === "ai_precise" ? "智能分层：高保真提取文字视觉，清理透明底并保持同画布位置。" : "快速模式使用可编辑文字数据重建透明文字层。",
       fallback: () => createTextLayer(input.canvasWidth, input.canvasHeight, textLayers),
       render: () => input.mode === "ai_precise"
         ? createAiTextVisualTransparentLayer(input.basePng, input.canvasWidth, input.canvasHeight, input.imageModel)
@@ -308,10 +415,23 @@ function buildExportLayerSpecs(input: {
       filename: "03_person.png",
       name: "人物层",
       kind: "person",
-      note: input.mode === "ai_precise" ? "AI 三层分包：只保留人物/医生/人像，透明背景，同画布位置不偏移。" : "快速模式不导出矩形人物假图层，请使用 AI 精细分层。",
+      zIndex: 2,
+      note: input.mode === "ai_precise" ? "AI 三层分包：保留人物、IP、产品和非文字主视觉，透明背景，同画布位置不偏移。" : "快速模式不导出矩形人物假图层，请使用 AI 精细分层。",
       fallback: () => createTransparentLayer(input.canvasWidth, input.canvasHeight),
       render: () => input.mode === "ai_precise"
         ? createAiPersonVisualTransparentLayer(input.basePng, input.canvasWidth, input.canvasHeight, input.imageModel)
+        : createTransparentLayer(input.canvasWidth, input.canvasHeight),
+    },
+    {
+      filename: "04_person_only.png",
+      name: "单独人物层",
+      kind: "person_only",
+      zIndex: 4,
+      visible: false,
+      note: input.mode === "ai_precise" ? "附加层：只保留人物/IP/角色本体，方便 PS 单独移动或精修；不参与成品叠加预览。" : "快速模式不导出单独人物层，请使用 AI 精细分层。",
+      fallback: () => createTransparentLayer(input.canvasWidth, input.canvasHeight),
+      render: () => input.mode === "ai_precise"
+        ? createAiPersonOnlyTransparentLayer(input.basePng, input.canvasWidth, input.canvasHeight, input.imageModel)
         : createTransparentLayer(input.canvasWidth, input.canvasHeight),
     },
   ];
@@ -327,9 +447,16 @@ async function renderLayerWithFallback(spec: ExportLayerSpec) {
     const reason = error instanceof Error ? error.message : String(error || "未知错误");
     return {
       png: await spec.fallback(),
-      warning: `图层 ${spec.filename} AI 生成失败，已使用兜底层。原因：${reason}`,
+      warning: layerFallbackWarning(spec, reason),
     };
   }
+}
+
+function layerFallbackWarning(spec: ExportLayerSpec, reason: string) {
+  if (spec.kind === "person") {
+    return `人物层未生成可用内容，已保留背景和文字层。可能是原图没有明显非文字主视觉，或上游接口临时失败。原因：${reason}`;
+  }
+  return `图层 ${spec.filename} AI 生成失败，已使用兜底层。原因：${reason}`;
 }
 
 function rectFromLayer(layer: InputLayer, canvasWidth: number, canvasHeight: number, padding = 0): PixelRect | null {
@@ -455,24 +582,50 @@ async function createAiPersonVisualTransparentLayer(
   height: number,
   imageModel: string,
 ) {
-  // Keep the PNG three-layer strategy model-driven: background, text, and person
+  // Keep the PNG three-layer strategy model-driven: background, text, and foreground visual
   // are generated as visual layers, then normalized to same-canvas transparent PNGs.
   const chromaCandidate = await createAiPngLayer({
     filename: "03_person.png",
     height,
     imageModel,
     prompt: [
-      "Create a full-canvas AI-generated person-only visual layer from the input design.",
-      "The person itself is an image layer for background, text, and person same-canvas transparent PNGs.",
-      "Create a full-canvas person-only visual layer from the input design.",
-      "Render only human/person pixels on a perfectly solid chroma magenta background (#ff00ff): face, hair, skin, hands, body, and clothing fabric.",
-      "Keep the original person identity, expression, pose, clothing style, lighting direction, scale, crop, and approximate position.",
-      "Exclude all background, products, objects, readable text, logos, QR codes, icons, labels, cards, panels, banners, decorations, frames, props, and abstract graphics.",
-      "Every non-person design element must be pure #ff00ff, even when it touches or overlaps the body.",
-      "If a foreground graphic covers part of the person, generate a clean natural continuation of the visible clothing/body shape behind it. Do not add cards, text, icons, or props.",
-      "Use the exact same full canvas size and keep the person in the same visual area. Do not crop, pad, resize, or shift the layer.",
-      "Same full canvas and same visual area. No crop, no padding, no shift.",
-      "If there is no person, return a pure #ff00ff full-canvas image.",
+      "Create a full-canvas non-text foreground visual layer from the input design.",
+      "This is the third Photoshop delivery layer: foreground visual / person / IP / product / main visual, on a transparent background after chroma keying.",
+      "Keep every visible non-text foreground element: human/person, doctor, child, face, body, clothing, cartoon or IP character, mascot, illustrated organ character, product, package, device, chair, prop, central photo, central illustration, main visual, icon, badge shape, card shape, button shape, title backplate, text backplate, decorative frame, glow frame, foreground platform, and foreground light ring.",
+      "For cards, buttons, badges, and backplates: keep the shape, border, glow, icon, and material; remove only the readable text glyphs from them.",
+      "Do not render Chinese characters, English letters, numbers, slogans, labels, phone numbers, addresses, QR codes, or any readable typography in this layer. Text belongs only to 02_text.png.",
+      "Keep original position, size, proportion, crop, color, edge softness, lighting, material, shadows, reflections, and approximate visual details unchanged.",
+      "Use the exact same full canvas size. No crop, no padding, no resize, no shift, no redesign, no new elements.",
+      "Output on a perfectly solid chroma magenta background (#ff00ff). Every pixel outside the requested foreground visual layer must be pure #ff00ff.",
+      "If there is absolutely no non-text foreground visual content, return a pure #ff00ff full-canvas image.",
+    ].join("\n"),
+    sourcePng,
+    transparent: false,
+    width,
+  });
+  const keyed = await keyOutChromaBackground(chromaCandidate, width, height, { r: 255, g: 0, b: 255 });
+  const cleaned = await cleanTransparentLayerMatte(keyed, width, height, "person");
+  return ensureUsefulTransparentLayer(cleaned, width, height);
+}
+
+async function createAiPersonOnlyTransparentLayer(
+  sourcePng: Buffer,
+  width: number,
+  height: number,
+  imageModel: string,
+) {
+  const chromaCandidate = await createAiPngLayer({
+    filename: "04_person_only.png",
+    height,
+    imageModel,
+    prompt: [
+      "Create a full-canvas person/IP-character-only layer from the input design.",
+      "Keep only the visible character or person body: human/person, doctor, child, face, body, clothing, hair, skin, hands, glasses, accessories worn by the character, cartoon mascot, IP character, illustrated organ character, and chair or small prop directly attached to the character pose.",
+      "Exclude every surrounding design element: background, title backplate, text backplate, card shape, button shape, badge shape, icon, decorative frame, glow frame, platform, light ring, product panel, logo, QR code, readable text, numbers, labels, address, phone, and all typography.",
+      "Keep original character identity, pose, expression, proportion, crop, approximate position, color, lighting, edge softness, and shadow details.",
+      "Use the exact same full canvas size. No crop, no padding, no resize, no shift, no redesign, no new elements.",
+      "Output on a perfectly solid chroma magenta background (#ff00ff). Every pixel outside the requested character/person must be pure #ff00ff.",
+      "If there is absolutely no person, mascot, IP character, or illustrated organ character, return a pure #ff00ff full-canvas image.",
     ].join("\n"),
     sourcePng,
     transparent: false,
@@ -582,15 +735,32 @@ async function keyOutChromaBackground(
   const key = useCorner ? corner : color;
   for (let pixel = 0; pixel < width * height; pixel += 1) {
     const index = pixel * 4;
-    const distance = colorDistance(output[index] || 0, output[index + 1] || 0, output[index + 2] || 0, key.r, key.g, key.b);
-    if (distance < 42) {
+    const r = output[index] || 0;
+    const g = output[index + 1] || 0;
+    const b = output[index + 2] || 0;
+    const distance = colorDistance(r, g, b, key.r, key.g, key.b);
+    const magentaStrength = chromaMagentaStrength(r, g, b);
+    if (distance < 42 || magentaStrength >= 0.86) {
+      output[index] = 0;
+      output[index + 1] = 0;
+      output[index + 2] = 0;
       output[index + 3] = 0;
-    } else if (distance < 96) {
+    } else if (distance < 118 || magentaStrength >= 0.45) {
       const alpha = output[index + 3] || 255;
-      output[index + 3] = Math.round(alpha * ((distance - 42) / 54));
+      const distanceAlpha = distance < 118 ? (distance - 42) / 76 : 1;
+      const magentaAlpha = magentaStrength >= 0.45 ? 1 - ((magentaStrength - 0.45) / 0.41) : 1;
+      output[index + 3] = Math.round(alpha * Math.max(0, Math.min(1, Math.min(distanceAlpha, magentaAlpha))));
     }
   }
   return rawRgbaToPng(output, width, height);
+}
+
+function chromaMagentaStrength(r: number, g: number, b: number) {
+  if (r < 135 || b < 115) return 0;
+  const magentaLead = Math.min(r - g, b - g);
+  if (magentaLead <= 18) return 0;
+  const saturation = (Math.max(r, g, b) - Math.min(r, g, b)) / Math.max(1, Math.max(r, g, b));
+  return Math.max(0, Math.min(1, (magentaLead / 150) * 0.72 + saturation * 0.28));
 }
 
 async function cleanTransparentLayerMatte(buffer: Buffer, width: number, height: number, kind: "text" | "person") {
@@ -606,6 +776,9 @@ async function cleanTransparentLayerMatte(buffer: Buffer, width: number, height:
     const index = pixel * 4;
     const alpha = output[index + 3] || 0;
     if (alpha <= transparentBelow) {
+      output[index] = 0;
+      output[index + 1] = 0;
+      output[index + 2] = 0;
       output[index + 3] = 0;
     } else if (alpha >= hardenAbove) {
       output[index + 3] = 255;
@@ -615,6 +788,126 @@ async function cleanTransparentLayerMatte(buffer: Buffer, width: number, height:
     }
   }
   return rawRgbaToPng(output, width, height);
+}
+
+async function removeForegroundMasksFromBackground(input: {
+  backgroundPng: Buffer;
+  height: number;
+  maskPngs: Buffer[];
+  width: number;
+}) {
+  const blurRadius = Math.max(16, Math.round(Math.min(input.width, input.height) * 0.022));
+  const featherRadius = Math.max(4, Math.round(Math.min(input.width, input.height) * 0.006));
+  const expandRadius = Math.max(5, Math.round(Math.min(input.width, input.height) * 0.008));
+  const [backgroundRaw, blurredRaw, mask] = await Promise.all([
+    sharp(input.backgroundPng)
+      .resize(input.width, input.height, { fit: "fill", kernel: sharp.kernel.lanczos3 })
+      .ensureAlpha()
+      .raw()
+      .toBuffer(),
+    sharp(input.backgroundPng)
+      .resize(input.width, input.height, { fit: "fill", kernel: sharp.kernel.lanczos3 })
+      .blur(blurRadius)
+      .ensureAlpha()
+      .raw()
+      .toBuffer(),
+    combinedAlphaMask(input.maskPngs, input.width, input.height),
+  ]);
+  const expandedMask = dilateMask(mask, input.width, input.height, expandRadius);
+  const featheredMask = boxBlurMask(expandedMask, input.width, input.height, featherRadius);
+  const output = Buffer.from(backgroundRaw);
+  const total = input.width * input.height;
+  for (let pixel = 0; pixel < total; pixel += 1) {
+    const maskValue = Math.max(expandedMask[pixel] || 0, featheredMask[pixel] || 0);
+    if (maskValue <= 4) continue;
+    const index = pixel * 4;
+    const strength = Math.min(1, maskValue / 255);
+    output[index] = Math.round((output[index] || 0) * (1 - strength) + (blurredRaw[index] || 0) * strength);
+    output[index + 1] = Math.round((output[index + 1] || 0) * (1 - strength) + (blurredRaw[index + 1] || 0) * strength);
+    output[index + 2] = Math.round((output[index + 2] || 0) * (1 - strength) + (blurredRaw[index + 2] || 0) * strength);
+    output[index + 3] = 255;
+  }
+  return rawRgbaToPng(output, input.width, input.height);
+}
+
+async function combinedAlphaMask(maskPngs: Buffer[], width: number, height: number) {
+  const mask = new Uint8Array(width * height);
+  for (const png of maskPngs) {
+    const raw = await sharp(png)
+      .resize(width, height, { fit: "fill", kernel: sharp.kernel.nearest })
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    for (let pixel = 0; pixel < width * height; pixel += 1) {
+      const alpha = raw[pixel * 4 + 3] || 0;
+      if (alpha > mask[pixel]) mask[pixel] = alpha;
+    }
+  }
+  return mask;
+}
+
+function dilateMask(mask: Uint8Array, width: number, height: number, radius: number) {
+  const horizontal = new Uint8Array(mask.length);
+  const output = new Uint8Array(mask.length);
+  for (let y = 0; y < height; y += 1) {
+    const row = y * width;
+    for (let x = 0; x < width; x += 1) {
+      let max = 0;
+      const left = Math.max(0, x - radius);
+      const right = Math.min(width - 1, x + radius);
+      for (let currentX = left; currentX <= right; currentX += 1) {
+        const value = mask[row + currentX] || 0;
+        if (value > max) max = value;
+      }
+      horizontal[row + x] = max;
+    }
+  }
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let max = 0;
+      const top = Math.max(0, y - radius);
+      const bottom = Math.min(height - 1, y + radius);
+      for (let currentY = top; currentY <= bottom; currentY += 1) {
+        const value = horizontal[currentY * width + x] || 0;
+        if (value > max) max = value;
+      }
+      output[y * width + x] = max;
+    }
+  }
+  return output;
+}
+
+function boxBlurMask(mask: Uint8Array, width: number, height: number, radius: number) {
+  const horizontal = new Uint8Array(mask.length);
+  const output = new Uint8Array(mask.length);
+  for (let y = 0; y < height; y += 1) {
+    const row = y * width;
+    for (let x = 0; x < width; x += 1) {
+      let sum = 0;
+      let count = 0;
+      const left = Math.max(0, x - radius);
+      const right = Math.min(width - 1, x + radius);
+      for (let currentX = left; currentX <= right; currentX += 1) {
+        sum += mask[row + currentX] || 0;
+        count += 1;
+      }
+      horizontal[row + x] = Math.round(sum / Math.max(1, count));
+    }
+  }
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let sum = 0;
+      let count = 0;
+      const top = Math.max(0, y - radius);
+      const bottom = Math.min(height - 1, y + radius);
+      for (let currentY = top; currentY <= bottom; currentY += 1) {
+        sum += horizontal[currentY * width + x] || 0;
+        count += 1;
+      }
+      output[y * width + x] = Math.round(sum / Math.max(1, count));
+    }
+  }
+  return output;
 }
 
 function sampleCornerColor(data: Buffer, width: number, height: number) {
@@ -694,6 +987,92 @@ async function inspectLayerPng(buffer: Buffer, expectedWidth: number, expectedHe
   };
 }
 
+async function compositePngLayers(layers: Buffer[], width: number, height: number) {
+  const [background, ...overlays] = layers;
+  if (!background) return createTransparentLayer(width, height);
+  return sharp(background)
+    .resize(width, height, { fit: "fill" })
+    .ensureAlpha()
+    .composite(overlays.map((input) => ({ input, blend: "over" as const })))
+    .png({ compressionLevel: 9, palette: false })
+    .toBuffer();
+}
+
+async function inspectLayerPackageReconstruction(original: Buffer, composite: Buffer, width: number, height: number, hasUsefulForegroundLayers = true) {
+  const [source, rebuilt] = await Promise.all([
+    sharp(original).resize(width, height, { fit: "fill" }).ensureAlpha().raw().toBuffer(),
+    sharp(composite).resize(width, height, { fit: "fill" }).ensureAlpha().raw().toBuffer(),
+  ]);
+  let totalDifference = 0;
+  for (let index = 0; index < source.length; index += 4) {
+    totalDifference += Math.abs((source[index] || 0) - (rebuilt[index] || 0));
+    totalDifference += Math.abs((source[index + 1] || 0) - (rebuilt[index + 1] || 0));
+    totalDifference += Math.abs((source[index + 2] || 0) - (rebuilt[index + 2] || 0));
+  }
+  const maxDifference = Math.max(1, width * height * 3 * 255);
+  const score = Math.max(0, Math.min(100, Math.round((1 - totalDifference / maxDifference) * 100)));
+  return {
+    score,
+    label: !hasUsefulForegroundLayers ? "分层不完整" : score >= 96 ? "还原优秀" : score >= 92 ? "可交付，建议复查" : "需要复查",
+    textCheck: "文字层已清理为透明底，请放大确认中文、数字和边缘效果。",
+    edgeCheck: "人物层已清理为透明底，请检查人物、IP、产品、卡片和图标边缘是否混入背景。",
+  };
+}
+
+function buildStoredZip(files: Array<{ filename: string; content: Buffer }>) {
+  const localChunks: Buffer[] = [];
+  const directoryChunks: Buffer[] = [];
+  let offset = 0;
+  for (const file of files) {
+    const name = Buffer.from(file.filename.replace(/\\/g, "/"));
+    const checksum = crc32(file.content);
+    const local = Buffer.alloc(30 + name.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt32LE(checksum, 14);
+    local.writeUInt32LE(file.content.length, 18);
+    local.writeUInt32LE(file.content.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    name.copy(local, 30);
+    localChunks.push(local, file.content);
+
+    const directory = Buffer.alloc(46 + name.length);
+    directory.writeUInt32LE(0x02014b50, 0);
+    directory.writeUInt16LE(20, 4);
+    directory.writeUInt16LE(20, 6);
+    directory.writeUInt16LE(0, 8);
+    directory.writeUInt16LE(0, 10);
+    directory.writeUInt32LE(checksum, 16);
+    directory.writeUInt32LE(file.content.length, 20);
+    directory.writeUInt32LE(file.content.length, 24);
+    directory.writeUInt16LE(name.length, 28);
+    directory.writeUInt32LE(offset, 42);
+    name.copy(directory, 46);
+    directoryChunks.push(directory);
+    offset += local.length + file.content.length;
+  }
+  const directorySize = directoryChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(directorySize, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...localChunks, ...directoryChunks, end]);
+}
+
+function crc32(buffer: Buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number) {
   const numeric = Number(value);
